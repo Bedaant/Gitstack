@@ -17,6 +17,7 @@ import ToolsPage from "./pages/ToolsPage";
 import ToolDetailPage from "./pages/ToolDetailPage";
 import GitHubRepoPage from "./pages/GitHubRepoPage";
 import CollectionsPage from "./pages/CollectionsPage";
+import CollectionDetailPage from "./pages/CollectionDetailPage";
 import TopicToolsPage from "./pages/TopicToolsPage";
 import Dashboard from "./pages/Dashboard";
 
@@ -41,7 +42,7 @@ const AppRouter = () => {
       <Route path="/tools/:toolId" element={<ToolDetailPage />} />
       <Route path="/repo/:owner/:repo" element={<GitHubRepoPage />} />
       <Route path="/collections" element={<CollectionsPage />} />
-      <Route path="/collections/:collectionId" element={<CollectionsPage />} />
+      <Route path="/collections/:collectionId" element={<CollectionDetailPage />} />
       <Route path="/topics/:topicId" element={<TopicToolsPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
     </Routes>

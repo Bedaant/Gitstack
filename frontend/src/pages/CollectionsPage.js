@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Clock } from "lucide-react";
 import { Header } from "../components/Header";
+import { Footer } from "../components/Footer";
 import { API } from "../utils/api";
 
 const bgColors = ['bg-pastel-mint', 'bg-pastel-yellow', 'bg-pastel-lavender', 'bg-pastel-pink', 'bg-blue-100', 'bg-orange-100'];
@@ -26,9 +27,9 @@ export default function CollectionsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="py-12 px-4">
+      <main className="py-12 px-4 flex-1">
         <div className="max-w-5xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-2" data-testid="collections-title">
             Collections
@@ -68,6 +69,7 @@ export default function CollectionsPage() {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

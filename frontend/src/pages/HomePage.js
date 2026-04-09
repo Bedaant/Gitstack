@@ -8,6 +8,7 @@ import { TopicsGrid } from "../components/sections/TopicsGrid";
 import { TrendingSection } from "../components/sections/TrendingSection";
 import { CommunityStacks } from "../components/sections/CommunityStacks";
 import { NewsletterSignup } from "../components/sections/NewsletterSignup";
+import { Footer } from "../components/Footer";
 import { API } from "../utils/api";
 
 export default function HomePage() {
@@ -49,13 +50,7 @@ export default function HomePage() {
       <TrendingSection />
       <CommunityStacks />
       <NewsletterSignup />
-      <footer className="py-8 px-4 border-t-4 border-black">
-        <div className="max-w-5xl mx-auto text-center">
-          <p className="font-mono text-sm text-zinc-500">
-            GitStack — GitHub, simplified for non-tech founders
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

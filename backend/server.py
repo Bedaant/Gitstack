@@ -459,6 +459,41 @@ TOPIC_KEYWORDS = {
         "login", "identity", "sso", "rbac", "authorization", "password",
         "encryption", "2fa", "mfa", "totp", "passkey", "ldap", "saml",
         "keycloak", "oidc", "access-control"
+    ],
+    "email-messaging": [
+        "email", "smtp", "newsletter", "mail", "messaging", "notification",
+        "push-notification", "chat", "realtime", "websocket", "sms",
+        "slack", "discord", "telegram", "matrix", "xmpp", "inbox",
+        "transactional-email", "mailing-list", "sendgrid", "resend"
+    ],
+    "cms-content": [
+        "cms", "content-management", "headless-cms", "blog", "markdown",
+        "documentation", "wiki", "publishing", "editor", "rich-text",
+        "static-site", "jamstack", "hugo", "gatsby", "ghost", "wordpress",
+        "strapi", "directus", "sanity", "contentful", "mdx"
+    ],
+    "mobile-dev": [
+        "react-native", "flutter", "mobile", "ios", "android", "expo",
+        "capacitor", "ionic", "swift", "kotlin", "pwa", "progressive-web-app",
+        "responsive", "app", "cross-platform", "native", "cordova"
+    ],
+    "testing-qa": [
+        "testing", "test", "playwright", "cypress", "selenium", "jest",
+        "vitest", "mocha", "pytest", "unittest", "e2e", "integration-testing",
+        "unit-testing", "qa", "quality-assurance", "benchmark", "load-testing",
+        "performance-testing", "coverage", "tdd", "bdd"
+    ],
+    "web3-blockchain": [
+        "blockchain", "web3", "ethereum", "solidity", "smart-contract",
+        "defi", "nft", "crypto", "cryptocurrency", "dapp", "solana",
+        "bitcoin", "token", "dao", "ipfs", "decentralized", "wallet",
+        "metamask", "hardhat", "foundry", "polygon"
+    ],
+    "selfhosted": [
+        "self-hosted", "selfhosted", "homelab", "docker-compose", "docker",
+        "homeserver", "privacy", "open-source", "alternative", "foss",
+        "self-hosting", "linux", "server", "nas", "backup", "reverse-proxy",
+        "nginx", "caddy", "traefik", "coolify", "portainer"
     ]
 }
 
@@ -1414,8 +1449,25 @@ async def seed_database():
     # Check if already seeded - use a lock document
     lock = await db.seed_lock.find_one({"_id": "seed_lock"})
     if lock and lock.get("seeded"):
+        # Always re-seed topics (lightweight, ensures new categories appear)
+        await db.topics.delete_many({})
+        topics = [
+            {"topic_id": "ai-agents", "name": "AI Agents", "icon": "Bot", "color": "text-blue-600", "bg_color": "bg-blue-100", "tool_count": 0},
+            {"topic_id": "ui-ux", "name": "UI/UX Tools", "icon": "Palette", "color": "text-pink-600", "bg_color": "bg-pink-100", "tool_count": 0},
+            {"topic_id": "automation", "name": "Automation", "icon": "Zap", "color": "text-yellow-600", "bg_color": "bg-yellow-100", "tool_count": 0},
+            {"topic_id": "data-analytics", "name": "Data & Analytics", "icon": "LineChart", "color": "text-emerald-600", "bg_color": "bg-emerald-100", "tool_count": 0},
+            {"topic_id": "payments", "name": "Payments & Billing", "icon": "CreditCard", "color": "text-orange-600", "bg_color": "bg-orange-100", "tool_count": 0},
+            {"topic_id": "auth", "name": "Authentication", "icon": "Shield", "color": "text-purple-600", "bg_color": "bg-purple-100", "tool_count": 0},
+            {"topic_id": "email-messaging", "name": "Email & Messaging", "icon": "Mail", "color": "text-rose-600", "bg_color": "bg-rose-100", "tool_count": 0},
+            {"topic_id": "cms-content", "name": "CMS & Content", "icon": "FileText", "color": "text-teal-600", "bg_color": "bg-teal-100", "tool_count": 0},
+            {"topic_id": "mobile-dev", "name": "Mobile Dev", "icon": "Smartphone", "color": "text-indigo-600", "bg_color": "bg-indigo-100", "tool_count": 0},
+            {"topic_id": "testing-qa", "name": "Testing & QA", "icon": "TestTube2", "color": "text-cyan-600", "bg_color": "bg-cyan-100", "tool_count": 0},
+            {"topic_id": "web3-blockchain", "name": "Web3 & Blockchain", "icon": "Blocks", "color": "text-amber-600", "bg_color": "bg-amber-100", "tool_count": 0},
+            {"topic_id": "selfhosted", "name": "Self-Hosted", "icon": "Server", "color": "text-slate-600", "bg_color": "bg-slate-100", "tool_count": 0},
+        ]
+        await db.topics.insert_many(topics)
         existing = await db.tools.count_documents({})
-        return {"message": "Database already seeded", "tools_count": existing}
+        return {"message": "Database already seeded, topics refreshed", "tools_count": existing}
     
     # Set lock immediately to prevent race conditions
     await db.seed_lock.update_one(
@@ -1433,6 +1485,12 @@ async def seed_database():
         {"topic_id": "data-analytics", "name": "Data & Analytics", "icon": "LineChart", "color": "text-emerald-600", "bg_color": "bg-emerald-100", "tool_count": 44},
         {"topic_id": "payments", "name": "Payments & Billing", "icon": "CreditCard", "color": "text-orange-600", "bg_color": "bg-orange-100", "tool_count": 19},
         {"topic_id": "auth", "name": "Authentication", "icon": "Shield", "color": "text-purple-600", "bg_color": "bg-purple-100", "tool_count": 15},
+        {"topic_id": "email-messaging", "name": "Email & Messaging", "icon": "Mail", "color": "text-rose-600", "bg_color": "bg-rose-100", "tool_count": 0},
+        {"topic_id": "cms-content", "name": "CMS & Content", "icon": "FileText", "color": "text-teal-600", "bg_color": "bg-teal-100", "tool_count": 0},
+        {"topic_id": "mobile-dev", "name": "Mobile Dev", "icon": "Smartphone", "color": "text-indigo-600", "bg_color": "bg-indigo-100", "tool_count": 0},
+        {"topic_id": "testing-qa", "name": "Testing & QA", "icon": "TestTube2", "color": "text-cyan-600", "bg_color": "bg-cyan-100", "tool_count": 0},
+        {"topic_id": "web3-blockchain", "name": "Web3 & Blockchain", "icon": "Blocks", "color": "text-amber-600", "bg_color": "bg-amber-100", "tool_count": 0},
+        {"topic_id": "selfhosted", "name": "Self-Hosted", "icon": "Server", "color": "text-slate-600", "bg_color": "bg-slate-100", "tool_count": 0},
     ]
     await db.topics.insert_many(topics)
     
