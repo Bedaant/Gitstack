@@ -3,9 +3,9 @@
 ## Project Overview
 GitStack is a SaaS platform that helps non-technical founders discover, understand, and use open-source GitHub tools. It bridges the gap between GitHub tools existing and founders actually using them.
 
-**Version:** 1.0 MVP
+**Version:** 1.1
 **Date:** April 2026
-**Status:** MVP Complete
+**Status:** MVP Complete + Code Quality Refactoring Complete
 
 ## Original Problem Statement
 Build a fully functional SaaS where every screen and feature works. Users need to discover GitHub tools without technical knowledge, understand them in plain English, and build their ideas without writing code.
@@ -19,148 +19,90 @@ Build a fully functional SaaS where every screen and feature works. Users need t
 - **AI:** Gemini 3 Flash via Emergent integrations
 - **Auth:** Google OAuth via Emergent Auth
 
-### Key Files
-- `/app/backend/server.py` - FastAPI backend with all endpoints
-- `/app/frontend/src/App.js` - React SPA with all pages
-- `/app/frontend/src/index.css` - Neo-brutalist design system
+### Key Files (Post-Refactoring)
+```
+/app/frontend/src/
+├── App.js                          # Thin router (~60 lines)
+├── utils/
+│   ├── api.js                      # API base URL constant
+│   └── sanitize.js                 # HTML sanitization utilities
+├── context/
+│   └── AuthContext.js              # Auth provider + useAuth hook
+├── components/
+│   ├── Header.js                   # Navigation header
+│   ├── AuthCallback.js             # OAuth callback handler
+│   └── sections/
+│       ├── Hero.js                 # Hero section with search
+│       ├── ViralFeatures.js        # Feature cards strip
+│       ├── RepoOfTheDay.js         # Daily repo highlight
+│       ├── TopicsGrid.js           # Browse by topic grid
+│       ├── TrendingSection.js      # Trending repos with tabs
+│       ├── CommunityStacks.js      # Founder stacks section
+│       └── NewsletterSignup.js     # Newsletter subscription
+├── pages/
+│   ├── HomePage.js                 # Main landing page
+│   ├── DeadToolDetector.js         # AI-powered SaaS alternative finder
+│   ├── StackGenerator.js           # AI stack generator
+│   ├── RoastMyStack.js             # AI stack roaster
+│   ├── RepoTranslator.js           # GitHub repo translator
+│   ├── IdeaExists.js               # Similar project finder
+│   ├── ToolsPage.js                # All tools listing
+│   ├── ToolDetailPage.js           # Individual tool detail
+│   ├── CollectionsPage.js          # Curated collections
+│   ├── GitHubRepoPage.js           # GitHub repo AI translation
+│   ├── TopicToolsPage.js           # Tools by topic
+│   ├── Dashboard.js                # User's saved stacks
+│   ├── FounderStacks.js            # Placeholder page
+│   └── ErrorExplainer.js           # Placeholder page
+
+/app/backend/
+├── server.py                       # FastAPI backend with all endpoints
+├── github_scraper.py               # GitHub trending scraper
+└── smart_search.py                 # AI-powered search service
+```
 
 ## User Personas
 1. **Non-Tech Founder** - Has business ideas, knows tools exist, but doesn't know which ones or how to use them
 2. **Indie Hacker** - Building side projects, wants to save money with open-source alternatives
 3. **SaaS Founder** - Wants to reduce costs and find tool stacks that work
 
-## Core Features (Implemented)
+## Core Features (All Implemented)
 
-### 1. Home Page ✅
-- Hero section with search bar
-- 6 goal chips (AI agent, SaaS starter, etc.)
-- Live count badge "127 tools"
-- Build Stack CTA button
-
-### 2. Viral Feature Strip ✅
-- Dead Tool Detector (HIGHEST PRIORITY)
-- Roast My Stack
-- Your Idea Exists (placeholder)
-- What Founders Used (placeholder)
-- Explain Error (placeholder)
-
-### 3. Browse by Topic Grid ✅
-- 6 categories with icons
-- AI Agents, UI/UX Tools, Automation, Data & Analytics, Payments, Authentication
-
-### 4. Trending Now Section ✅
-- 4 tabs (Top this week, Most starred, New & rising, PH picks)
-- Tool cards with rank, name, description, language, stars, difficulty
-
-### 5. Community Stacks ✅
-- 3 pre-seeded public stacks
-- Copy count for social proof
-- One-click copy functionality
-
-### 6. Dead Tool Detector ✅ (AI-Powered)
-- Input: Paid SaaS tools (comma-separated)
-- Output: Free alternatives with annual savings
-- Shareable result card
-
-### 7. Stack Generator ✅ (AI-Powered)
-- Input: Business idea description
-- Output: 4-6 tools in setup order
-- Each tool has: name, description, difficulty, setup time, steps
-
-### 8. Repo Translator ✅ (AI-Powered)
-- Input: GitHub URL
-- Output: Plain English explanation
-- What it does, who it's for, what you can build, difficulty, steps
-
-### 9. Roast My Stack ✅ (AI-Powered)
-- Input: Selected tools (clickable chips)
-- Output: Brutal but helpful feedback
-- What's redundant, overpriced, missing, smarter alternatives
-
-### 10. Tools Page ✅
-- 44+ seeded tools with plain English descriptions
-- Search functionality
-- Grid layout with difficulty badges
-
-### 11. Tool Detail Page ✅
-- Full tool information
-- Who it's for, what you can build
-- Paid alternative comparison
-- Step-by-step setup guide
-- Related tools
-
-### 12. Collections Page ✅
-- 6 curated collections
-- Goal-oriented titles
-- Difficulty and time estimates
-- Pastel color backgrounds
-
-### 13. My Stack (Dashboard) ✅
-- Google OAuth protected
-- User's saved stacks
-- Share functionality (placeholder)
-
-### 14. Google OAuth ✅
-- Sign in with Google button
-- Session management
-- Protected routes
-
-## Database Schema
-
-### Collections
-- `tools` - 44+ seeded tools
-- `topics` - 6 categories
-- `collections` - 6 curated stacks
-- `users` - Authenticated users
-- `user_sessions` - Auth sessions
-- `user_stacks` - User saved stacks
-
-### Tool Schema
-```javascript
-{
-  tool_id: string,
-  name: string,
-  description: string,
-  who_its_for: string,
-  what_you_can_build: string[],
-  difficulty: "Beginner" | "Intermediate" | "Advanced",
-  setup_time: string,
-  setup_steps: string[],
-  related_tools: string[],
-  github_url: string,
-  stars: string,
-  language: string,
-  category: string,
-  tags: string[],
-  paid_alternative: string,
-  monthly_cost: string
-}
-```
+### 1. Home Page - Hero, search, topic chips, tool count badge
+### 2. Viral Feature Strip - Dead Tool Detector, Roast My Stack, Idea Exists, Repo Translator, Founder Stacks
+### 3. Browse by Topic Grid - 6 categories with filtered tools
+### 4. Trending Now Section - 4 tabs with live GitHub data
+### 5. Community Stacks - Real founder tech stacks
+### 6. Dead Tool Detector (AI) - Finds free alternatives with annual savings
+### 7. Stack Generator (AI) - Generates tool stacks from business ideas
+### 8. Repo Translator (AI) - Plain English explanations of GitHub repos
+### 9. Roast My Stack (AI) - Brutally honest stack feedback
+### 10. Tools Page - 44+ curated + live GitHub tools with search
+### 11. Tool Detail Page - Full info, setup guide, related tools
+### 12. Collections Page - 6 curated goal-oriented collections
+### 13. Your Idea Already Exists (AI) - Finds similar open-source projects
+### 14. Repo of the Day + Newsletter - Daily featured repo with email digest
+### 15. Dashboard / My Stack - Google OAuth protected user stacks
+### 16. Google OAuth - Emergent-managed auth
 
 ## API Endpoints
 
-### Public Endpoints
-- `GET /api/health` - Health check
-- `GET /api/tools` - List tools
-- `GET /api/tools/{tool_id}` - Tool detail
-- `GET /api/topics` - List topics
-- `GET /api/collections` - List collections
-- `GET /api/stacks/public` - Public stacks
+### Public
+- `GET /api/health`, `GET /api/tools`, `GET /api/tools/{tool_id}`, `GET /api/topics`, `GET /api/collections`
+- `GET /api/stacks/public`, `GET /api/tools/trending/list`, `GET /api/stacks/featured`
+- `GET /api/repo-of-the-day`, `GET /api/newsletter/count`
+- `POST /api/search`, `GET /api/search/autocomplete`, `POST /api/newsletter/subscribe`
 
-### AI Endpoints
-- `POST /api/ai/dead-tool-detector` - Find free alternatives
-- `POST /api/ai/stack-generator` - Generate tool stack
-- `POST /api/ai/repo-translator` - Translate GitHub repo
-- `POST /api/ai/roast-my-stack` - Get stack roasted
+### AI
+- `POST /api/ai/dead-tool-detector`, `POST /api/ai/stack-generator`
+- `POST /api/ai/repo-translator`, `POST /api/ai/roast-my-stack`
+- `POST /api/ai/idea-exists`, `GET /api/ai/translate-repo/{owner}/{repo}`
 
-### Auth Endpoints
-- `POST /api/auth/session` - Exchange OAuth token
-- `GET /api/auth/me` - Get current user
-- `POST /api/auth/logout` - Logout
+### Auth
+- `POST /api/auth/session`, `GET /api/auth/me`, `POST /api/auth/logout`
 
-### Protected Endpoints
-- `GET /api/my-stacks` - User's stacks
-- `POST /api/my-stacks` - Save stack
+### Protected
+- `GET /api/my-stacks`, `POST /api/my-stacks`
 
 ## Design System
 - **Style:** Neo-Brutalist with pastel accents
@@ -168,91 +110,24 @@ Build a fully functional SaaS where every screen and feature works. Users need t
 - **Colors:** Black/white core, pastel accents (mint, yellow, lavender, pink)
 - **Shadows:** Hard 4px offset black shadows
 
-## What's Not Implemented (P1 Backlog)
-1. "Your Idea Already Exists" feature
-2. "What Founders Actually Used" feature  
-3. "Explain This Error" feature
-4. Share functionality (generate shareable URLs)
-5. Newsletter signup
-6. Pro plan / monetization
-7. Detailed collection pages with tool lists
-8. Community notes on tools
+## Code Quality Fixes (April 2026)
+- [x] XSS: Replaced dangerouslySetInnerHTML with DOMPurify sanitization
+- [x] Empty catch blocks: Added proper error logging
+- [x] React Keys: Replaced all index-as-key with stable unique identifiers
+- [x] React Hooks: Fixed use-toast.js dependency array
+- [x] Complexity: Split monolithic App.js (~2100 lines) into 20+ focused component files
 
-## Next Action Items
-1. Implement share functionality for results
-2. Build collection detail pages
-3. Add "Your Idea Exists" feature
-4. Implement newsletter signup
-5. Add analytics tracking
+## What's Not Implemented (Backlog)
+1. Background cron job scheduling for scraper (currently startup-triggered)
+2. "What Founders Actually Used" full page (currently placeholder)
+3. "Explain This Error" feature (placeholder)
+4. Share functionality (generate shareable URLs)
+5. Pro plan / monetization
+6. Community notes on tools
+7. Backend function refactoring (server.py, github_scraper.py large functions)
 
 ## Success Metrics
 - Dead Tool Detector uses/day
 - Stack Generator completions/day
 - Share button clicks
 - Tool card views per session
-
----
-
-## Update 2: Smart GitHub Integration (April 2026)
-
-### New Features Implemented
-
-#### 1. Live GitHub Trending
-- Scrapes GitHub trending page every 6 hours
-- Shows repos with weekly star growth ("↗ 5,673 stars this week")
-- 4 tabs: Top this week, Today, This month, New & rising
-- Opens GitHub directly when clicked
-
-#### 2. Browse by Topic (Fixed)
-- Each topic now shows DIFFERENT filtered tools
-- AI Agents → LangChain, Flowise, Dify, LlamaIndex
-- UI/UX → Formbricks, Ghost, shadcn/ui, Radix, etc.
-- Topics pull from both curated tools + GitHub repos
-
-#### 3. What Founders Actually Used
-- Real tech stacks from successful open-source projects:
-  - Cal.com (28k stars): Next.js, Prisma, tRPC, Tailwind, PostgreSQL
-  - Supabase (62k stars): PostgreSQL, PostgREST, GoTrue, Realtime
-  - n8n (35k stars): TypeScript, Vue.js, PostgreSQL, Redis, Bull
-  - Appwrite (38k stars): PHP, Redis, MariaDB, ClamAV, Traefik
-  - Plane (25k stars): Next.js, Django, PostgreSQL, Redis, Celery
-  - Documenso (6k stars): Next.js, Prisma, tRPC, Tailwind, Resend
-
-#### 4. Smart Search (Backend Ready)
-- AI-powered query understanding
-- Searches curated DB + live GitHub
-- Endpoint: POST /api/search
-
-### Architecture for 50,000 repos
-
-```
-GitHub (300M repos)
-    ↓ Filter: stars > 100, active in 6 months
-    ↓ Categories: dev-tools, saas, ai, automation
-    ↓ Daily trending scrape
-    ↓ (~500 new repos/day)
-
-STORAGE TIERS:
-- HOT (500 repos): Full details + AI descriptions, refreshed daily
-- WARM (50,000 repos): Basic info, refreshed weekly  
-- COLD (unlimited): On-demand fetch from GitHub API
-
-MEMORY: ~250MB for 50,000 repos
-```
-
-### Backend Files Added
-- `/app/backend/github_scraper.py` - GitHub trending scraper
-- `/app/backend/smart_search.py` - AI-powered search service
-
-### API Endpoints Added
-- `GET /api/tools/trending/list?tab=top_week` - Live trending
-- `GET /api/stacks/featured` - Founder stacks
-- `POST /api/search` - Smart search
-- `POST /api/scraper/run` - Trigger scraper
-- `GET /api/scraper/status` - Scraper status
-
-## Next Action Items
-1. Schedule 6-hour cron job for GitHub scraper
-2. Implement search autocomplete UI
-3. Add repo of the day feature
-4. Build share functionality for results
