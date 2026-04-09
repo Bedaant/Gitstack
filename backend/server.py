@@ -759,23 +759,33 @@ Keep it simple. No technical jargon. Focus on business outcomes."""
     return result
 
 @api_router.post("/ai/idea-exists")
-async def idea_exists(idea: str):
+async def idea_exists_post(request: Request):
+    """Find similar GitHub projects for an idea"""
+    body = await request.json()
+    idea = body.get("idea", "")
+    
+    if not idea:
+        raise HTTPException(status_code=400, detail="idea is required")
+    
     prompt = f"""A founder wants to build: {idea}
 
-Find 3-5 existing open-source GitHub projects that are building something similar.
+Find 5-8 existing open-source GitHub projects that are building something similar or could be used as a foundation.
 
-Return ONLY a valid JSON array:
+Return ONLY a valid JSON array (no markdown):
 [
   {{
     "name": "Project Name",
-    "description": "What it does (plain English)",
-    "githubUrl": "https://github.com/...",
+    "full_name": "owner/repo",
+    "description": "What it does in plain English (1-2 sentences)",
+    "githubUrl": "https://github.com/owner/repo",
     "stars": "Xk",
-    "howToGoFurther": "How the founder can differentiate or build on top of this"
+    "language": "Python/JavaScript/etc",
+    "whyRelevant": "How this relates to their idea",
+    "howToUse": "How they can build on top of this or differentiate"
   }}
 ]
 
-Be accurate with real repositories. Frame it positively - show existing work as a foundation, not competition."""
+Be accurate with REAL GitHub repositories that actually exist. Focus on popular, well-maintained projects."""
 
     result = await call_gemini(prompt, json_response=True)
     try:
@@ -785,9 +795,274 @@ Be accurate with real repositories. Frame it positively - show existing work as 
             cleaned = cleaned.split("\n", 1)[1]
             cleaned = cleaned.rsplit("```", 1)[0]
         data = json.loads(cleaned)
-        return {"similar_projects": data}
+        return {"idea": idea, "similar_projects": data, "count": len(data)}
     except:
-        return {"similar_projects": [], "raw": result}
+        return {"idea": idea, "similar_projects": [], "raw": result}
+
+# ==================== REPO OF THE DAY ====================
+
+@api_router.get("/repo-of-the-day")
+async def get_repo_of_the_day():
+    """Get the featured repo of the day with AI translation"""
+    
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Check if we already have a repo of the day
+    cached = await db.repo_of_the_day.find_one({"date": today}, {"_id": 0})
+    if cached:
+        return cached
+    
+    # Get trending repos and pick one
+    try:
+        # Fetch from GitHub trending
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://github.com/trending?since=daily",
+                headers={"User-Agent": "GitStack"},
+                timeout=30
+            )
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                articles = soup.select('article.Box-row')
+                
+                # Pick a good one (high stars, good description)
+                best_repo = None
+                for article in articles[:10]:
+                    h2 = article.select_one('h2 a')
+                    if not h2:
+                        continue
+                    full_name = h2.get('href', '').strip('/')
+                    if not full_name or '/' not in full_name:
+                        continue
+                    
+                    desc_elem = article.select_one('p')
+                    description = desc_elem.get_text(strip=True) if desc_elem else ""
+                    
+                    # Skip if no description
+                    if len(description) < 20:
+                        continue
+                    
+                    stars_elem = article.select_one('a[href$="/stargazers"]')
+                    stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
+                    
+                    best_repo = {
+                        "full_name": full_name,
+                        "description": description,
+                        "stars": stars_text
+                    }
+                    break
+                
+                if not best_repo:
+                    # Fallback to first repo
+                    first = articles[0] if articles else None
+                    if first:
+                        h2 = first.select_one('h2 a')
+                        best_repo = {
+                            "full_name": h2.get('href', '').strip('/') if h2 else "vercel/next.js",
+                            "description": "A popular open-source project",
+                            "stars": "100k"
+                        }
+    except Exception as e:
+        logger.error(f"Error fetching trending: {e}")
+        best_repo = {"full_name": "vercel/next.js", "description": "The React Framework", "stars": "118k"}
+    
+    if not best_repo:
+        best_repo = {"full_name": "vercel/next.js", "description": "The React Framework", "stars": "118k"}
+    
+    # Get AI translation for this repo
+    owner, repo = best_repo["full_name"].split("/")
+    try:
+        # Fetch repo details
+        async with httpx.AsyncClient() as client:
+            repo_response = await client.get(
+                f"https://api.github.com/repos/{best_repo['full_name']}",
+                headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                timeout=15
+            )
+            repo_data = repo_response.json() if repo_response.status_code == 200 else {}
+            
+            # Get README
+            readme_content = ""
+            try:
+                readme_response = await client.get(
+                    f"https://api.github.com/repos/{best_repo['full_name']}/readme",
+                    headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                    timeout=15
+                )
+                if readme_response.status_code == 200:
+                    import base64
+                    readme_data = readme_response.json()
+                    if readme_data.get("encoding") == "base64":
+                        readme_content = base64.b64decode(readme_data.get("content", "")).decode("utf-8", errors="ignore")[:2000]
+            except:
+                pass
+        
+        # AI Translation
+        prompt = f"""Create a "Repo of the Day" feature for non-technical founders:
+
+Repository: {best_repo['full_name']}
+Description: {repo_data.get('description', best_repo['description'])}
+Stars: {repo_data.get('stargazers_count', best_repo['stars'])}
+Language: {repo_data.get('language', 'Unknown')}
+
+README:
+{readme_content[:1500]}
+
+Write an engaging, plain-English summary:
+
+**Headline:** (Catchy 5-8 word headline)
+
+**What it does:** (1 sentence, simple)
+
+**Why it's trending:** (1 sentence)
+
+**Perfect for founders who:** (2-3 bullet points of use cases)
+
+**Get started in 5 minutes:** (3 simple steps)
+
+Make it exciting and accessible to non-technical people!"""
+
+        translation = await call_gemini(prompt)
+        
+        result = {
+            "date": today,
+            "full_name": best_repo["full_name"],
+            "name": repo_data.get("name", repo.split("/")[-1]),
+            "owner": owner,
+            "description": repo_data.get("description", best_repo["description"]),
+            "stars": repo_data.get("stargazers_count", 0),
+            "language": repo_data.get("language", "Unknown"),
+            "topics": repo_data.get("topics", [])[:5],
+            "html_url": repo_data.get("html_url", f"https://github.com/{best_repo['full_name']}"),
+            "translation": translation,
+            "selected_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Cache it
+        await db.repo_of_the_day.update_one(
+            {"date": today},
+            {"$set": result},
+            upsert=True
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error creating repo of the day: {e}")
+        return {
+            "date": today,
+            "full_name": best_repo["full_name"],
+            "name": best_repo["full_name"].split("/")[-1],
+            "description": best_repo["description"],
+            "stars": best_repo["stars"],
+            "error": "Translation failed"
+        }
+
+# ==================== NEWSLETTER ====================
+
+class NewsletterSubscribeRequest(BaseModel):
+    email: str
+
+@api_router.post("/newsletter/subscribe")
+async def subscribe_newsletter(req: NewsletterSubscribeRequest):
+    """Subscribe to the GitStack daily digest"""
+    email = req.email.lower().strip()
+    
+    # Basic validation
+    if not email or "@" not in email or "." not in email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    
+    # Check if already subscribed
+    existing = await db.newsletter_subscribers.find_one({"email": email})
+    if existing:
+        return {"message": "Already subscribed", "status": "existing"}
+    
+    # Save subscriber
+    await db.newsletter_subscribers.insert_one({
+        "email": email,
+        "subscribed_at": datetime.now(timezone.utc).isoformat(),
+        "status": "active"
+    })
+    
+    return {"message": "Successfully subscribed to GitStack daily digest!", "status": "new"}
+
+@api_router.get("/newsletter/count")
+async def get_newsletter_count():
+    """Get subscriber count for social proof"""
+    count = await db.newsletter_subscribers.count_documents({"status": "active"})
+    return {"count": count}
+
+# ==================== SEARCH AUTOCOMPLETE ====================
+
+@api_router.get("/search/autocomplete")
+async def search_autocomplete(q: str):
+    """Get search suggestions for autocomplete"""
+    if len(q) < 2:
+        return {"suggestions": []}
+    
+    suggestions = []
+    
+    # Search curated tools
+    tools = await db.tools.find(
+        {"$or": [
+            {"name": {"$regex": f"^{re.escape(q)}", "$options": "i"}},
+            {"name": {"$regex": re.escape(q), "$options": "i"}}
+        ]},
+        {"_id": 0, "name": 1, "description": 1, "category": 1}
+    ).limit(5).to_list(5)
+    
+    for t in tools:
+        suggestions.append({
+            "type": "tool",
+            "name": t["name"],
+            "description": t.get("description", "")[:60],
+            "category": t.get("category", "")
+        })
+    
+    # Search github repos
+    gh_repos = await db.github_repos.find(
+        {"$or": [
+            {"name": {"$regex": f"^{re.escape(q)}", "$options": "i"}},
+            {"name": {"$regex": re.escape(q), "$options": "i"}}
+        ]},
+        {"_id": 0, "name": 1, "description": 1, "full_name": 1, "stars": 1}
+    ).sort("score", -1).limit(5).to_list(5)
+    
+    for r in gh_repos:
+        suggestions.append({
+            "type": "github",
+            "name": r["name"],
+            "full_name": r.get("full_name", ""),
+            "description": r.get("description", "")[:60],
+            "stars": r.get("stars", 0)
+        })
+    
+    # Add category suggestions
+    categories = [
+        {"name": "AI Agents", "type": "category"},
+        {"name": "Automation", "type": "category"},
+        {"name": "Analytics", "type": "category"},
+        {"name": "Authentication", "type": "category"},
+        {"name": "Payments", "type": "category"},
+        {"name": "UI/UX Tools", "type": "category"},
+        {"name": "Database", "type": "category"},
+        {"name": "E-commerce", "type": "category"},
+    ]
+    
+    for cat in categories:
+        if q.lower() in cat["name"].lower():
+            suggestions.append(cat)
+    
+    # Add idea suggestions
+    ideas = [
+        "Build a SaaS", "Build a chatbot", "Build an AI app", 
+        "Build a marketplace", "Build a newsletter", "Build a booking system"
+    ]
+    for idea in ideas:
+        if q.lower() in idea.lower():
+            suggestions.append({"type": "idea", "name": idea})
+    
+    return {"suggestions": suggestions[:10]}
 
 # ==================== MY STACK ROUTES ====================
 
