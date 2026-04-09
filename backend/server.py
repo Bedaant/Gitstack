@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7,11 +7,14 @@ import os
 import logging
 import uuid
 import httpx
+import asyncio
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+from bs4 import BeautifulSoup
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -102,6 +105,14 @@ class SaveStackRequest(BaseModel):
     name: str
     tools: List[str]
     is_public: bool = True
+
+class SmartSearchRequest(BaseModel):
+    query: str
+    limit: int = 20
+    include_github_live: bool = True
+
+class RepoTranslateRequest(BaseModel):
+    full_name: str
 
 # ==================== AUTH HELPERS ====================
 
@@ -222,36 +233,212 @@ async def logout(request: Request, response: Response):
 # ==================== TOOLS ROUTES ====================
 
 @api_router.get("/tools")
-async def get_tools(category: Optional[str] = None, search: Optional[str] = None, limit: int = 50):
+async def get_tools(category: Optional[str] = None, topic: Optional[str] = None, search: Optional[str] = None, limit: int = 50):
     query = {}
     if category:
         query["category"] = category
-    if search:
+    if topic:
+        # Search in category or tags
         query["$or"] = [
-            {"name": {"$regex": search, "$options": "i"}},
-            {"description": {"$regex": search, "$options": "i"}},
-            {"tags": {"$regex": search, "$options": "i"}}
+            {"category": {"$regex": topic, "$options": "i"}},
+            {"tags": {"$regex": topic, "$options": "i"}}
         ]
+    if search:
+        search_query = {
+            "$or": [
+                {"name": {"$regex": search, "$options": "i"}},
+                {"description": {"$regex": search, "$options": "i"}},
+                {"tags": {"$regex": search, "$options": "i"}}
+            ]
+        }
+        if query:
+            query = {"$and": [query, search_query]}
+        else:
+            query = search_query
+    
     tools = await db.tools.find(query, {"_id": 0}).limit(limit).to_list(limit)
+    
+    # Also search github_repos if not enough results
+    if len(tools) < limit:
+        gh_query = {}
+        if topic:
+            gh_query["$or"] = [
+                {"topics": {"$regex": topic, "$options": "i"}},
+                {"language": {"$regex": topic, "$options": "i"}}
+            ]
+        if search:
+            gh_query["$or"] = [
+                {"name": {"$regex": search, "$options": "i"}},
+                {"description": {"$regex": search, "$options": "i"}}
+            ]
+        
+        gh_repos = await db.github_repos.find(gh_query, {"_id": 0}).sort("score", -1).limit(limit - len(tools)).to_list(limit - len(tools))
+        
+        # Convert github_repos format to tools format
+        for repo in gh_repos:
+            tools.append({
+                "tool_id": repo.get("repo_id", repo.get("full_name", "").replace("/", "_")),
+                "name": repo.get("name", ""),
+                "description": repo.get("description", ""),
+                "who_its_for": "Developers and founders",
+                "what_you_can_build": [],
+                "difficulty": "Intermediate",
+                "setup_time": "30 mins",
+                "setup_steps": ["Visit the GitHub repo", "Follow the README instructions", "Deploy or integrate"],
+                "related_tools": [],
+                "github_url": repo.get("html_url", f"https://github.com/{repo.get('full_name', '')}"),
+                "stars": f"{repo.get('stars', 0):,}",
+                "language": repo.get("language", "Unknown"),
+                "category": ", ".join(repo.get("topics", [])[:3]) if repo.get("topics") else "Open Source",
+                "tags": repo.get("topics", []),
+                "source": "github"
+            })
+    
     return tools
 
 @api_router.get("/tools/{tool_id}")
 async def get_tool(tool_id: str):
     tool = await db.tools.find_one({"tool_id": tool_id}, {"_id": 0})
     if not tool:
+        # Try github_repos
+        gh_repo = await db.github_repos.find_one({"repo_id": tool_id}, {"_id": 0})
+        if gh_repo:
+            return {
+                "tool_id": gh_repo.get("repo_id"),
+                "name": gh_repo.get("name", ""),
+                "description": gh_repo.get("description", ""),
+                "who_its_for": "Developers and founders",
+                "what_you_can_build": [],
+                "difficulty": "Intermediate",
+                "setup_time": "30 mins",
+                "setup_steps": ["Visit the GitHub repo", "Follow the README instructions", "Deploy or integrate"],
+                "related_tools": [],
+                "github_url": gh_repo.get("html_url", f"https://github.com/{gh_repo.get('full_name', '')}"),
+                "stars": f"{gh_repo.get('stars', 0):,}",
+                "language": gh_repo.get("language", "Unknown"),
+                "category": ", ".join(gh_repo.get("topics", [])[:3]) if gh_repo.get("topics") else "Open Source",
+                "tags": gh_repo.get("topics", []),
+                "ai_description": gh_repo.get("ai_description"),
+                "source": "github"
+            }
         raise HTTPException(status_code=404, detail="Tool not found")
     return tool
 
 @api_router.get("/tools/trending/list")
-async def get_trending_tools(tab: str = "top_week"):
-    tools = await db.tools.find({}, {"_id": 0}).limit(10).to_list(10)
-    return tools
+async def get_trending_tools(tab: str = "top_week", language: str = ""):
+    """Get real trending repos from GitHub or cache"""
+    
+    # Check cache first (valid for 6 hours)
+    cache_key = f"trending_{tab}_{language}"
+    cached = await db.trending_cache.find_one({"cache_key": cache_key}, {"_id": 0})
+    
+    if cached:
+        cached_time = datetime.fromisoformat(cached.get("cached_at", "2000-01-01"))
+        if datetime.now(timezone.utc) - cached_time < timedelta(hours=6):
+            return cached.get("repos", [])
+    
+    # Scrape GitHub trending
+    since_map = {
+        "top_week": "weekly",
+        "top_day": "daily",
+        "top_month": "monthly",
+        "most_starred": "weekly",
+        "new_rising": "daily"
+    }
+    since = since_map.get(tab, "daily")
+    
+    repos = []
+    try:
+        url = f"https://github.com/trending/{language}?since={since}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers={"User-Agent": "GitStack"}, timeout=30)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                articles = soup.select('article.Box-row')
+                
+                for i, article in enumerate(articles[:15]):
+                    try:
+                        h2 = article.select_one('h2 a')
+                        if not h2:
+                            continue
+                        full_name = h2.get('href', '').strip('/')
+                        if not full_name or '/' not in full_name:
+                            continue
+                        
+                        desc_elem = article.select_one('p')
+                        description = desc_elem.get_text(strip=True) if desc_elem else ""
+                        
+                        stars_elem = article.select_one('a[href$="/stargazers"]')
+                        stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
+                        stars = stars_text.strip().replace(',', '')
+                        if 'k' in stars.lower():
+                            stars = str(int(float(stars.lower().replace('k', '')) * 1000))
+                        
+                        lang_elem = article.select_one('[itemprop="programmingLanguage"]')
+                        lang = lang_elem.get_text(strip=True) if lang_elem else "Unknown"
+                        
+                        today_elem = article.select_one('span.d-inline-block.float-sm-right')
+                        today_stars = ""
+                        if today_elem:
+                            today_stars = today_elem.get_text(strip=True)
+                        
+                        repos.append({
+                            "tool_id": full_name.replace("/", "_").lower(),
+                            "name": full_name.split('/')[-1],
+                            "full_name": full_name,
+                            "description": description[:200],
+                            "stars": stars,
+                            "language": lang,
+                            "today_stars": today_stars,
+                            "github_url": f"https://github.com/{full_name}",
+                            "difficulty": "Intermediate",
+                            "rank": i + 1
+                        })
+                    except Exception as e:
+                        logger.error(f"Error parsing trending repo: {e}")
+                        continue
+        
+        # Cache results
+        if repos:
+            await db.trending_cache.update_one(
+                {"cache_key": cache_key},
+                {"$set": {
+                    "cache_key": cache_key,
+                    "repos": repos,
+                    "cached_at": datetime.now(timezone.utc).isoformat()
+                }},
+                upsert=True
+            )
+    except Exception as e:
+        logger.error(f"Error fetching trending: {e}")
+        # Fallback to curated tools
+        tools = await db.tools.find({}, {"_id": 0}).sort("stars", -1).limit(10).to_list(10)
+        return tools
+    
+    return repos
 
 # ==================== TOPICS ROUTES ====================
 
 @api_router.get("/topics")
 async def get_topics():
     topics = await db.topics.find({}, {"_id": 0}).to_list(20)
+    
+    # Update tool counts dynamically
+    for topic in topics:
+        topic_name = topic.get("name", "")
+        # Count from tools collection
+        tool_count = await db.tools.count_documents({
+            "$or": [
+                {"category": {"$regex": topic_name, "$options": "i"}},
+                {"tags": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}}
+            ]
+        })
+        # Count from github_repos
+        gh_count = await db.github_repos.count_documents({
+            "topics": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}
+        })
+        topic["tool_count"] = tool_count + gh_count
+    
     return topics
 
 @api_router.get("/topics/{topic_id}/tools")
@@ -259,7 +446,47 @@ async def get_topic_tools(topic_id: str):
     topic = await db.topics.find_one({"topic_id": topic_id}, {"_id": 0})
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    tools = await db.tools.find({"category": topic["name"]}, {"_id": 0}).to_list(50)
+    
+    topic_name = topic.get("name", "")
+    
+    # Search tools by category and tags
+    tools = await db.tools.find({
+        "$or": [
+            {"category": {"$regex": topic_name, "$options": "i"}},
+            {"tags": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}},
+            {"tags": {"$regex": topic_name.lower().replace(" ", ""), "$options": "i"}}
+        ]
+    }, {"_id": 0}).to_list(50)
+    
+    # Also search github_repos
+    gh_repos = await db.github_repos.find({
+        "$or": [
+            {"topics": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}},
+            {"topics": {"$regex": topic_name.lower().replace(" ", ""), "$options": "i"}},
+            {"language": {"$regex": topic_name, "$options": "i"}}
+        ]
+    }, {"_id": 0}).sort("score", -1).limit(50 - len(tools)).to_list(50 - len(tools))
+    
+    # Convert github repos to tool format
+    for repo in gh_repos:
+        tools.append({
+            "tool_id": repo.get("repo_id", repo.get("full_name", "").replace("/", "_")),
+            "name": repo.get("name", ""),
+            "description": repo.get("description", ""),
+            "who_its_for": "Developers and founders",
+            "what_you_can_build": [],
+            "difficulty": "Intermediate",
+            "setup_time": "30 mins",
+            "setup_steps": ["Visit the GitHub repo", "Follow the README instructions"],
+            "related_tools": [],
+            "github_url": repo.get("html_url", f"https://github.com/{repo.get('full_name', '')}"),
+            "stars": f"{repo.get('stars', 0):,}",
+            "language": repo.get("language", "Unknown"),
+            "category": topic_name,
+            "tags": repo.get("topics", []),
+            "source": "github"
+        })
+    
     return {"topic": topic, "tools": tools}
 
 # ==================== COLLECTIONS ROUTES ====================
@@ -465,6 +692,76 @@ async def get_public_stacks():
     stacks = await db.user_stacks.find({"is_public": True}, {"_id": 0}).sort("copy_count", -1).limit(20).to_list(20)
     return stacks
 
+@api_router.get("/stacks/featured")
+async def get_featured_stacks():
+    """Get real founder stacks from famous open-source projects"""
+    
+    # Famous open-source projects and their stacks
+    famous_stacks = [
+        {
+            "stack_id": "calcom_stack",
+            "name": "Cal.com's Stack",
+            "description": "The scheduling tool used by 50k+ companies",
+            "owner": "Cal.com",
+            "owner_url": "https://github.com/calcom",
+            "tools": ["Next.js", "Prisma", "tRPC", "Tailwind CSS", "PostgreSQL"],
+            "stars": "28k",
+            "copy_count": 1543
+        },
+        {
+            "stack_id": "supabase_stack",
+            "name": "Supabase's Stack",
+            "description": "The open-source Firebase alternative",
+            "owner": "Supabase",
+            "owner_url": "https://github.com/supabase",
+            "tools": ["PostgreSQL", "PostgREST", "GoTrue", "Realtime", "Storage"],
+            "stars": "62k",
+            "copy_count": 2341
+        },
+        {
+            "stack_id": "n8n_stack",
+            "name": "n8n's Stack",
+            "description": "Workflow automation tool",
+            "owner": "n8n",
+            "owner_url": "https://github.com/n8n-io",
+            "tools": ["TypeScript", "Vue.js", "PostgreSQL", "Redis", "Bull"],
+            "stars": "35k",
+            "copy_count": 876
+        },
+        {
+            "stack_id": "appwrite_stack",
+            "name": "Appwrite's Stack",
+            "description": "Backend-as-a-Service platform",
+            "owner": "Appwrite",
+            "owner_url": "https://github.com/appwrite",
+            "tools": ["PHP", "Redis", "MariaDB", "ClamAV", "Traefik"],
+            "stars": "38k",
+            "copy_count": 654
+        },
+        {
+            "stack_id": "plane_stack",
+            "name": "Plane's Stack",
+            "description": "Open-source Jira alternative",
+            "owner": "Plane",
+            "owner_url": "https://github.com/makeplane",
+            "tools": ["Next.js", "Django", "PostgreSQL", "Redis", "Celery"],
+            "stars": "25k",
+            "copy_count": 432
+        },
+        {
+            "stack_id": "documenso_stack",
+            "name": "Documenso's Stack",
+            "description": "Open-source DocuSign alternative",
+            "owner": "Documenso",
+            "owner_url": "https://github.com/documenso",
+            "tools": ["Next.js", "Prisma", "tRPC", "Tailwind CSS", "Resend"],
+            "stars": "6k",
+            "copy_count": 321
+        }
+    ]
+    
+    return famous_stacks
+
 @api_router.get("/stacks/{stack_id}")
 async def get_stack(stack_id: str):
     stack = await db.user_stacks.find_one({"stack_id": stack_id}, {"_id": 0})
@@ -484,18 +781,172 @@ async def copy_stack(stack_id: str):
         raise HTTPException(status_code=404, detail="Stack not found")
     return {"message": "Stack copied"}
 
+# ==================== SMART SEARCH ====================
+
+@api_router.post("/search")
+async def smart_search(req: SmartSearchRequest):
+    """AI-powered search across curated DB and live GitHub"""
+    results = []
+    
+    # 1. Parse query with AI
+    parsed_query = {"keywords": req.query.lower().split(), "intent": "search"}
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"search_{uuid.uuid4().hex[:8]}",
+            system_message="Parse search queries for GitHub tools."
+        ).with_model("gemini", "gemini-3-flash-preview")
+        
+        prompt = f"""Parse this search: "{req.query}"
+Return ONLY JSON (no markdown):
+{{"keywords": ["word1", "word2"], "categories": ["ai", "saas"], "github_query": "optimized search", "alternative_to": null}}"""
+        
+        response = await chat.send_message(UserMessage(text=prompt))
+        import json
+        cleaned = response.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+        parsed_query = json.loads(cleaned)
+    except Exception as e:
+        logger.error(f"Query parse error: {e}")
+    
+    keywords = parsed_query.get("keywords", req.query.lower().split())
+    
+    # 2. Search our database
+    if keywords:
+        text_regex = "|".join(re.escape(k) for k in keywords[:5])
+        db_query = {
+            "$or": [
+                {"name": {"$regex": text_regex, "$options": "i"}},
+                {"description": {"$regex": text_regex, "$options": "i"}},
+                {"tags": {"$in": keywords}},
+                {"topics": {"$in": keywords}}
+            ]
+        }
+        
+        # Search curated tools
+        tools = await db.tools.find(db_query, {"_id": 0}).limit(req.limit).to_list(req.limit)
+        for t in tools:
+            t["source"] = "curated"
+            results.append(t)
+        
+        # Search github_repos
+        gh_repos = await db.github_repos.find(db_query, {"_id": 0}).sort("score", -1).limit(req.limit - len(results)).to_list(req.limit - len(results))
+        for r in gh_repos:
+            r["source"] = "github_cached"
+            results.append(r)
+    
+    # 3. Search GitHub live if not enough results
+    if req.include_github_live and len(results) < req.limit:
+        github_query = parsed_query.get("github_query", req.query)
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    "https://api.github.com/search/repositories",
+                    params={
+                        "q": f"{github_query} stars:>50",
+                        "sort": "stars",
+                        "order": "desc",
+                        "per_page": req.limit - len(results)
+                    },
+                    headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                    timeout=15
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    for item in data.get("items", []):
+                        results.append({
+                            "tool_id": item["full_name"].replace("/", "_").lower(),
+                            "name": item["name"],
+                            "full_name": item["full_name"],
+                            "description": item.get("description") or "",
+                            "stars": f"{item['stargazers_count']:,}",
+                            "language": item.get("language") or "Unknown",
+                            "github_url": item["html_url"],
+                            "topics": item.get("topics", []),
+                            "source": "github_live"
+                        })
+        except Exception as e:
+            logger.error(f"GitHub live search error: {e}")
+    
+    return {
+        "query": req.query,
+        "parsed": parsed_query,
+        "results": results[:req.limit],
+        "total": len(results)
+    }
+
+@api_router.get("/search/suggestions")
+async def search_suggestions(q: str):
+    """Get search suggestions based on partial query"""
+    if len(q) < 2:
+        return {"suggestions": []}
+    
+    # Search tool names
+    tools = await db.tools.find(
+        {"name": {"$regex": f"^{re.escape(q)}", "$options": "i"}},
+        {"_id": 0, "name": 1, "description": 1}
+    ).limit(5).to_list(5)
+    
+    suggestions = [{"name": t["name"], "description": t.get("description", "")[:60]} for t in tools]
+    
+    # Add category suggestions
+    categories = ["AI Agents", "Automation", "Analytics", "Authentication", "Payments", "UI/UX", "Database", "API", "DevOps"]
+    for cat in categories:
+        if cat.lower().startswith(q.lower()):
+            suggestions.append({"name": cat, "type": "category"})
+    
+    return {"suggestions": suggestions[:8]}
+
+# ==================== GITHUB SCRAPER ====================
+
+@api_router.post("/scraper/run")
+async def trigger_scraper(background_tasks: BackgroundTasks):
+    """Manually trigger GitHub scraper (admin only)"""
+    from github_scraper import GitHubScraper
+    
+    async def run_scrape():
+        scraper = GitHubScraper(db)
+        await scraper.run_full_scrape()
+    
+    background_tasks.add_task(run_scrape)
+    return {"message": "Scraper started in background"}
+
+@api_router.get("/scraper/status")
+async def scraper_status():
+    """Get last scrape status"""
+    metadata = await db.scrape_metadata.find_one({"_id": "last_scrape"})
+    if not metadata:
+        return {"status": "never_run"}
+    
+    gh_count = await db.github_repos.count_documents({})
+    return {
+        "last_scrape": metadata.get("timestamp"),
+        "stats": metadata.get("stats"),
+        "total_repos": gh_count
+    }
+
 # ==================== SEED DATA ====================
 
 @api_router.post("/seed")
 async def seed_database():
     """Seed the database with initial tools, topics, and collections"""
     
-    # Check if already seeded
-    existing = await db.tools.count_documents({})
-    if existing > 50:
+    # Check if already seeded - use a lock document
+    lock = await db.seed_lock.find_one({"_id": "seed_lock"})
+    if lock and lock.get("seeded"):
+        existing = await db.tools.count_documents({})
         return {"message": "Database already seeded", "tools_count": existing}
     
-    # Seed Topics
+    # Set lock immediately to prevent race conditions
+    await db.seed_lock.update_one(
+        {"_id": "seed_lock"},
+        {"$set": {"seeded": True, "timestamp": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+    
+    # Clear and seed Topics
+    await db.topics.delete_many({})
     topics = [
         {"topic_id": "ai-agents", "name": "AI Agents", "icon": "Bot", "color": "text-blue-600", "bg_color": "bg-blue-100", "tool_count": 28},
         {"topic_id": "ui-ux", "name": "UI/UX Tools", "icon": "Palette", "color": "text-pink-600", "bg_color": "bg-pink-100", "tool_count": 52},
@@ -504,10 +955,10 @@ async def seed_database():
         {"topic_id": "payments", "name": "Payments & Billing", "icon": "CreditCard", "color": "text-orange-600", "bg_color": "bg-orange-100", "tool_count": 19},
         {"topic_id": "auth", "name": "Authentication", "icon": "Shield", "color": "text-purple-600", "bg_color": "bg-purple-100", "tool_count": 15},
     ]
-    await db.topics.delete_many({})
     await db.topics.insert_many(topics)
     
-    # Seed Tools (100+ curated tools with plain English descriptions)
+    # Clear and seed Tools
+    await db.tools.delete_many({})
     tools = [
         # Forms & Surveys
         {

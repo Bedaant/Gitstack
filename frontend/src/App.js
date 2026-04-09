@@ -338,10 +338,32 @@ const TopicsGrid = ({ topics }) => {
 };
 
 // Trending Section
-const TrendingSection = ({ tools }) => {
+const TrendingSection = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('Top this week');
-  const tabs = ['Top this week', 'Most starred', 'New & rising', 'PH picks'];
+  const [activeTab, setActiveTab] = useState('top_week');
+  const [tools, setTools] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  const tabs = [
+    { id: 'top_week', label: 'Top this week' },
+    { id: 'top_day', label: 'Today' },
+    { id: 'top_month', label: 'This month' },
+    { id: 'new_rising', label: 'New & rising' }
+  ];
+
+  useEffect(() => {
+    const fetchTrending = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get(`${API}/tools/trending/list`, { params: { tab: activeTab } });
+        setTools(res.data);
+      } catch (e) {
+        console.error("Error fetching trending:", e);
+      }
+      setLoading(false);
+    };
+    fetchTrending();
+  }, [activeTab]);
 
   return (
     <section className="py-16 px-4 border-t-4 border-black">
@@ -349,91 +371,141 @@ const TrendingSection = ({ tools }) => {
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div>
             <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">Trending Now</h2>
-            <p className="text-zinc-500 mt-1">The most popular open-source tools this week.</p>
+            <p className="text-zinc-500 mt-1">Live from GitHub — updated every 6 hours.</p>
           </div>
           
           <div className="flex gap-2 overflow-x-auto pb-2">
             {tabs.map(tab => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
                 className={`whitespace-nowrap px-4 py-2 font-semibold text-sm border-2 border-black transition-all ${
-                  activeTab === tab ? 'bg-black text-white' : 'bg-white hover:bg-pastel-yellow'
+                  activeTab === tab.id ? 'bg-black text-white' : 'bg-white hover:bg-pastel-yellow'
                 }`}
-                data-testid={`tab-${tab.toLowerCase().replace(/ /g, '-')}`}
+                data-testid={`tab-${tab.id}`}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="space-y-0 border-2 border-black">
-          {tools.slice(0, 5).map((tool, i) => (
-            <button
-              key={tool.tool_id}
-              onClick={() => navigate(`/tools/${tool.tool_id}`)}
-              className="w-full flex items-center gap-4 p-4 hover:bg-pastel-yellow transition-colors border-b-2 border-black last:border-b-0 text-left"
-              data-testid={`trending-${tool.tool_id}`}
-            >
-              <span className="font-mono text-xl font-bold text-zinc-400 w-8">0{i + 1}</span>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold flex items-center gap-2">
-                  {tool.name}
-                  <ExternalLink className="w-4 h-4 text-zinc-400" />
-                </h3>
-                <p className="text-sm text-zinc-500 truncate">{tool.description}</p>
-              </div>
-              <div className="hidden sm:flex items-center gap-4">
-                <span className="text-xs font-mono bg-zinc-100 px-2 py-1 border border-black">{tool.language}</span>
-                <span className="flex items-center gap-1 text-sm font-semibold">
-                  <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {tool.stars}
-                </span>
-                <span className={`text-xs font-bold px-2 py-1 ${
-                  tool.difficulty === 'Beginner' ? 'badge-beginner' : 
-                  tool.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
-                }`}>
-                  {tool.difficulty}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="spinner mx-auto"></div>
+          </div>
+        ) : (
+          <div className="space-y-0 border-2 border-black">
+            {tools.slice(0, 10).map((tool, i) => (
+              <button
+                key={tool.tool_id || tool.full_name}
+                onClick={() => window.open(tool.github_url, '_blank')}
+                className="w-full flex items-center gap-4 p-4 hover:bg-pastel-yellow transition-colors border-b-2 border-black last:border-b-0 text-left"
+                data-testid={`trending-${i}`}
+              >
+                <span className="font-mono text-xl font-bold text-zinc-400 w-8">{String(i + 1).padStart(2, '0')}</span>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold flex items-center gap-2">
+                    {tool.name}
+                    <ExternalLink className="w-4 h-4 text-zinc-400" />
+                  </h3>
+                  <p className="text-sm text-zinc-500 truncate">{tool.description}</p>
+                </div>
+                <div className="hidden sm:flex items-center gap-4">
+                  <span className="text-xs font-mono bg-zinc-100 px-2 py-1 border border-black">{tool.language}</span>
+                  <span className="flex items-center gap-1 text-sm font-semibold">
+                    <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {tool.stars}
+                  </span>
+                  {tool.today_stars && (
+                    <span className="text-xs text-green-600 font-semibold">
+                      <TrendingUp className="w-3 h-3 inline" /> {tool.today_stars}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
 };
 
-// Community Stacks
-const CommunityStacks = ({ stacks }) => {
+// Community Stacks - Real founder stacks
+const CommunityStacks = () => {
+  const [stacks, setStacks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStacks = async () => {
+      try {
+        const res = await axios.get(`${API}/stacks/featured`);
+        setStacks(res.data);
+      } catch (e) {
+        console.error("Error fetching featured stacks:", e);
+      }
+      setLoading(false);
+    };
+    fetchStacks();
+  }, []);
+
   const handleCopy = async (stackId) => {
     try {
       await axios.post(`${API}/stacks/${stackId}/copy`);
-      toast.success("Stack copied!");
+      toast.success("Stack copied to clipboard!");
     } catch {
       toast.error("Failed to copy stack");
     }
   };
 
+  if (loading) {
+    return (
+      <section className="py-16 px-4 bg-pastel-lavender border-t-4 border-black">
+        <div className="max-w-5xl mx-auto text-center py-12">
+          <div className="spinner mx-auto"></div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="py-16 px-4 bg-pastel-lavender border-t-4 border-black">
       <div className="max-w-5xl mx-auto">
-        <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">Community Stacks</h2>
-        <p className="text-zinc-600 mb-8">Real founder stacks you can copy in one click.</p>
+        <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">What Founders Actually Used</h2>
+        <p className="text-zinc-600 mb-8">Real tech stacks behind successful open-source projects.</p>
         
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {stacks.map(stack => (
-            <div key={stack.stack_id} className="neo-card p-6 bg-white">
-              <h3 className="font-bold text-lg mb-2">{stack.name}</h3>
-              <p className="text-sm text-zinc-500 mb-4">{stack.tools.length} tools</p>
+            <div key={stack.stack_id} className="neo-card p-6 bg-white" data-testid={`stack-${stack.stack_id}`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-black text-white flex items-center justify-center font-bold text-sm">
+                  {stack.owner?.charAt(0) || 'S'}
+                </div>
+                <div>
+                  <h3 className="font-bold">{stack.name}</h3>
+                  <a href={stack.owner_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                    {stack.owner}
+                  </a>
+                </div>
+              </div>
+              <p className="text-sm text-zinc-500 mb-3">{stack.description}</p>
+              <div className="flex flex-wrap gap-1 mb-4">
+                {stack.tools.slice(0, 5).map((tool, i) => (
+                  <span key={i} className="text-xs px-2 py-1 bg-zinc-100 border border-zinc-200 font-mono">
+                    {tool}
+                  </span>
+                ))}
+              </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm font-mono text-zinc-400">{stack.copy_count} copies</span>
+                <span className="text-sm flex items-center gap-1">
+                  <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {stack.stars}
+                </span>
                 <button 
                   onClick={() => handleCopy(stack.stack_id)}
-                  className="neo-btn neo-btn-secondary px-4 py-2 text-sm"
-                  data-testid={`copy-stack-${stack.stack_id}`}
+                  className="neo-btn neo-btn-secondary px-3 py-1 text-sm"
+                  data-testid={`copy-${stack.stack_id}`}
                 >
-                  <Copy className="w-4 h-4 mr-2" /> Copy
+                  <Copy className="w-3 h-3 mr-1" /> Copy
                 </button>
               </div>
             </div>
@@ -1274,8 +1346,6 @@ const Dashboard = () => {
 // Home Page
 const HomePage = () => {
   const [topics, setTopics] = useState([]);
-  const [tools, setTools] = useState([]);
-  const [stacks, setStacks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1284,15 +1354,8 @@ const HomePage = () => {
         // Seed database first
         await axios.post(`${API}/seed`);
         
-        const [topicsRes, toolsRes, stacksRes] = await Promise.all([
-          axios.get(`${API}/topics`),
-          axios.get(`${API}/tools`, { params: { limit: 10 } }),
-          axios.get(`${API}/stacks/public`)
-        ]);
-        
+        const topicsRes = await axios.get(`${API}/topics`);
         setTopics(topicsRes.data);
-        setTools(toolsRes.data);
-        setStacks(stacksRes.data);
       } catch (e) {
         console.error(e);
       }
@@ -1318,8 +1381,8 @@ const HomePage = () => {
       <Hero />
       <ViralFeatures />
       <TopicsGrid topics={topics} />
-      <TrendingSection tools={tools} />
-      <CommunityStacks stacks={stacks} />
+      <TrendingSection />
+      <CommunityStacks />
       <footer className="py-8 px-4 border-t-4 border-black">
         <div className="max-w-5xl mx-auto text-center">
           <p className="font-mono text-sm text-zinc-500">
@@ -1343,6 +1406,106 @@ const FounderStacks = () => (
 const ErrorExplainer = () => (
   <div className="min-h-screen"><Header /><main className="py-12 px-4 text-center"><h1 className="text-4xl font-black">Explain This Error</h1><p className="text-zinc-500 mt-4">Coming soon...</p></main></div>
 );
+
+// Topic Tools Page - Shows tools filtered by topic
+const TopicToolsPage = () => {
+  const { topicId } = useParams();
+  const navigate = useNavigate();
+  const [topic, setTopic] = useState(null);
+  const [tools, setTools] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTopicTools = async () => {
+      try {
+        const res = await axios.get(`${API}/topics/${topicId}/tools`);
+        setTopic(res.data.topic);
+        setTools(res.data.tools);
+      } catch (e) {
+        console.error(e);
+      }
+      setLoading(false);
+    };
+    fetchTopicTools();
+  }, [topicId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <div className="flex items-center justify-center py-32">
+          <div className="spinner"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!topic) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <div className="text-center py-32">
+          <h1 className="text-2xl font-bold">Topic not found</h1>
+          <Link to="/tools" className="neo-btn neo-btn-primary mt-4 px-6 py-2">Browse All Tools</Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      <Header />
+      <main className="py-12 px-4">
+        <div className="max-w-5xl mx-auto">
+          <div className={`neo-card p-8 mb-8 ${topic.bg_color}`}>
+            <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-2" data-testid="topic-title">
+              {topic.name}
+            </h1>
+            <p className="text-zinc-600">{tools.length} tools in this category</p>
+          </div>
+
+          {tools.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-zinc-500">No tools found in this category yet.</p>
+              <Link to="/tools" className="neo-btn neo-btn-primary mt-4 px-6 py-2">Browse All Tools</Link>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              {tools.map(tool => (
+                <button
+                  key={tool.tool_id}
+                  onClick={() => tool.github_url ? window.open(tool.github_url, '_blank') : navigate(`/tools/${tool.tool_id}`)}
+                  className="neo-card p-6 text-left"
+                  data-testid={`tool-${tool.tool_id}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-bold text-lg">{tool.name}</h3>
+                    <span className={`text-xs font-bold px-2 py-1 ${
+                      tool.difficulty === 'Beginner' ? 'badge-beginner' : 
+                      tool.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
+                    }`}>
+                      {tool.difficulty}
+                    </span>
+                  </div>
+                  <p className="text-sm text-zinc-600 mb-3 line-clamp-2">{tool.description}</p>
+                  <div className="flex items-center gap-4 text-xs text-zinc-500">
+                    <span className="font-mono bg-zinc-100 px-2 py-1 border border-zinc-200">{tool.language}</span>
+                    <span className="flex items-center gap-1">
+                      <Star className="w-3 h-3 text-yellow-500" fill="currentColor" /> {tool.stars}
+                    </span>
+                    {tool.source === 'github' && (
+                      <span className="text-xs text-green-600 font-semibold">LIVE</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
 
 // Need to import useParams
 import { useParams } from "react-router-dom";
@@ -1370,7 +1533,7 @@ const AppRouter = () => {
       <Route path="/tools/:toolId" element={<ToolDetailPage />} />
       <Route path="/collections" element={<CollectionsPage />} />
       <Route path="/collections/:collectionId" element={<CollectionsPage />} />
-      <Route path="/topics/:topicId" element={<ToolsPage />} />
+      <Route path="/topics/:topicId" element={<TopicToolsPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
     </Routes>
   );
