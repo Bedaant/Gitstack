@@ -190,3 +190,69 @@ Build a fully functional SaaS where every screen and feature works. Users need t
 - Stack Generator completions/day
 - Share button clicks
 - Tool card views per session
+
+---
+
+## Update 2: Smart GitHub Integration (April 2026)
+
+### New Features Implemented
+
+#### 1. Live GitHub Trending
+- Scrapes GitHub trending page every 6 hours
+- Shows repos with weekly star growth ("↗ 5,673 stars this week")
+- 4 tabs: Top this week, Today, This month, New & rising
+- Opens GitHub directly when clicked
+
+#### 2. Browse by Topic (Fixed)
+- Each topic now shows DIFFERENT filtered tools
+- AI Agents → LangChain, Flowise, Dify, LlamaIndex
+- UI/UX → Formbricks, Ghost, shadcn/ui, Radix, etc.
+- Topics pull from both curated tools + GitHub repos
+
+#### 3. What Founders Actually Used
+- Real tech stacks from successful open-source projects:
+  - Cal.com (28k stars): Next.js, Prisma, tRPC, Tailwind, PostgreSQL
+  - Supabase (62k stars): PostgreSQL, PostgREST, GoTrue, Realtime
+  - n8n (35k stars): TypeScript, Vue.js, PostgreSQL, Redis, Bull
+  - Appwrite (38k stars): PHP, Redis, MariaDB, ClamAV, Traefik
+  - Plane (25k stars): Next.js, Django, PostgreSQL, Redis, Celery
+  - Documenso (6k stars): Next.js, Prisma, tRPC, Tailwind, Resend
+
+#### 4. Smart Search (Backend Ready)
+- AI-powered query understanding
+- Searches curated DB + live GitHub
+- Endpoint: POST /api/search
+
+### Architecture for 50,000 repos
+
+```
+GitHub (300M repos)
+    ↓ Filter: stars > 100, active in 6 months
+    ↓ Categories: dev-tools, saas, ai, automation
+    ↓ Daily trending scrape
+    ↓ (~500 new repos/day)
+
+STORAGE TIERS:
+- HOT (500 repos): Full details + AI descriptions, refreshed daily
+- WARM (50,000 repos): Basic info, refreshed weekly  
+- COLD (unlimited): On-demand fetch from GitHub API
+
+MEMORY: ~250MB for 50,000 repos
+```
+
+### Backend Files Added
+- `/app/backend/github_scraper.py` - GitHub trending scraper
+- `/app/backend/smart_search.py` - AI-powered search service
+
+### API Endpoints Added
+- `GET /api/tools/trending/list?tab=top_week` - Live trending
+- `GET /api/stacks/featured` - Founder stacks
+- `POST /api/search` - Smart search
+- `POST /api/scraper/run` - Trigger scraper
+- `GET /api/scraper/status` - Scraper status
+
+## Next Action Items
+1. Schedule 6-hour cron job for GitHub scraper
+2. Implement search autocomplete UI
+3. Add repo of the day feature
+4. Build share functionality for results
