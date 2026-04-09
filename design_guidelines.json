@@ -1,0 +1,115 @@
+{
+  "theme": "LIGHT",
+  "archetype": "3",
+  "archetype_name": "Pastel & Soft (Neo-Brutalist Twist)",
+  "vibe": "High-contrast, bold, approachably technical, fun, stark geometry with pastel pops.",
+  "global_rules": {
+    "color_mode": "light-only",
+    "background": "#FFFFFF",
+    "text": "#09090B",
+    "border_style": "2px solid #09090B",
+    "shadow_style": "4px 4px 0px 0px rgba(9,9,11,1)",
+    "shadow_hover": "2px 2px 0px 0px rgba(9,9,11,1)",
+    "corner_radius": "0px (Sharp edges everywhere)",
+    "contrast_strategy": "High contrast black and white core, accented by solid, flat pastel blocks (Mint, Yellow, Lavender) to indicate interactive zones or categories."
+  },
+  "colors": {
+    "background": {
+      "default": "#FFFFFF",
+      "alt": "#FAFAFA",
+      "pastel_mint": "#A7F3D0",
+      "pastel_yellow": "#FEF08A",
+      "pastel_lavender": "#E9D5FF",
+      "pastel_pink": "#FBCFE8"
+    },
+    "text": {
+      "primary": "#0A0A0A",
+      "secondary": "#3F3F46",
+      "inverse": "#FFFFFF",
+      "accent": "#2563EB"
+    },
+    "border": {
+      "default": "#09090B",
+      "light": "#D4D4D8",
+      "active": "#000000"
+    },
+    "accents": {
+      "primary": "#2563EB", 
+      "danger": "#EF4444", 
+      "warning": "#F59E0B",
+      "success": "#10B981"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "'Bricolage Grotesque', sans-serif",
+      "body": "'DM Sans', sans-serif",
+      "mono": "'IBM Plex Mono', monospace"
+    },
+    "scales": {
+      "h1": "text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight uppercase",
+      "h2": "text-4xl sm:text-5xl font-extrabold tracking-tight",
+      "h3": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h4": "text-xl font-bold uppercase tracking-wider",
+      "body": "text-base font-medium leading-relaxed",
+      "mono_label": "text-xs font-bold font-mono tracking-widest uppercase"
+    }
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-6 md:p-12 lg:p-20",
+    "section_gap": "gap-20 md:gap-32",
+    "bento_grid": "grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-6 md:gap-8",
+    "component_padding": "p-6 sm:p-8"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all font-bold px-6 py-3",
+      "secondary": "bg-white text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-pastel_yellow hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all font-bold px-6 py-3",
+      "pill": "rounded-full px-4 py-2 border-2 border-black font-mono text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-white hover:bg-pastel_pink transition-colors"
+    },
+    "cards": {
+      "tool_card": "bg-white border-2 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-4 relative transition-transform hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]",
+      "roast_card": "bg-black text-white border-2 border-danger p-8 shadow-[8px_8px_0px_0px_#EF4444]",
+      "stack_card": "bg-pastel_lavender border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+    },
+    "inputs": {
+      "search": "w-full border-4 border-black px-6 py-4 text-xl font-bold focus:outline-none focus:ring-0 focus:bg-pastel_yellow shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-colors placeholder:text-zinc-400"
+    },
+    "navigation": {
+      "header": "sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b-4 border-black py-4"
+    }
+  },
+  "motion_and_interactions": {
+    "hover_states": "All interactive elements must compress their hard shadows and translate slightly (X and Y) to simulate being pressed.",
+    "marquee": "Use react-fast-marquee with Bricolage Grotesque text-4xl or larger for Trending Tools and Roasting sections. Hard border top and bottom.",
+    "page_transitions": "Minimal. Keep it punchy and instantaneous to match the brutalist aesthetic."
+  },
+  "media_and_assets": {
+    "icons": "lucide-react, bold variants (strokeWidth={2.5}) where possible, or use standard strokes but large sizes.",
+    "images": {
+      "hero_illustration": {
+        "url": "https://static.prod-images.emergentagent.com/jobs/8bb8c987-2878-421e-a627-bf4f0f6ab482/images/26ad63182886ff1823baaf1f1d313f17ff418367be62981985bc68a8bcc54244.png",
+        "alt": "3D isometric illustration of a stack of software tools, boxes, and gears, vibrant neo-brutalist style",
+        "usage": "Hero section dominant visual, floating slightly to the side or above the search bar."
+      },
+      "abstract_bg_1": {
+        "url": "https://images.unsplash.com/photo-1665186096440-ebf0fad65c79?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwyfHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGdlb21ldHJpYyUyMGFic3RyYWN0fGVufDB8fHx8MTc3NTc1NjQ3OXww&ixlib=rb-4.1.0&q=85",
+        "alt": "abstract background pattern",
+        "usage": "Use selectively inside Collection cards or topic headers as a textured background with mix-blend-mode or low opacity."
+      }
+    }
+  },
+  "specific_page_instructions": {
+    "hero": "Center heavy search bar. Below it, 'Goal Chips' (e.g., 'Deploy NextJS', 'Free Database') as clickable pills. Use the hero_illustration as an overlapping graphic.",
+    "dead_tool_detector": "Two-pane layout. Left: stark input for paid tool URL. Right: Result card rendering in a pastel_mint box.",
+    "stack_generator": "Chat interface but stark and blocky. No soft bubbles. Square cards for generated tools.",
+    "repo_translator": "Input GitHub URL. The output must parse technical jargon into a massive, friendly, plain-English paragraph in the 'h3' font.",
+    "roast_my_stack": "Aggressive visual shift. Black background, red accents. The roast text should be large, maybe using a monospace font for maximum terminal-vibe impact.",
+    "collections_page": "Grid of massive cards. Each card has a different pastel background color and huge typography.",
+    "browse_topics": "Bento grid (tetris mode). Mixing squares and wide rectangles."
+  },
+  "testing_attributes": {
+    "requirement": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case format.",
+    "examples": ["data-testid='hero-search-input'", "data-testid='dead-tool-submit'", "data-testid='roast-my-stack-button'"]
+  }
+}
