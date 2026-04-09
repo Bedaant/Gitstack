@@ -419,24 +419,78 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
 
 # ==================== TOPICS ROUTES ====================
 
+# Expanded keyword map — maps each topic to the actual tags repos use on GitHub
+TOPIC_KEYWORDS = {
+    "ai-agents": [
+        "ai", "artificial-intelligence", "machine-learning", "deep-learning", "llm",
+        "chatgpt", "gpt", "openai", "ai-agents", "agent", "agents", "claude",
+        "langchain", "rag", "nlp", "natural-language-processing", "transformer",
+        "pytorch", "tensorflow", "neural-network", "generative-ai", "mcp",
+        "claude-code", "copilot", "chatbot", "llama", "huggingface"
+    ],
+    "ui-ux": [
+        "react", "nextjs", "frontend", "ui", "ux", "design", "css", "tailwind",
+        "component", "design-system", "svelte", "vue", "angular", "web",
+        "responsive", "animation", "icons", "theme", "dashboard", "template",
+        "shadcn", "radix", "headless-ui", "storybook", "figma"
+    ],
+    "automation": [
+        "automation", "devops", "ci-cd", "github-actions", "workflow", "pipeline",
+        "docker", "kubernetes", "terraform", "ansible", "jenkins", "deploy",
+        "infrastructure", "iac", "scripting", "cron", "task-runner", "cli",
+        "command-line", "terminal", "shell", "bash", "linux", "monitoring",
+        "observability", "metrics", "alerting", "logging", "self-hosted"
+    ],
+    "data-analytics": [
+        "database", "sql", "postgresql", "mysql", "mongodb", "redis", "data",
+        "analytics", "data-science", "data-engineering", "etl", "visualization",
+        "bi", "business-intelligence", "data-pipeline", "spark", "kafka",
+        "elasticsearch", "timeseries", "graphql", "orm", "migration",
+        "sqlite", "supabase", "postgres", "dbt", "airflow"
+    ],
+    "payments": [
+        "payments", "stripe", "billing", "ecommerce", "e-commerce", "fintech",
+        "invoice", "subscription", "checkout", "payment-gateway", "crypto",
+        "blockchain", "wallet", "saas", "pricing", "monetization",
+        "marketplace", "shop", "store", "cart"
+    ],
+    "auth": [
+        "authentication", "auth", "oauth", "security", "jwt", "session",
+        "login", "identity", "sso", "rbac", "authorization", "password",
+        "encryption", "2fa", "mfa", "totp", "passkey", "ldap", "saml",
+        "keycloak", "oidc", "access-control"
+    ]
+}
+
+def _build_topic_query(topic_id: str) -> list:
+    """Build a list of regex conditions for matching repos to a topic"""
+    keywords = TOPIC_KEYWORDS.get(topic_id, [])
+    if not keywords:
+        return []
+    return [{"$regex": kw, "$options": "i"} for kw in keywords]
+
 @api_router.get("/topics")
 async def get_topics():
     topics = await db.topics.find({}, {"_id": 0}).to_list(20)
     
-    # Update tool counts dynamically
     for topic in topics:
+        topic_id = topic.get("topic_id", "")
         topic_name = topic.get("name", "")
-        # Count from tools collection
-        tool_count = await db.tools.count_documents({
-            "$or": [
-                {"category": {"$regex": topic_name, "$options": "i"}},
-                {"tags": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}}
-            ]
-        })
-        # Count from github_repos
-        gh_count = await db.github_repos.count_documents({
-            "topics": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}
-        })
+        keywords = TOPIC_KEYWORDS.get(topic_id, [topic_name.lower().replace(" ", "-")])
+        
+        # Build OR query across all keyword variations
+        or_conditions = []
+        for kw in keywords:
+            or_conditions.append({"tags": {"$regex": kw, "$options": "i"}})
+            or_conditions.append({"category": {"$regex": kw, "$options": "i"}})
+        
+        tool_count = await db.tools.count_documents({"$or": or_conditions}) if or_conditions else 0
+        
+        gh_or = [{"topics": {"$in": keywords}}]
+        for kw in keywords[:5]:  # Also regex match for partial matches
+            gh_or.append({"topics": {"$regex": kw, "$options": "i"}})
+        gh_count = await db.github_repos.count_documents({"$or": gh_or})
+        
         topic["tool_count"] = tool_count + gh_count
     
     return topics
@@ -448,27 +502,36 @@ async def get_topic_tools(topic_id: str):
         raise HTTPException(status_code=404, detail="Topic not found")
     
     topic_name = topic.get("name", "")
+    keywords = TOPIC_KEYWORDS.get(topic_id, [topic_name.lower().replace(" ", "-")])
     
-    # Search tools by category and tags
-    tools = await db.tools.find({
-        "$or": [
-            {"category": {"$regex": topic_name, "$options": "i"}},
-            {"tags": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}},
-            {"tags": {"$regex": topic_name.lower().replace(" ", ""), "$options": "i"}}
-        ]
-    }, {"_id": 0}).to_list(50)
+    # Search curated tools
+    or_conditions = []
+    for kw in keywords:
+        or_conditions.append({"tags": {"$regex": kw, "$options": "i"}})
+        or_conditions.append({"category": {"$regex": kw, "$options": "i"}})
     
-    # Also search github_repos
-    gh_repos = await db.github_repos.find({
-        "$or": [
-            {"topics": {"$regex": topic_name.lower().replace(" ", "-"), "$options": "i"}},
-            {"topics": {"$regex": topic_name.lower().replace(" ", ""), "$options": "i"}},
-            {"language": {"$regex": topic_name, "$options": "i"}}
-        ]
-    }, {"_id": 0}).sort("score", -1).limit(50 - len(tools)).to_list(50 - len(tools))
+    tools = await db.tools.find(
+        {"$or": or_conditions} if or_conditions else {},
+        {"_id": 0}
+    ).to_list(100)
     
-    # Convert github repos to tool format
+    # Search github_repos with expanded keywords
+    gh_or = [{"topics": {"$in": keywords}}]
+    for kw in keywords[:5]:
+        gh_or.append({"topics": {"$regex": kw, "$options": "i"}})
+    
+    remaining = max(100 - len(tools), 20)
+    gh_repos = await db.github_repos.find(
+        {"$or": gh_or},
+        {"_id": 0}
+    ).sort("score", -1).limit(remaining).to_list(remaining)
+    
+    # Convert github repos to tool format — dedupe by name
+    seen_names = {t["name"].lower() for t in tools}
     for repo in gh_repos:
+        if repo.get("name", "").lower() in seen_names:
+            continue
+        seen_names.add(repo["name"].lower())
         tools.append({
             "tool_id": repo.get("repo_id", repo.get("full_name", "").replace("/", "_")),
             "name": repo.get("name", ""),
@@ -486,6 +549,9 @@ async def get_topic_tools(topic_id: str):
             "tags": repo.get("topics", []),
             "source": "github"
         })
+    
+    # Update topic count to match actual results
+    topic["tool_count"] = len(tools)
     
     return {"topic": topic, "tools": tools}
 
@@ -1314,17 +1380,30 @@ async def trigger_scraper(background_tasks: BackgroundTasks):
 
 @api_router.get("/scraper/status")
 async def scraper_status():
-    """Get last scrape status"""
+    """Get last scrape status with details"""
     metadata = await db.scrape_metadata.find_one({"_id": "last_scrape"})
-    if not metadata:
-        return {"status": "never_run"}
-    
     gh_count = await db.github_repos.count_documents({})
-    return {
-        "last_scrape": metadata.get("timestamp"),
-        "stats": metadata.get("stats"),
-        "total_repos": gh_count
+    hot_count = await db.github_repos.count_documents({"tier": "hot"})
+    warm_count = await db.github_repos.count_documents({"tier": "warm"})
+    with_topics = await db.github_repos.count_documents({"topics": {"$ne": []}})
+    
+    result = {
+        "total_repos": gh_count,
+        "hot_tier": hot_count,
+        "warm_tier": warm_count,
+        "with_topics": with_topics,
+        "cron_active": _scraper_task is not None and not _scraper_task.done() if _scraper_task else False,
+        "cron_interval": "Every 6 hours"
     }
+    
+    if metadata:
+        result["last_scrape"] = metadata.get("timestamp")
+        result["stats"] = metadata.get("stats")
+    else:
+        result["last_scrape"] = None
+        result["stats"] = None
+    
+    return result
 
 # ==================== SEED DATA ====================
 
@@ -2307,6 +2386,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Background scraper scheduler
+_scraper_task = None
+
+async def _scraper_loop():
+    """Run scraper on startup, then every 6 hours"""
+    from github_scraper import GitHubScraper
+    await asyncio.sleep(10)  # Let server start
+    while True:
+        try:
+            logger.info("Cron: Starting scheduled GitHub scrape...")
+            scraper = GitHubScraper(db)
+            stats = await scraper.run_full_scrape()
+            await scraper.cleanup_old_repos(30)
+            logger.info(f"Cron: Scrape complete — {stats}")
+        except Exception as e:
+            logger.error(f"Cron: Scraper error — {e}")
+        await asyncio.sleep(6 * 60 * 60)  # 6 hours
+
+@app.on_event("startup")
+async def startup_event():
+    global _scraper_task
+    _scraper_task = asyncio.create_task(_scraper_loop())
+    logger.info("Background scraper scheduled (every 6 hours)")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global _scraper_task
+    if _scraper_task:
+        _scraper_task.cancel()
     client.close()

@@ -39,7 +39,10 @@ CATEGORIES = [
     "database", "api", "cli", "devops", "monitoring", "analytics",
     "authentication", "payments", "email", "cms", "ecommerce",
     "no-code", "low-code", "boilerplate", "starter-template",
-    "open-source", "self-hosted", "productivity", "collaboration"
+    "open-source", "self-hosted", "productivity", "collaboration",
+    "react", "nextjs", "typescript", "python", "llm", "chatbot",
+    "design-system", "ui", "frontend", "data-science", "security",
+    "docker", "kubernetes", "workflow", "agent", "generative-ai"
 ]
 
 # Languages to track
@@ -358,7 +361,7 @@ class GitHubScraper:
         
         # 2. Search by categories
         date_filter = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
-        for category in CATEGORIES[:10]:  # Limit to avoid rate limits
+        for category in CATEGORIES[:20]:  # Search more categories
             query = f"topic:{category} stars:>100 pushed:>{date_filter}"
             logger.info(f"Searching: {query}")
             results = await self.search_github_api(query, max_results=50)
