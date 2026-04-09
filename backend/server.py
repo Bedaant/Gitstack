@@ -633,6 +633,131 @@ Be direct and slightly savage, but constructive. This is meant to be fun but gen
     result = await call_gemini(prompt)
     return {"roast": result}
 
+@api_router.get("/ai/translate-repo/{owner}/{repo}")
+async def translate_github_repo(owner: str, repo: str):
+    """Translate any GitHub repo to plain English with AI"""
+    full_name = f"{owner}/{repo}"
+    
+    # Check cache first (7 day TTL)
+    cached = await db.repo_translations.find_one({"full_name": full_name}, {"_id": 0})
+    if cached:
+        cached_time = datetime.fromisoformat(cached.get("translated_at", "2000-01-01"))
+        if datetime.now(timezone.utc) - cached_time < timedelta(days=7):
+            return cached
+    
+    # Fetch repo info from GitHub
+    try:
+        async with httpx.AsyncClient() as client:
+            # Get repo details
+            repo_response = await client.get(
+                f"https://api.github.com/repos/{full_name}",
+                headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                timeout=15
+            )
+            if repo_response.status_code != 200:
+                raise HTTPException(status_code=404, detail="Repository not found on GitHub")
+            
+            repo_data = repo_response.json()
+            
+            # Get README
+            readme_content = ""
+            try:
+                readme_response = await client.get(
+                    f"https://api.github.com/repos/{full_name}/readme",
+                    headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                    timeout=15
+                )
+                if readme_response.status_code == 200:
+                    import base64
+                    readme_data = readme_response.json()
+                    if readme_data.get("encoding") == "base64":
+                        readme_content = base64.b64decode(readme_data.get("content", "")).decode("utf-8", errors="ignore")[:3000]
+            except:
+                pass
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"GitHub API error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch from GitHub")
+    
+    # AI Translation
+    prompt = f"""Translate this GitHub repository for a non-technical founder:
+
+Repository: {full_name}
+Description: {repo_data.get('description', 'No description')}
+Stars: {repo_data.get('stargazers_count', 0):,}
+Language: {repo_data.get('language', 'Unknown')}
+Topics: {', '.join(repo_data.get('topics', [])[:5])}
+
+README excerpt:
+{readme_content[:2000] if readme_content else 'No README available'}
+
+Provide a complete analysis in this exact format:
+
+**What it does:** (1 simple sentence a business person would understand)
+
+**Who it's for:** (describe the ideal user in plain terms)
+
+**What you can build with it:**
+- Example 1
+- Example 2
+- Example 3
+
+**Difficulty:** Beginner/Intermediate/Advanced
+
+**Setup time:** X minutes/hours (realistic estimate)
+
+**How to get started:**
+1. First step (plain English, no jargon)
+2. Second step
+3. Third step
+
+**Replaces (paid alternative):** Name the paid SaaS this could replace and estimated monthly cost, or "No direct paid alternative"
+
+Keep it simple. No technical jargon. Focus on business outcomes."""
+
+    translation = await call_gemini(prompt)
+    
+    # Parse difficulty from translation
+    difficulty = "Intermediate"
+    if "Beginner" in translation:
+        difficulty = "Beginner"
+    elif "Advanced" in translation:
+        difficulty = "Advanced"
+    
+    # Parse setup time
+    setup_time = "30 mins"
+    import re
+    time_match = re.search(r'\*\*Setup time:\*\*\s*(.+?)(?:\n|$)', translation)
+    if time_match:
+        setup_time = time_match.group(1).strip()
+    
+    result = {
+        "full_name": full_name,
+        "name": repo_data.get("name"),
+        "owner": repo_data.get("owner", {}).get("login"),
+        "description": repo_data.get("description"),
+        "stars": repo_data.get("stargazers_count", 0),
+        "forks": repo_data.get("forks_count", 0),
+        "language": repo_data.get("language"),
+        "topics": repo_data.get("topics", []),
+        "html_url": repo_data.get("html_url"),
+        "homepage": repo_data.get("homepage"),
+        "translation": translation,
+        "difficulty": difficulty,
+        "setup_time": setup_time,
+        "translated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Cache the translation
+    await db.repo_translations.update_one(
+        {"full_name": full_name},
+        {"$set": result},
+        upsert=True
+    )
+    
+    return result
+
 @api_router.post("/ai/idea-exists")
 async def idea_exists(idea: str):
     prompt = f"""A founder wants to build: {idea}
@@ -696,67 +821,67 @@ async def get_public_stacks():
 async def get_featured_stacks():
     """Get real founder stacks from famous open-source projects"""
     
-    # Famous open-source projects and their stacks
+    # Famous open-source projects and their stacks - NO FAKE NUMBERS
     famous_stacks = [
         {
             "stack_id": "calcom_stack",
             "name": "Cal.com's Stack",
             "description": "The scheduling tool used by 50k+ companies",
             "owner": "Cal.com",
-            "owner_url": "https://github.com/calcom",
+            "owner_url": "https://github.com/calcom/cal.com",
+            "repo_url": "https://github.com/calcom/cal.com",
             "tools": ["Next.js", "Prisma", "tRPC", "Tailwind CSS", "PostgreSQL"],
-            "stars": "28k",
-            "copy_count": 1543
+            "stars": "28k"
         },
         {
             "stack_id": "supabase_stack",
             "name": "Supabase's Stack",
             "description": "The open-source Firebase alternative",
             "owner": "Supabase",
-            "owner_url": "https://github.com/supabase",
+            "owner_url": "https://github.com/supabase/supabase",
+            "repo_url": "https://github.com/supabase/supabase",
             "tools": ["PostgreSQL", "PostgREST", "GoTrue", "Realtime", "Storage"],
-            "stars": "62k",
-            "copy_count": 2341
+            "stars": "62k"
         },
         {
             "stack_id": "n8n_stack",
             "name": "n8n's Stack",
             "description": "Workflow automation tool",
             "owner": "n8n",
-            "owner_url": "https://github.com/n8n-io",
+            "owner_url": "https://github.com/n8n-io/n8n",
+            "repo_url": "https://github.com/n8n-io/n8n",
             "tools": ["TypeScript", "Vue.js", "PostgreSQL", "Redis", "Bull"],
-            "stars": "35k",
-            "copy_count": 876
+            "stars": "35k"
         },
         {
             "stack_id": "appwrite_stack",
             "name": "Appwrite's Stack",
             "description": "Backend-as-a-Service platform",
             "owner": "Appwrite",
-            "owner_url": "https://github.com/appwrite",
+            "owner_url": "https://github.com/appwrite/appwrite",
+            "repo_url": "https://github.com/appwrite/appwrite",
             "tools": ["PHP", "Redis", "MariaDB", "ClamAV", "Traefik"],
-            "stars": "38k",
-            "copy_count": 654
+            "stars": "38k"
         },
         {
             "stack_id": "plane_stack",
             "name": "Plane's Stack",
             "description": "Open-source Jira alternative",
             "owner": "Plane",
-            "owner_url": "https://github.com/makeplane",
+            "owner_url": "https://github.com/makeplane/plane",
+            "repo_url": "https://github.com/makeplane/plane",
             "tools": ["Next.js", "Django", "PostgreSQL", "Redis", "Celery"],
-            "stars": "25k",
-            "copy_count": 432
+            "stars": "25k"
         },
         {
             "stack_id": "documenso_stack",
             "name": "Documenso's Stack",
             "description": "Open-source DocuSign alternative",
             "owner": "Documenso",
-            "owner_url": "https://github.com/documenso",
+            "owner_url": "https://github.com/documenso/documenso",
+            "repo_url": "https://github.com/documenso/documenso",
             "tools": ["Next.js", "Prisma", "tRPC", "Tailwind CSS", "Resend"],
-            "stars": "6k",
-            "copy_count": 321
+            "stars": "6k"
         }
     ]
     

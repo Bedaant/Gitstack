@@ -399,7 +399,13 @@ const TrendingSection = () => {
             {tools.slice(0, 10).map((tool, i) => (
               <button
                 key={tool.tool_id || tool.full_name}
-                onClick={() => window.open(tool.github_url, '_blank')}
+                onClick={() => {
+                  if (tool.full_name) {
+                    window.location.href = `/repo/${tool.full_name}`;
+                  } else if (tool.github_url) {
+                    window.open(tool.github_url, '_blank');
+                  }
+                }}
                 className="w-full flex items-center gap-4 p-4 hover:bg-pastel-yellow transition-colors border-b-2 border-black last:border-b-0 text-left"
                 data-testid={`trending-${i}`}
               >
@@ -449,15 +455,6 @@ const CommunityStacks = () => {
     fetchStacks();
   }, []);
 
-  const handleCopy = async (stackId) => {
-    try {
-      await axios.post(`${API}/stacks/${stackId}/copy`);
-      toast.success("Stack copied to clipboard!");
-    } catch {
-      toast.error("Failed to copy stack");
-    }
-  };
-
   if (loading) {
     return (
       <section className="py-16 px-4 bg-pastel-lavender border-t-4 border-black">
@@ -476,16 +473,23 @@ const CommunityStacks = () => {
         
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {stacks.map(stack => (
-            <div key={stack.stack_id} className="neo-card p-6 bg-white" data-testid={`stack-${stack.stack_id}`}>
+            <a 
+              key={stack.stack_id} 
+              href={stack.repo_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="neo-card p-6 bg-white block" 
+              data-testid={`stack-${stack.stack_id}`}
+            >
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 bg-black text-white flex items-center justify-center font-bold text-sm">
                   {stack.owner?.charAt(0) || 'S'}
                 </div>
                 <div>
                   <h3 className="font-bold">{stack.name}</h3>
-                  <a href={stack.owner_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                  <span className="text-xs text-primary hover:underline">
                     {stack.owner}
-                  </a>
+                  </span>
                 </div>
               </div>
               <p className="text-sm text-zinc-500 mb-3">{stack.description}</p>
@@ -500,15 +504,11 @@ const CommunityStacks = () => {
                 <span className="text-sm flex items-center gap-1">
                   <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {stack.stars}
                 </span>
-                <button 
-                  onClick={() => handleCopy(stack.stack_id)}
-                  className="neo-btn neo-btn-secondary px-3 py-1 text-sm"
-                  data-testid={`copy-${stack.stack_id}`}
-                >
-                  <Copy className="w-3 h-3 mr-1" /> Copy
-                </button>
+                <span className="text-xs text-primary font-semibold flex items-center gap-1">
+                  View on GitHub <ExternalLink className="w-3 h-3" />
+                </span>
               </div>
-            </div>
+            </a>
           ))}
         </div>
       </div>
@@ -605,8 +605,21 @@ const DeadToolDetector = () => {
                 ))}
               </div>
 
-              <button className="neo-btn neo-btn-secondary px-6 py-3 w-full" data-testid="share-results">
-                <Share2 className="w-5 h-5 mr-2" /> Share Results
+              <button 
+                onClick={() => {
+                  const text = `I found ${results.length} free alternatives and can save $${totalSavings}/year! 🎉\n\n${results.map(r => `${r.paidTool} → ${r.freeAlternative} (Save ${r.annualSavings})`).join('\n')}\n\nTry GitStack: ${window.location.origin}/dead-tool-detector`;
+                  
+                  if (navigator.share) {
+                    navigator.share({ title: `I'm saving $${totalSavings}/year with free tools!`, text });
+                  } else {
+                    navigator.clipboard.writeText(text);
+                    toast.success("Results copied to clipboard!");
+                  }
+                }}
+                className="neo-btn neo-btn-secondary px-6 py-3 w-full" 
+                data-testid="share-results"
+              >
+                <Share2 className="w-5 h-5 mr-2" /> Share "I'm saving ${totalSavings}/yr"
               </button>
             </div>
           )}
@@ -1254,6 +1267,151 @@ const CollectionsPage = () => {
   );
 };
 
+// GitHub Repo Detail Page (for trending repos with AI translation)
+const GitHubRepoPage = () => {
+  const { owner, repo } = useParams();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchTranslation = async () => {
+      try {
+        const res = await axios.get(`${API}/ai/translate-repo/${owner}/${repo}`);
+        setData(res.data);
+      } catch (e) {
+        setError("Failed to translate repository");
+        console.error(e);
+      }
+      setLoading(false);
+    };
+    fetchTranslation();
+  }, [owner, repo]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <div className="flex flex-col items-center justify-center py-32">
+          <div className="spinner mb-4"></div>
+          <p className="font-bold text-lg">Translating to plain English...</p>
+          <p className="text-zinc-500">Reading the README and analyzing</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <div className="text-center py-32">
+          <h1 className="text-2xl font-bold mb-4">Repository not found</h1>
+          <a href={`https://github.com/${owner}/${repo}`} target="_blank" rel="noopener noreferrer" className="neo-btn neo-btn-primary px-6 py-2">
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      <Header />
+      <main className="py-12 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="neo-card p-8 mb-8" data-testid="github-repo-detail">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h1 className="text-4xl font-black mb-2">{data.name}</h1>
+                <p className="text-zinc-500 font-mono text-sm mb-4">{data.full_name}</p>
+                <div className="flex items-center gap-4">
+                  <span className={`text-sm font-bold px-3 py-1 ${
+                    data.difficulty === 'Beginner' ? 'badge-beginner' : 
+                    data.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
+                  }`}>
+                    {data.difficulty}
+                  </span>
+                  <span className="flex items-center gap-1 text-sm text-zinc-500">
+                    <Clock className="w-4 h-4" /> {data.setup_time}
+                  </span>
+                  <span className="flex items-center gap-1 text-sm font-semibold">
+                    <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {data.stars?.toLocaleString()}
+                  </span>
+                  {data.forks > 0 && (
+                    <span className="text-sm text-zinc-500">{data.forks?.toLocaleString()} forks</span>
+                  )}
+                </div>
+              </div>
+              <a 
+                href={data.html_url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="neo-btn neo-btn-secondary px-4 py-2"
+                data-testid="github-link"
+              >
+                <Github className="w-5 h-5 mr-2" /> View on GitHub
+              </a>
+            </div>
+
+            {data.description && (
+              <p className="text-lg text-zinc-600 mb-6 italic">"{data.description}"</p>
+            )}
+
+            {data.topics && data.topics.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-6">
+                {data.topics.map((topic, i) => (
+                  <span key={i} className="text-xs font-mono px-2 py-1 bg-zinc-100 border border-zinc-200">
+                    {topic}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* AI Translation */}
+          <div className="neo-card p-8 bg-pastel-mint" data-testid="ai-translation">
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-primary" /> Plain English Explanation
+            </h2>
+            <div 
+              className="prose-gitstack"
+              dangerouslySetInnerHTML={{ 
+                __html: data.translation
+                  ?.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                  .replace(/\n- /g, '<br/>• ')
+                  .replace(/\n\d\. /g, (match) => '<br/>' + match.trim() + ' ')
+                  .replace(/\n/g, '<br/>')
+              }} 
+            />
+          </div>
+
+          <div className="flex gap-4 mt-8">
+            <a 
+              href={data.html_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="neo-btn neo-btn-primary px-6 py-3 flex-1 justify-center"
+            >
+              <Github className="w-5 h-5 mr-2" /> Start Using This Tool
+            </a>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(`Check out ${data.name}: ${data.html_url}`);
+                toast.success("Link copied!");
+              }}
+              className="neo-btn neo-btn-secondary px-6 py-3"
+              data-testid="share-repo"
+            >
+              <Share2 className="w-5 h-5 mr-2" /> Share
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
 // Dashboard / My Stack Page
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
@@ -1531,6 +1689,7 @@ const AppRouter = () => {
       <Route path="/error-explainer" element={<ErrorExplainer />} />
       <Route path="/tools" element={<ToolsPage />} />
       <Route path="/tools/:toolId" element={<ToolDetailPage />} />
+      <Route path="/repo/:owner/:repo" element={<GitHubRepoPage />} />
       <Route path="/collections" element={<CollectionsPage />} />
       <Route path="/collections/:collectionId" element={<CollectionsPage />} />
       <Route path="/topics/:topicId" element={<TopicToolsPage />} />
