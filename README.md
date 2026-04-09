@@ -286,9 +286,83 @@ curl -X POST http://localhost:8001/api/scraper/run
 
 ---
 
-## Deployment
+## Deployment on Render (Recommended)
 
-### Docker (recommended)
+The easiest way — push to GitHub, everything deploys automatically.
+
+### One-Time Setup (5 minutes)
+
+#### Step 1: Create a free MongoDB Atlas database
+
+1. Go to [mongodb.com/atlas](https://www.mongodb.com/atlas) → Sign up (free)
+2. Create a **Free Shared Cluster** (M0 — 512MB, free forever)
+3. Under **Database Access** → Add a database user (username + password)
+4. Under **Network Access** → Click **"Allow Access from Anywhere"** (IP: `0.0.0.0/0`)
+5. Click **Connect** → **Drivers** → Copy your connection string:
+   ```
+   mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/gitstack?retryWrites=true&w=majority
+   ```
+   (Replace `USERNAME` and `PASSWORD` with your actual credentials)
+
+#### Step 2: Deploy on Render
+
+1. Push this repo to GitHub (use "Save to GitHub" if on Emergent)
+2. Go to [render.com](https://render.com) → Sign up (free)
+3. Click **New** → **Blueprint**
+4. Connect your GitHub repo
+5. Render will detect `render.yaml` and show 2 services:
+   - `gitstack-api` (Backend — Python)
+   - `gitstack-app` (Frontend — Static)
+6. You'll be prompted to fill in 3 values:
+
+   | Variable | Where to get it |
+   |----------|----------------|
+   | `MONGO_URL` | Your MongoDB Atlas connection string from Step 1 |
+   | `EMERGENT_LLM_KEY` | [emergentagent.com](https://emergentagent.com) → Profile → Universal Key |
+   | `REACT_APP_BACKEND_URL` | After backend deploys, copy its URL (e.g., `https://gitstack-api.onrender.com`) |
+
+7. Click **Apply** — both services deploy automatically
+
+#### Step 3: Set the Frontend Backend URL
+
+1. Wait for `gitstack-api` to finish deploying
+2. Copy its URL (e.g., `https://gitstack-api.onrender.com`)
+3. Go to `gitstack-app` → **Environment** → Set `REACT_APP_BACKEND_URL` to that URL
+4. Trigger a manual redeploy on the frontend
+
+**That's it!** Every future `git push` auto-redeploys both services.
+
+### What the `render.yaml` Does
+
+```
+render.yaml          ← Blueprint file (auto-detected by Render)
+├── gitstack-api     ← Backend (Python, free tier)
+│   ├── Installs requirements.txt + emergentintegrations
+│   ├── Runs: uvicorn server:app
+│   └── Health check: /api/health
+└── gitstack-app     ← Frontend (Static site, free tier)
+    ├── Runs: yarn install && yarn build
+    ├── Serves: build/ folder
+    └── All routes → index.html (SPA support)
+```
+
+### Render Free Tier Limits
+
+| | Backend | Frontend |
+|--|---------|----------|
+| **Plan** | Free Web Service | Free Static Site |
+| **RAM** | 512 MB | N/A |
+| **Bandwidth** | 100 GB/mo | 100 GB/mo |
+| **Sleep** | Spins down after 15 min inactivity | Always on |
+| **Custom domain** | Yes | Yes |
+
+> **Note:** On the free tier, the backend sleeps after 15 minutes of inactivity. First request after sleep takes ~30 seconds to cold-start. Upgrade to the Starter plan ($7/mo) to keep it always on.
+
+---
+
+## Alternative Deployment Options
+
+### Docker
 
 ```bash
 # Backend
@@ -302,19 +376,11 @@ yarn build
 # Serve the build/ folder with nginx, Vercel, or Netlify
 ```
 
-### Vercel (Frontend)
+### Vercel (Frontend) + Render (Backend)
 
-1. Push to GitHub
-2. Import in Vercel
-3. Set root directory to `frontend`
-4. Add env var: `REACT_APP_BACKEND_URL=https://your-backend-url.com`
-
-### Railway / Render (Backend)
-
-1. Push to GitHub
-2. Create new service, point to `backend/` directory
-3. Set env vars: `MONGO_URL`, `DB_NAME`, `EMERGENT_LLM_KEY`
-4. Start command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
+1. Deploy backend on Render (steps above)
+2. Import frontend in [Vercel](https://vercel.com) → Set root to `frontend`
+3. Add env var: `REACT_APP_BACKEND_URL=https://gitstack-api.onrender.com`
 
 ---
 

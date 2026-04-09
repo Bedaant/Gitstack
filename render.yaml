@@ -1,0 +1,50 @@
+# Render Blueprint — auto-deploys frontend + backend on git push
+# Docs: https://docs.render.com/blueprint-spec
+
+services:
+  # ==================== BACKEND ====================
+  - type: web
+    name: gitstack-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: |
+      pip install -r requirements.txt
+      pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGO_URL
+        sync: false  # You'll set this manually (MongoDB Atlas connection string)
+      - key: DB_NAME
+        value: gitstack
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: EMERGENT_LLM_KEY
+        sync: false  # You'll set this manually (your Emergent Universal Key)
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+    healthCheckPath: /api/health
+
+  # ==================== FRONTEND ====================
+  - type: web
+    name: gitstack-app
+    runtime: static
+    region: oregon
+    plan: free
+    rootDir: frontend
+    buildCommand: yarn install && yarn build
+    staticPublishPath: build
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: REACT_APP_BACKEND_URL
+        sync: false  # Set to: https://gitstack-api.onrender.com (your backend URL)
+      - key: NODE_VERSION
+        value: "20.20.0"
