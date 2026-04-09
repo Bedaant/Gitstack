@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Package, Menu, X, LogOut } from "lucide-react";
+import { Menu, X, LogOut } from "lucide-react";
 
 export const Header = () => {
   const { user, login, logout } = useAuth();
@@ -11,9 +11,7 @@ export const Header = () => {
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b-4 border-black py-4">
       <div className="max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary flex items-center justify-center border-2 border-black neo-shadow">
-            <Package className="w-5 h-5 text-white" strokeWidth={2.5} />
-          </div>
+          <img src="/logo.svg" alt="GitStack" className="w-10 h-10" />
           <span className="text-2xl font-extrabold tracking-tight">GitStack</span>
         </Link>
 
