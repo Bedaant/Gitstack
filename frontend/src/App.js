@@ -177,8 +177,27 @@ const Header = () => {
 // Hero Section
 const Hero = () => {
   const [query, setQuery] = useState("");
+  const [toolCount, setToolCount] = useState(0);
   const navigate = useNavigate();
   const chips = ['AI agent', 'SaaS starter', 'Marketplace', 'Automation', 'UI/design', 'Data tools'];
+
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const [toolsRes, ghRes] = await Promise.all([
+          axios.get(`${API}/tools`, { params: { limit: 1 } }),
+          axios.get(`${API}/scraper/status`)
+        ]);
+        // Get total from curated + github repos
+        const curated = 44; // Our curated tools
+        const github = ghRes.data.total_repos || 0;
+        setToolCount(curated + github);
+      } catch {
+        setToolCount(44); // Fallback to curated only
+      }
+    };
+    fetchCount();
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -194,7 +213,7 @@ const Hero = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-4 py-2 border-2 border-black neo-shadow mb-6 bg-pastel-mint">
               <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></span>
-              <span className="font-mono text-sm font-bold">127 TOOLS, PLAIN ENGLISH</span>
+              <span className="font-mono text-sm font-bold">{toolCount > 0 ? `${toolCount}+ TOOLS` : 'LOADING...'}, PLAIN ENGLISH</span>
             </div>
             
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight uppercase leading-[0.95] mb-6" data-testid="hero-title">
