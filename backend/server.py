@@ -852,7 +852,7 @@ async def get_collection(collection_id: str):
 
 @api_router.post("/ai/dead-tool-detector")
 @limiter.limit("10/minute")
-async def dead_tool_detector(_request: Request, req: DeadToolRequest):
+async def dead_tool_detector(request: Request, req: DeadToolRequest):
     prompt = f"""I am paying for these SaaS tools: {req.paid_tools}
 
 Find free open-source GitHub alternatives for each tool.
@@ -886,7 +886,7 @@ Be accurate with real GitHub repositories. Calculate realistic cost estimates.""
 
 @api_router.post("/ai/stack-generator")
 @limiter.limit("10/minute")
-async def stack_generator(_request: Request, req: StackGeneratorRequest):
+async def stack_generator(request: Request, req: StackGeneratorRequest):
     context = f"Idea: {req.idea}"
     if req.budget:
         context += f"\nBudget: {req.budget}"
@@ -928,7 +928,7 @@ Put tools in the order they should be set up. Use real GitHub repositories."""
 
 @api_router.post("/ai/repo-translator")
 @limiter.limit("10/minute")
-async def repo_translator(_request: Request, req: RepoTranslatorRequest):
+async def repo_translator(request: Request, req: RepoTranslatorRequest):
     github_url = req.github_url.strip().rstrip("/")
 
     # Only allow github.com URLs — reject anything else
@@ -1000,7 +1000,7 @@ Keep it extremely simple. No technical jargon. Be friendly and reassuring."""
 
 @api_router.post("/ai/roast-my-stack")
 @limiter.limit("10/minute")
-async def roast_my_stack(_request: Request, req: RoastRequest):
+async def roast_my_stack(request: Request, req: RoastRequest):
     tools_str = ", ".join(req.tools)
     prompt = f"""A founder is using these tools: {tools_str}
 
