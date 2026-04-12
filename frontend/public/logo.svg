@@ -1,13 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <!-- Bottom layer -->
-  <rect x="6" y="28" width="36" height="10" rx="1" fill="#000000" stroke="#000000" stroke-width="2"/>
-  <!-- Middle layer -->
-  <rect x="4" y="18" width="36" height="10" rx="1" fill="#2563EB" stroke="#000000" stroke-width="2"/>
-  <!-- Top layer -->
-  <rect x="8" y="8" width="36" height="10" rx="1" fill="#000000" stroke="#000000" stroke-width="2"/>
-  <!-- Git branch symbol on top layer -->
-  <circle cx="20" cy="13" r="2" fill="white"/>
-  <circle cx="32" cy="13" r="2" fill="white"/>
-  <line x1="22" y1="13" x2="30" y2="13" stroke="white" stroke-width="2"/>
-  <circle cx="26" cy="13" r="1.5" fill="#2563EB"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+    <!-- The "Core Loop" G -->
+    <path d="M 50 15 A 35 35 0 1 0 85 50 L 50 50" stroke="#0F172A" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+    
+    <!-- Top Git Node (Merge) -->
+    <circle cx="50" cy="15" r="10" fill="#EC4899" />
+    
+    <!-- Center Git Node (Start) -->
+    <circle cx="50" cy="50" r="10" fill="#06B6D4" />
 </svg>

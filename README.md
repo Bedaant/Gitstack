@@ -5,7 +5,7 @@
 
 ![GitStack](frontend/public/logo.svg)
 
-**1100+ tools indexed** | **12 categories** | **AI-powered translations** | **Live GitHub data**
+**4300+ tools indexed** | **12 categories** | **Premium UI/UX** | **Live GitHub data**
 
 ---
 
@@ -13,12 +13,13 @@
 
 GitStack is a SaaS platform that curates open-source GitHub tools and explains them in plain English for non-technical founders. Instead of scrolling through READMEs full of jargon, you get:
 
-- **Stack Generator** — Tell us your idea, get the exact tools you need
-- **Dead Tool Detector** — Find free alternatives to paid SaaS (Typeform → Formbricks, Calendly → Cal.com)
-- **Repo Translator** — Paste any GitHub URL, understand it in 10 seconds
-- **Roast My Stack** — Get brutally honest feedback on your tool choices
-- **Your Idea Already Exists** — Find repos to fork instead of building from scratch
-- **Repo of the Day** — Daily curated tool with newsletter digest
+- **Stack Generator** — Multi-step tool orchestrator. Build your entire tech stack from a single idea.
+- **Comparison Engine** — Side-by-side battle reports. Cost, setup, and "vibe" analysis for founders.
+- **Dead Tool Detector** — Stop the burn. Find open-source alternatives to expensive SaaS.
+- **Repo Translator** — The README translator. Get a plain English explanation of any repo in 10 seconds.
+- **Roast My Stack** — Brutally honest AI feedback on your tools. Learn why your stack sucks.
+- **Your Idea Already Exists** — Find existing engines and blueprints to fork instead of starting from zero.
+- **Repo of the Day** — Daily curated discovery with automatic newsletter digest.
 
 ---
 
@@ -26,12 +27,13 @@ GitStack is a SaaS platform that curates open-source GitHub tools and explains t
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, Tailwind CSS, shadcn/ui |
+| Frontend | React 19, Tailwind CSS, Framer Motion (Animations) |
 | Backend | FastAPI (Python), Motor (async MongoDB) |
-| Database | MongoDB |
-| AI | Google Gemini 3 Flash (via [Emergent Integrations](https://emergentagent.com)) |
-| Auth | Google OAuth (Emergent-managed) |
-| Scraping | GitHub API + BeautifulSoup (background cron every 6 hours) |
+| Database | MongoDB Atlas |
+| AI Rendering | Marked + DOMPurify (Interactive Markdown) |
+| AI Engine | Google Gemini 1.5 Flash |
+| Auth | Guest-Only (Hardened for production) |
+| Scraping | GitHub API + BeautifulSoup (Background cron every 6 hours) |
 
 ---
 
@@ -41,9 +43,8 @@ Before you begin, make sure you have:
 
 - **Python 3.10+** — [Download](https://www.python.org/downloads/)
 - **Node.js 18+** — [Download](https://nodejs.org/)
-- **MongoDB** — [Install locally](https://www.mongodb.com/docs/manual/installation/) or use [MongoDB Atlas](https://www.mongodb.com/atlas) (free tier)
-- **Yarn** — `npm install -g yarn`
-- **Emergent LLM Key** (for AI features) — Get one at [emergentagent.com](https://emergentagent.com) → Profile → Universal Key
+- **MongoDB Atlas** — [Create free cluster](https://www.mongodb.com/atlas)
+- **Gemini API Key** — Get one from [Google AI Studio](https://aistudio.google.com/)
 
 ---
 
@@ -78,13 +79,13 @@ pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudf
 Create `/backend/.env`:
 
 ```env
-MONGO_URL=mongodb://localhost:27017
+MONGO_URL=mongodb+srv://... (Your Atlas URL)
 DB_NAME=gitstack
 CORS_ORIGINS=*
-EMERGENT_LLM_KEY=your_emergent_key_here
+GEMINI_API_KEY=your_gemini_key_here
 ```
 
-> **Note:** The `EMERGENT_LLM_KEY` powers all AI features (Stack Generator, Dead Tool Detector, Repo Translator, Roast My Stack, Idea Exists). Get one at [emergentagent.com](https://emergentagent.com) → Profile → Universal Key.
+> **Note:** The `GEMINI_API_KEY` powers all AI features (Stack Generator, Comparison Engine, Dead Tool Detector, Repo Translator, Roast My Stack, Idea Exists). Get one for free at [Google AI Studio](https://aistudio.google.com/).
 >
 > Without this key, the app still works for browsing/searching tools — only AI features will fail.
 
@@ -234,6 +235,7 @@ gitstack/
 | POST | `/api/ai/repo-translator` | Translate GitHub repo to plain English |
 | POST | `/api/ai/roast-my-stack` | Roast your tool stack |
 | POST | `/api/ai/idea-exists` | Find similar open-source projects |
+| POST | `/api/ai/compare` | Side-by-side battle reports (Tool A vs B) |
 | GET | `/api/ai/translate-repo/{owner}/{repo}` | Translate specific repo |
 
 ### Auth (Google OAuth)

@@ -1,13 +1,15 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame } from "lucide-react";
+import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame, AlertTriangle, Scale } from "lucide-react";
 
 const productLinks = [
   { name: "Stack Generator", path: "/stack-generator", icon: Sparkles },
   { name: "Dead Tool Detector", path: "/dead-tool-detector", icon: Skull },
   { name: "Repo Translator", path: "/repo-translator", icon: BookOpen },
-  { name: "Your Idea Exists", path: "/idea-exists", icon: Lightbulb },
   { name: "Roast My Stack", path: "/roast-my-stack", icon: Flame },
+  { name: "Your Idea Exists", path: "/idea-exists", icon: Lightbulb },
+  { name: "Comparison Engine", path: "/compare", icon: Scale },
+  { name: "Repo of the Day", path: "/repo-of-the-day", icon: Sparkles },
 ];
 
 const navLinks = [
@@ -25,7 +27,7 @@ export const Footer = () => {
           {/* Brand */}
           <div className="md:col-span-1">
             <Link to="/" className="flex items-center gap-3 mb-4">
-              <img src="/logo.svg" alt="GitStack" className="w-8 h-8 invert" />
+              <img src="/logo-white.svg" alt="GitStack" className="w-8 h-8" />
               <span className="text-xl font-extrabold tracking-tight">GitStack</span>
             </Link>
             <p className="text-sm text-zinc-400 leading-relaxed">

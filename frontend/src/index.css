@@ -177,37 +177,110 @@ code, pre, .font-mono {
 }
 
 /* Prose for markdown */
-.prose-gitstack h1, .prose-gitstack h2, .prose-gitstack h3 {
-  font-family: 'Bricolage Grotesque', sans-serif;
-  font-weight: 700;
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
+.prose-gitstack {
+  color: #09090B;
 }
 
-.prose-gitstack p {
+.prose-gitstack h1, .prose-gitstack h2, .prose-gitstack h3, 
+.prose-gitstack h4, .prose-gitstack h5, .prose-gitstack h6 {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 800;
+  margin-top: 2rem;
   margin-bottom: 1rem;
-  line-height: 1.7;
+  line-height: 1.2;
+}
+
+.prose-gitstack h1 { font-size: 2.25rem; }
+.prose-gitstack h2 { font-size: 1.875rem; border-bottom: 4px solid #000; padding-bottom: 0.5rem; display: inline-block; }
+.prose-gitstack h3 { font-size: 1.5rem; }
+
+.prose-gitstack p {
+  margin-bottom: 1.25rem;
+  line-height: 1.8;
 }
 
 .prose-gitstack ul, .prose-gitstack ol {
   margin-left: 1.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  list-style-type: square;
+}
+
+.prose-gitstack ol {
+  list-style-type: decimal;
 }
 
 .prose-gitstack li {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-left: 0.25rem;
 }
 
 .prose-gitstack strong {
-  font-weight: 700;
+  font-weight: 800;
+  color: #000;
 }
 
 .prose-gitstack code {
   background: #F4F4F5;
-  padding: 0.125rem 0.375rem;
-  border: 1px solid #E4E4E7;
+  padding: 0.2rem 0.4rem;
+  border: 2px solid #09090B;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.875rem;
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.prose-gitstack pre {
+  background: #09090B;
+  color: #FACC15;
+  padding: 1.5rem;
+  border: 4px solid #09090B;
+  box-shadow: 6px 6px 0px 0px #FACC15;
+  overflow-x: auto;
+  margin-bottom: 2rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.9rem;
+}
+
+.prose-gitstack table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+  border: 4px solid #09090B;
+  background: white;
+}
+
+.prose-gitstack th {
+  background: #09090B;
+  color: white;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.prose-gitstack td {
+  border: 2px solid #09090B;
+  padding: 1rem;
+  vertical-align: top;
+}
+
+.prose-gitstack tr:nth-child(even) {
+  background: #F8FAFC;
+}
+
+.prose-gitstack blockquote {
+  border-left: 8px solid #2563EB;
+  padding: 1.5rem;
+  background: #EFF6FF;
+  margin: 2rem 0;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.prose-gitstack hr {
+  border: none;
+  border-top: 4px dashed #09090B;
+  margin: 3rem 0;
 }
 
 /* Loading Spinner */

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { toast } from "sonner";
 import { ArrowLeft, Clock, Star, CheckCircle2, Github, ExternalLink } from "lucide-react";
 import { Header } from "../components/Header";
+import { Footer } from "../components/Footer";
 import { API } from "../utils/api";
 
 export default function CollectionDetailPage() {
@@ -19,6 +21,7 @@ export default function CollectionDetailPage() {
         setCollection(res.data.collection);
         setTools(res.data.tools);
       } catch (e) {
+        toast.error("Failed to load collection. Please try again.");
         console.error(e);
       }
       setLoading(false);
@@ -143,6 +146,8 @@ export default function CollectionDetailPage() {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 }
+

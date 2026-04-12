@@ -1,13 +1,13 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Skull, Flame, Lightbulb, Users, ArrowRight, BookOpen } from "lucide-react";
+import { Skull, Flame, Lightbulb, ArrowRight, BookOpen, Sparkles } from "lucide-react";
 
 const features = [
-  { id: 'dead-tool', title: 'Dead Tool Detector', desc: 'Find free alternatives to paid SaaS', icon: Skull, color: 'bg-pastel-pink', highlight: true, path: '/dead-tool-detector' },
-  { id: 'idea-exists', title: 'Your Idea Exists', desc: 'Find similar repos to build on', icon: Lightbulb, color: 'bg-pastel-mint', path: '/idea-exists' },
-  { id: 'roast', title: 'Roast My Stack', desc: 'Get brutally honest feedback', icon: Flame, color: 'bg-pastel-yellow', path: '/roast-my-stack' },
-  { id: 'repo-translator', title: 'Repo Translator', desc: 'Paste any GitHub link', icon: BookOpen, color: 'bg-blue-100', path: '/repo-translator' },
-  { id: 'founders', title: 'Founder Stacks', desc: 'Real stacks behind famous tools', icon: Users, color: 'bg-pastel-lavender', path: '/founder-stacks' },
+  { id: 'stack-gen', title: 'Stack Generator', desc: 'Build your entire tech stack from an idea', icon: Sparkles, color: 'bg-primary text-white', highlight: true, path: '/stack-generator' },
+  { id: 'dead-tool', title: 'Dead Tool Detector', desc: 'Find free alternatives to paid SaaS', icon: Skull, color: 'bg-pastel-pink', path: '/dead-tool-detector' },
+  { id: 'repo-translator', title: 'Repo Translator', desc: 'Explain any GitHub repo in plain English', icon: BookOpen, color: 'bg-blue-100', path: '/repo-translator' },
+  { id: 'roast', title: 'Roast My Stack', desc: 'Get brutally honest feedback on your tools', icon: Flame, color: 'bg-pastel-yellow', path: '/roast-my-stack' },
+  { id: 'idea-exists', title: 'Idea Already Exists', desc: 'Find similar repos to build on top of', icon: Lightbulb, color: 'bg-pastel-mint', path: '/idea-exists' },
 ];
 
 export const ViralFeatures = () => {

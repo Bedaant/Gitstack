@@ -1,10 +1,20 @@
 import React from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Bot, Palette, Zap, LineChart, CreditCard, Shield, ArrowRight, Package, Mail, FileText, Smartphone, TestTube2, Blocks, Server } from "lucide-react";
+import {
+  Bot, Palette, Zap, LineChart, CreditCard, Shield, ArrowRight, Package,
+  Mail, FileText, Smartphone, TestTube2, Blocks, Server,
+  Code, Brain, Cpu, Network, Terminal, Mic, CheckCircle, Camera,
+  Database, Globe, Activity, Gamepad2
+} from "lucide-react";
 
-const iconMap = { Bot, Palette, Zap, LineChart, CreditCard, Shield, Mail, FileText, Smartphone, TestTube2, Blocks, Server };
+const iconMap = {
+  Bot, Palette, Zap, LineChart, CreditCard, Shield, Mail, FileText,
+  Smartphone, TestTube2, Blocks, Server, Code, Brain, Cpu, Network,
+  Terminal, Mic, CheckCircle, Camera, Database, Globe, Activity,
+  Gamepad: Gamepad2, Gamepad2,
+};
 
-export const TopicsGrid = ({ topics }) => {
+export const TopicsGrid = ({ topics, loading }) => {
   const navigate = useNavigate();
 
   return (
@@ -20,6 +30,19 @@ export const TopicsGrid = ({ topics }) => {
           </Link>
         </div>
 
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="neo-card p-5 flex items-center gap-4 animate-pulse">
+                <div className="w-12 h-12 bg-zinc-200 border-2 border-zinc-200 flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-zinc-200 rounded w-3/4" />
+                  <div className="h-3 bg-zinc-100 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {topics.map(topic => {
             const IconComponent = iconMap[topic.icon] || Package;
@@ -41,6 +64,7 @@ export const TopicsGrid = ({ topics }) => {
             );
           })}
         </div>
+        )}
       </div>
     </section>
   );

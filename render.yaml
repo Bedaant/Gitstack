@@ -1,48 +1,39 @@
-# Render Blueprint — auto-deploys frontend + backend on git push
-# Docs: https://docs.render.com/blueprint-spec
-
 services:
-  # ==================== BACKEND ====================
+  # ── Backend (FastAPI) ──────────────────────────────────────────
   - type: web
     name: gitstack-api
     runtime: python
-    region: oregon
-    plan: free
     rootDir: backend
-    buildCommand: |
-      pip install -r requirements.txt
-      pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
       - key: MONGO_URL
-        sync: false  # You'll set this manually (MongoDB Atlas connection string)
+        sync: false          # fill in Render dashboard
       - key: DB_NAME
         value: gitstack
+      - key: GEMINI_API_KEY
+        sync: false          # fill in Render dashboard
+      - key: GITHUB_TOKEN
+        sync: false          # optional but strongly recommended — raises rate limit to 5000/hr
       - key: CORS_ORIGINS
-        value: "*"
-      - key: EMERGENT_LLM_KEY
-        sync: false  # You'll set this manually (your Emergent Universal Key)
+        sync: false          # set to your frontend URL, e.g. https://gitstack-app.onrender.com
+      - key: NTFY_TOPIC
+        value: gitstack-alerts
       - key: PYTHON_VERSION
-        value: "3.11.0"
-    healthCheckPath: /api/health
+        value: "3.11"
 
-  # ==================== FRONTEND ====================
+  # ── Frontend (React static site) ──────────────────────────────
   - type: web
     name: gitstack-app
     runtime: static
     rootDir: frontend
-    buildCommand: yarn install --frozen-lockfile && yarn build
+    buildCommand: npm install && npm run build
     staticPublishPath: build
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
     envVars:
       - key: REACT_APP_BACKEND_URL
-        sync: false  # Set to: https://gitstack-api.onrender.com (your backend URL)
-      - key: NODE_VERSION
-        value: "20.20.0"
+        sync: false          # set to your backend URL after it deploys, e.g. https://gitstack-api.onrender.com

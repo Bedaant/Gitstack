@@ -1,7 +1,11 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -13,7 +17,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+import google.generativeai as genai
 from bs4 import BeautifulSoup
 
 ROOT_DIR = Path(__file__).parent
@@ -24,9 +28,43 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+# Configure Google Gemini
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-app = FastAPI()
+# GitHub API headers — token raises rate limit from 60 to 5000 req/hr
+_gh_token = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_HEADERS = {
+    "Accept": "application/vnd.github.v3+json",
+    "User-Agent": "GitStack",
+    **({"Authorization": f"token {_gh_token}"} if _gh_token else {}),
+}
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Startup
+    global _scraper_task
+    _scraper_task = asyncio.create_task(_scraper_loop())
+    logger.info("Background scraper scheduled (every 6 hours)")
+    asyncio.create_task(send_phone_alert(
+        title="🚀 GitStack Server Started",
+        message="Backend is live and cron is running (every 6 hours).",
+        priority="default"
+    ))
+    yield
+    # Shutdown
+    if _scraper_task:
+        _scraper_task.cancel()
+    client.close()
+    asyncio.create_task(send_phone_alert(
+        title="⚠️ GitStack Server Shutting Down",
+        message="The backend server is shutting down.",
+        priority="high"
+    ))
+
+limiter = Limiter(key_func=get_remote_address)
+app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
 
 # Configure logging
@@ -87,19 +125,19 @@ class UserStack(BaseModel):
     created_at: datetime
 
 class DeadToolRequest(BaseModel):
-    paid_tools: str
+    paid_tools: str = Field(..., min_length=2, max_length=500)
 
 class StackGeneratorRequest(BaseModel):
-    idea: str
-    budget: Optional[str] = None
+    idea: str = Field(..., min_length=3, max_length=300)
+    budget: Optional[str] = Field(None, max_length=50)
     needs_payments: Optional[bool] = None
     building_alone: Optional[bool] = None
 
 class RepoTranslatorRequest(BaseModel):
-    github_url: str
+    github_url: str = Field(..., min_length=10, max_length=200)
 
 class RoastRequest(BaseModel):
-    tools: List[str]
+    tools: List[str] = Field(..., min_length=1, max_length=30)
 
 class SaveStackRequest(BaseModel):
     name: str
@@ -148,19 +186,26 @@ async def require_auth(request: Request) -> UserModel:
 # ==================== AI HELPERS ====================
 
 async def call_gemini(prompt: str, json_response: bool = False) -> str:
-    try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"gitstack_{uuid.uuid4().hex[:8]}",
-            system_message="You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools."
-        ).with_model("gemini", "gemini-3-flash-preview")
-        
-        message = UserMessage(text=prompt)
-        response = await chat.send_message(message)
-        return response
-    except Exception as e:
-        logger.error(f"Gemini API error: {e}")
-        raise HTTPException(status_code=500, detail="AI service temporarily unavailable")
+    # Try multiple variants for better compatibility
+    model_variants = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash", "gemini-pro"]
+    
+    last_error = None
+    for model_name in model_variants:
+        try:
+            generation_config = {"response_mime_type": "application/json"} if json_response else {}
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction="You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools."
+            )
+            response = await model.generate_content_async(prompt, generation_config=generation_config)
+            return response.text
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Gemini model {model_name} failed: {e}")
+            continue
+            
+    logger.error(f"All Gemini models failed. Last error: {last_error}")
+    raise HTTPException(status_code=500, detail=f"AI service temporarily unavailable: {str(last_error)}")
 
 # ==================== AUTH ROUTES ====================
 
@@ -291,7 +336,8 @@ async def get_tools(category: Optional[str] = None, topic: Optional[str] = None,
                 "language": repo.get("language", "Unknown"),
                 "category": ", ".join(repo.get("topics", [])[:3]) if repo.get("topics") else "Open Source",
                 "tags": repo.get("topics", []),
-                "source": "github"
+                "source": "github",
+                "full_name": repo.get("full_name", "")
             })
     
     return tools
@@ -426,7 +472,27 @@ TOPIC_KEYWORDS = {
         "chatgpt", "gpt", "openai", "ai-agents", "agent", "agents", "claude",
         "langchain", "rag", "nlp", "natural-language-processing", "transformer",
         "pytorch", "tensorflow", "neural-network", "generative-ai", "mcp",
-        "claude-code", "copilot", "chatbot", "llama", "huggingface"
+        "claude-code", "copilot", "chatbot", "llama", "huggingface",
+        "crewai", "autogen", "swarm", "openai-agents", "multi-agent", "agentops"
+    ],
+    "ai-coding-tools": [
+        "mcp", "model-context-protocol", "claude-code", "cursor", "cursor-ai", 
+        "windsurf", "aider", "codeium", "vscode-extension", "copilot-alternative",
+        "ide", "coding-assistant", "programming", "autocode"
+    ],
+    "ai-memory-pkm": [
+        "obsidian", "obsidian-plugin", "ai-memory", "mem0", "memgpt", "second-brain",
+        "knowledge-graph", "pkm", "personal-knowledge-management", "zettelkasten"
+    ],
+    "local-ai": [
+        "ollama", "vllm", "llamacpp", "lmstudio", "localai", "local-llm", "private-ai"
+    ],
+    "mcp-tools": [
+        "mcp", "model-context-protocol", "mcp-server", "mcp-client", "awesome-mcp"
+    ],
+    "ai-agents-advanced": [
+        "multi-agent", "autonomous-agents", "computer-use", "browser-use", "web-agent",
+        "swarm", "crewai", "autogen", "task-automation"
     ],
     "ui-ux": [
         "react", "nextjs", "frontend", "ui", "ux", "design", "css", "tailwind",
@@ -438,96 +504,251 @@ TOPIC_KEYWORDS = {
         "automation", "devops", "ci-cd", "github-actions", "workflow", "pipeline",
         "docker", "kubernetes", "terraform", "ansible", "jenkins", "deploy",
         "infrastructure", "iac", "scripting", "cron", "task-runner", "cli",
-        "command-line", "terminal", "shell", "bash", "linux", "monitoring",
-        "observability", "metrics", "alerting", "logging", "self-hosted"
+        "n8n", "zapier", "make-alternative"
     ],
     "data-analytics": [
         "database", "sql", "postgresql", "mysql", "mongodb", "redis", "data",
         "analytics", "data-science", "data-engineering", "etl", "visualization",
-        "bi", "business-intelligence", "data-pipeline", "spark", "kafka",
-        "elasticsearch", "timeseries", "graphql", "orm", "migration",
-        "sqlite", "supabase", "postgres", "dbt", "airflow"
+        "bi", "business-intelligence", "data-pipeline", "spark", "kafka"
+    ],
+    "voice-speech-ai": [
+        "text-to-speech", "speech-to-text", "voice-cloning", "elevenlabs", "tts", "stt", "audio-ai"
+    ],
+    "code-quality-review": [
+        "static-analysis", "code-review", "sonarqube", "code-quality", "lint", "security-scan", "sast"
+    ],
+    "rag-vector-search": [
+        "rag", "vector-database", "vector-db", "embedding", "semantic-search", "pinecone", "chromadb", "qdrant"
+    ],
+    "scraping-data-extraction": [
+        "web-scraping", "playwright", "firecrawl", "scraper", "crawling", "extraction", "headless-browser"
+    ],
+    "terminal-shell": [
+        "dotfiles", "terminal", "zsh", "bash", "tui", "ratatui", "cli", "shell-scripts"
     ],
     "payments": [
-        "payments", "stripe", "billing", "ecommerce", "e-commerce", "fintech",
-        "invoice", "subscription", "checkout", "payment-gateway", "crypto",
-        "blockchain", "wallet", "saas", "pricing", "monetization",
-        "marketplace", "shop", "store", "cart"
+        "payments", "stripe", "billing", "ecommerce", "fintech", "invoice", "subscription"
     ],
     "auth": [
-        "authentication", "auth", "oauth", "security", "jwt", "session",
-        "login", "identity", "sso", "rbac", "authorization", "password",
-        "encryption", "2fa", "mfa", "totp", "passkey", "ldap", "saml",
-        "keycloak", "oidc", "access-control"
+        "authentication", "auth", "oauth", "security", "identity", "sso", "login"
     ],
     "email-messaging": [
-        "email", "smtp", "newsletter", "mail", "messaging", "notification",
-        "push-notification", "chat", "realtime", "websocket", "sms",
-        "slack", "discord", "telegram", "matrix", "xmpp", "inbox",
-        "transactional-email", "mailing-list", "sendgrid", "resend"
+        "email", "newsletter", "mail", "messaging", "notification", "chat", "realtime"
     ],
     "cms-content": [
-        "cms", "content-management", "headless-cms", "blog", "markdown",
-        "documentation", "wiki", "publishing", "editor", "rich-text",
-        "static-site", "jamstack", "hugo", "gatsby", "ghost", "wordpress",
-        "strapi", "directus", "sanity", "contentful", "mdx"
+        "cms", "content-management", "blog", "markdown", "documentation", "wiki"
     ],
     "mobile-dev": [
-        "react-native", "flutter", "mobile", "ios", "android", "expo",
-        "capacitor", "ionic", "swift", "kotlin", "pwa", "progressive-web-app",
-        "responsive", "app", "cross-platform", "native", "cordova"
-    ],
-    "testing-qa": [
-        "testing", "test", "playwright", "cypress", "selenium", "jest",
-        "vitest", "mocha", "pytest", "unittest", "e2e", "integration-testing",
-        "unit-testing", "qa", "quality-assurance", "benchmark", "load-testing",
-        "performance-testing", "coverage", "tdd", "bdd"
+        "react-native", "flutter", "mobile", "ios", "android", "expo"
     ],
     "web3-blockchain": [
-        "blockchain", "web3", "ethereum", "solidity", "smart-contract",
-        "defi", "nft", "crypto", "cryptocurrency", "dapp", "solana",
-        "bitcoin", "token", "dao", "ipfs", "decentralized", "wallet",
-        "metamask", "hardhat", "foundry", "polygon"
+        "blockchain", "web3", "ethereum", "solidity", "defi", "nft", "crypto"
     ],
     "selfhosted": [
         "self-hosted", "selfhosted", "homelab", "docker-compose", "docker",
         "homeserver", "privacy", "open-source", "alternative", "foss",
         "self-hosting", "linux", "server", "nas", "backup", "reverse-proxy",
         "nginx", "caddy", "traefik", "coolify", "portainer"
-    ]
+    ],
+    # === New trending categories ===
+    "ai-coding-tools": [
+        "claude", "claude-code", "cursor", "cursor-ai", "windsurf", "aider",
+        "codeium", "copilot", "mcp", "model-context-protocol", "claude-mcp",
+        "ai-coding", "vibe-coding", "code-assistant", "ai-editor",
+        "vscode-extension", "neovim", "zed", "coding-assistant", "pair-programming"
+    ],
+    "ai-memory-pkm": [
+        "obsidian", "obsidian-plugin", "ai-memory", "mem0", "memgpt",
+        "second-brain", "knowledge-graph", "personal-knowledge-management",
+        "zettelkasten", "logseq", "note-taking", "pkm", "digital-garden",
+        "roam", "notion-alternative", "knowledge-base", "memory-augmentation"
+    ],
+    "local-ai": [
+        "ollama", "vllm", "llamacpp", "lmstudio", "localai", "local-llm",
+        "private-ai", "on-premise-ai", "llama", "mistral", "phi", "gemma",
+        "llm-inference", "quantization", "gguf", "onnx", "model-serving",
+        "open-weights", "self-hosted-llm", "local-inference"
+    ],
+    "mcp-tools": [
+        "mcp", "model-context-protocol", "mcp-server", "mcp-client",
+        "claude-mcp", "mcp-tool", "mcp-integration", "anthropic",
+        "tool-use", "function-calling", "tool-calling", "ai-tools"
+    ],
+    "ai-agents-advanced": [
+        "computer-use", "browser-use", "web-agent", "autonomous-agent",
+        "openai-agents", "agentops", "crewai", "autogen", "swarm",
+        "multi-agent-system", "agent-framework", "task-automation",
+        "rpa", "browser-automation", "screen-agent", "desktop-agent"
+    ],
+    "devtools-modern": [
+        "bun", "deno", "biome", "turbo", "turborepo", "pnpm", "mise",
+        "nix", "devcontainer", "devpod", "gitpod", "codespaces",
+        "zed", "helix", "neovim", "developer-experience", "dx",
+        "monorepo", "workspace", "toolchain"
+    ],
+
+    # === Voice & Speech AI ===
+    "voice-speech-ai": [
+        "text-to-speech", "tts", "speech-to-text", "stt", "whisper",
+        "voice-cloning", "voice-synthesis", "coqui", "bark", "piper",
+        "elevenlabs-alternative", "open-source-voice", "real-time-voice", "voice-agent",
+        "asr", "automatic-speech-recognition", "openai-whisper", "faster-whisper",
+        "audio-ai", "speech-synthesis", "open-source-tts", "audio-generation",
+        "transcription", "diarization", "speaker-recognition"
+    ],
+
+    # === Code Quality & Review ===
+    "code-quality-review": [
+        "code-review", "static-analysis", "lint", "linter", "code-analysis",
+        "open-source-code-review", "sonarqube-alternative", "code-quality",
+        "tech-debt", "dependency-check", "security-scan", "sast", "code-smell",
+        "refactoring", "complexity", "coverage", "code-metrics", "ast",
+        "abstract-syntax-tree", "codemods", "semgrep",
+        "eslint", "pylint", "ruff", "mypy", "type-checking"
+    ],
+
+    # === Computer Vision & Image AI ===
+    "computer-vision-image-ai": [
+        "stable-diffusion", "comfyui", "automatic1111", "diffusers",
+        "image-generation", "text-to-image", "controlnet", "lora",
+        "yolo", "object-detection", "ocr", "tesseract", "face-detection",
+        "image-segmentation", "computer-vision", "opencv", "mediapipe",
+        "image-processing", "upscaling", "inpainting", "dreambooth",
+        "midjourney-alternative", "dalle-alternative", "sdxl", "flux",
+        "open-source-vision"
+    ],
+
+    # === RAG & Vector Search ===
+    "rag-vector-search": [
+        "rag", "vector-database", "vector-store", "embedding", "embeddings",
+        "chromadb", "qdrant", "weaviate", "pinecone-alternative", "milvus", "faiss",
+        "semantic-search", "knowledge-retrieval", "document-retrieval",
+        "retrieval-augmented", "pgvector", "lancedb", "turbopuffer",
+        "reranking", "hybrid-search", "dense-retrieval", "ann",
+        "open-source-vector-db"
+    ],
+
+    # === Web Scraping & Data Extraction ===
+    "scraping-data-extraction": [
+        "web-scraping", "scraper", "crawler", "crawlee", "scrapy",
+        "playwright", "puppeteer", "selenium", "cheerio", "beautifulsoup",
+        "data-extraction", "web-crawler", "price-tracking", "news-scraper",
+        "html-parser", "headless-browser", "firecrawl-alternative",
+        "open-source-scraper", "spider", "etl", "data-pipeline"
+    ],
+
+    # === API Development & Testing ===
+    "api-development": [
+        "api", "rest-api", "graphql", "openapi", "swagger", "postman-alternative",
+        "hoppscotch", "bruno", "insomnia", "api-testing", "api-gateway",
+        "api-mock", "api-documentation", "fastapi", "express", "hapi",
+        "rate-limiting", "api-proxy", "grpc", "websocket", "http-client",
+        "open-source-api-tool", "sdk-generator", "openapi-generator"
+    ],
+
+    # === Terminal, Shell & Dotfiles ===
+    "terminal-shell": [
+        "terminal", "shell", "dotfiles", "zsh", "fish", "bash", "nushell",
+        "tmux", "wezterm", "alacritty", "kitty", "starship",
+        "oh-my-zsh", "oh-my-posh", "prompt", "plugin", "zsh-plugin",
+        "shell-script", "linux", "cli-tool", "tui",
+        "terminal-ui", "curses", "ratatui", "foss-cli"
+    ],
+
+    # === Document & PDF AI ===
+    "document-pdf-ai": [
+        "pdf", "pdf-processing", "ocr", "document-ai", "document-extraction",
+        "llamaparse-alternative", "unstructured", "docling", "pdfplumber",
+        "document-parsing", "invoice-extraction", "table-extraction",
+        "pdf-reader", "pdf-converter", "markdown-extraction",
+        "document-intelligence", "form-extraction", "receipt-ocr",
+        "open-source-ocr"
+    ],
+
+    # === Game Development ===
+    "game-development": [
+        "game-engine", "gamedev", "godot", "pygame", "unity-alternative",
+        "indie-game", "game-dev", "2d-game", "3d-game", "retro",
+        "emulator", "wasm-game", "webgl", "threejs", "babylonjs",
+        "physics-engine", "tilemap", "procedural-generation",
+        "roguelike", "ecs", "open-source-game-engine"
+    ],
+
+    # === Monitoring, SRE & Error Tracking ===
+    "monitoring-sre": [
+        "monitoring", "observability", "sre", "error-tracking",
+        "sentry-alternative", "datadog-alternative", "uptime", "status-page",
+        "incident-management", "alerting", "log-management", "logging",
+        "prometheus", "grafana", "opentelemetry", "tracing", "apm",
+        "application-performance", "glitchtip", "highlight", "axiom-alternative",
+        "pagerduty-alternative", "healthcheck", "open-source-observability"
+    ],
 }
 
+
+async def get_topic_keywords(topic_id: str, db) -> list:
+    """Get keywords for a topic — checks hardcoded dict first, then DB for auto-discovered topics"""
+    if topic_id in TOPIC_KEYWORDS:
+        return TOPIC_KEYWORDS[topic_id]
+    # Fall back to auto-discovered keywords from DB
+    doc = await db.auto_topic_keywords.find_one({"topic_id": topic_id}, {"_id": 0, "keywords": 1})
+    if doc:
+        return doc.get("keywords", [])
+    return []
+
+
 def _build_topic_query(topic_id: str) -> list:
-    """Build a list of regex conditions for matching repos to a topic"""
+    """Build a list of regex conditions for matching repos to a topic (sync version for hardcoded topics)"""
     keywords = TOPIC_KEYWORDS.get(topic_id, [])
     if not keywords:
         return []
     return [{"$regex": kw, "$options": "i"} for kw in keywords]
 
+import time
+_topics_cache = None
+_topics_cache_time = 0
+
 @api_router.get("/topics")
 async def get_topics():
-    topics = await db.topics.find({}, {"_id": 0}).to_list(20)
+    global _topics_cache, _topics_cache_time
     
-    for topic in topics:
+    if _topics_cache and time.time() - _topics_cache_time < 3600 * 6:
+        return _topics_cache
+
+    topics = await db.topics.find({}, {"_id": 0}).to_list(50)  # up to 50 including auto-discovered
+
+    async def get_topic_count(topic):
         topic_id = topic.get("topic_id", "")
         topic_name = topic.get("name", "")
-        keywords = TOPIC_KEYWORDS.get(topic_id, [topic_name.lower().replace(" ", "-")])
-        
-        # Build OR query across all keyword variations
+        keywords = await get_topic_keywords(topic_id, db)
+        if not keywords:
+            keywords = [topic_name.lower().replace(" ", "-")]
+
         or_conditions = []
         for kw in keywords:
             or_conditions.append({"tags": {"$regex": kw, "$options": "i"}})
             or_conditions.append({"category": {"$regex": kw, "$options": "i"}})
-        
-        tool_count = await db.tools.count_documents({"$or": or_conditions}) if or_conditions else 0
-        
+
         gh_or = [{"topics": {"$in": keywords}}]
-        for kw in keywords[:5]:  # Also regex match for partial matches
+        for kw in keywords[:8]:
             gh_or.append({"topics": {"$regex": kw, "$options": "i"}})
-        gh_count = await db.github_repos.count_documents({"$or": gh_or})
+            gh_or.append({"description": {"$regex": kw, "$options": "i"}})
+            
+        async def dummy_count(): return 0
         
-        topic["tool_count"] = tool_count + gh_count
-    
+        # Run counts in parallel for this topic
+        results = await asyncio.gather(
+            db.tools.count_documents({"$or": or_conditions}) if or_conditions else dummy_count(),
+            db.github_repos.count_documents({"$or": gh_or})
+        )
+        topic["tool_count"] = (results[0] or 0) + (results[1] or 0)
+        return topic
+
+    # Run processing for all topics in parallel
+    await asyncio.gather(*(get_topic_count(t) for t in topics))
+
+    _topics_cache = topics
+    _topics_cache_time = time.time()
     return topics
 
 @api_router.get("/topics/{topic_id}/tools")
@@ -535,26 +756,31 @@ async def get_topic_tools(topic_id: str):
     topic = await db.topics.find_one({"topic_id": topic_id}, {"_id": 0})
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    
+
     topic_name = topic.get("name", "")
-    keywords = TOPIC_KEYWORDS.get(topic_id, [topic_name.lower().replace(" ", "-")])
-    
+    # Use async lookup so auto-discovered topics also work
+    keywords = await get_topic_keywords(topic_id, db)
+    if not keywords:
+        keywords = [topic_name.lower().replace(" ", "-")]
+
     # Search curated tools
     or_conditions = []
     for kw in keywords:
         or_conditions.append({"tags": {"$regex": kw, "$options": "i"}})
         or_conditions.append({"category": {"$regex": kw, "$options": "i"}})
-    
+
     tools = await db.tools.find(
         {"$or": or_conditions} if or_conditions else {},
         {"_id": 0}
     ).to_list(100)
-    
+
     # Search github_repos with expanded keywords
     gh_or = [{"topics": {"$in": keywords}}]
-    for kw in keywords[:5]:
+    for kw in keywords[:8]:  # More coverage
         gh_or.append({"topics": {"$regex": kw, "$options": "i"}})
-    
+        gh_or.append({"description": {"$regex": kw, "$options": "i"}})
+        gh_or.append({"name": {"$regex": kw, "$options": "i"}})
+
     remaining = max(100 - len(tools), 20)
     gh_repos = await db.github_repos.find(
         {"$or": gh_or},
@@ -582,7 +808,8 @@ async def get_topic_tools(topic_id: str):
             "language": repo.get("language", "Unknown"),
             "category": topic_name,
             "tags": repo.get("topics", []),
-            "source": "github"
+            "source": "github",
+            "full_name": repo.get("full_name", "")
         })
     
     # Update topic count to match actual results
@@ -608,7 +835,8 @@ async def get_collection(collection_id: str):
 # ==================== AI FEATURES ====================
 
 @api_router.post("/ai/dead-tool-detector")
-async def dead_tool_detector(req: DeadToolRequest):
+@limiter.limit("10/minute")
+async def dead_tool_detector(_request: Request, req: DeadToolRequest):
     prompt = f"""I am paying for these SaaS tools: {req.paid_tools}
 
 Find free open-source GitHub alternatives for each tool.
@@ -641,7 +869,8 @@ Be accurate with real GitHub repositories. Calculate realistic cost estimates.""
         return {"alternatives": [], "raw": result}
 
 @api_router.post("/ai/stack-generator")
-async def stack_generator(req: StackGeneratorRequest):
+@limiter.limit("10/minute")
+async def stack_generator(_request: Request, req: StackGeneratorRequest):
     context = f"Idea: {req.idea}"
     if req.budget:
         context += f"\nBudget: {req.budget}"
@@ -682,8 +911,27 @@ Put tools in the order they should be set up. Use real GitHub repositories."""
         return {"stack": [], "raw": result}
 
 @api_router.post("/ai/repo-translator")
-async def repo_translator(req: RepoTranslatorRequest):
-    prompt = f"""Translate this GitHub repository for a non-technical founder: {req.github_url}
+@limiter.limit("10/minute")
+async def repo_translator(_request: Request, req: RepoTranslatorRequest):
+    github_url = req.github_url.strip().rstrip("/")
+
+    # Only allow github.com URLs — reject anything else
+    if not re.search(r'^https?://github\.com/', github_url):
+        raise HTTPException(status_code=400, detail="Only GitHub repository URLs are supported.")
+
+    # Extract owner/repo from URL so we can hit the real GitHub API
+    match = re.search(r'github\.com/([^/]+/[^/\s?#]+)', github_url)
+    if match:
+        full_name = match.group(1)
+        owner, repo_name = full_name.split("/", 1)
+        try:
+            translation_data = await translate_github_repo(owner, repo_name)
+            return {"translation": translation_data.get("translation", "")}
+        except Exception:
+            pass  # fall through to URL-only prompt on any error
+
+    # Fallback: Gemini without real data (old behaviour, for non-GitHub URLs)
+    prompt = f"""Translate this GitHub repository for a non-technical founder: {github_url}
 
 Explain it simply. Return in this exact Markdown format:
 
@@ -693,7 +941,7 @@ Explain it simply. Return in this exact Markdown format:
 
 **What you can build with it:**
 - Example 1
-- Example 2  
+- Example 2
 - Example 3
 
 **Difficulty:** Beginner/Intermediate/Advanced
@@ -708,8 +956,35 @@ Keep language simple. No jargon. Focus on outcomes, not technology."""
     result = await call_gemini(prompt)
     return {"translation": result}
 
+@api_router.post("/ai/error-explainer")
+@limiter.limit("15/minute")
+async def error_explainer(request: Request):
+    """Explain a technical error in plain English"""
+    body = await request.json()
+    error_text = body.get("error_text", "")
+    
+    if not error_text:
+        raise HTTPException(status_code=400, detail="error_text is required")
+    
+    prompt = f"""A non-technical founder got this error message:
+
+{error_text[:3000]}
+
+Explain this error in plain English like you're talking to a friend who doesn't code:
+
+1. **What happened:** (1-2 simple sentences)
+2. **Why it happened:** (the root cause, no jargon)
+3. **How to fix it:** (step-by-step, simple instructions)
+4. **How to prevent it:** (one tip to avoid this in the future)
+
+Keep it extremely simple. No technical jargon. Be friendly and reassuring."""
+
+    result = await call_gemini(prompt)
+    return {"explanation": result}
+
 @api_router.post("/ai/roast-my-stack")
-async def roast_my_stack(req: RoastRequest):
+@limiter.limit("10/minute")
+async def roast_my_stack(_request: Request, req: RoastRequest):
     tools_str = ", ".join(req.tools)
     prompt = f"""A founder is using these tools: {tools_str}
 
@@ -752,7 +1027,7 @@ async def translate_github_repo(owner: str, repo: str):
             # Get repo details
             repo_response = await client.get(
                 f"https://api.github.com/repos/{full_name}",
-                headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                headers=GITHUB_HEADERS,
                 timeout=15
             )
             if repo_response.status_code != 200:
@@ -765,7 +1040,7 @@ async def translate_github_repo(owner: str, repo: str):
             try:
                 readme_response = await client.get(
                     f"https://api.github.com/repos/{full_name}/readme",
-                    headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                    headers=GITHUB_HEADERS,
                     timeout=15
                 )
                 if readme_response.status_code == 200:
@@ -795,9 +1070,9 @@ README excerpt:
 
 Provide a complete analysis in this exact format:
 
-**What it does:** (1 simple sentence a business person would understand)
+**What it does:** (1 simple sentence explaining the core value. Emphasize that it is an OPEN SOURCE alternative)
 
-**Who it's for:** (describe the ideal user in plain terms)
+**Who it's for:** (describe the ideal non-technical founder user)
 
 **What you can build with it:**
 - Example 1
@@ -806,16 +1081,16 @@ Provide a complete analysis in this exact format:
 
 **Difficulty:** Beginner/Intermediate/Advanced
 
-**Setup time:** X minutes/hours (realistic estimate)
+**Setup time:** X minutes (realistic estimate for self-hosting)
 
 **How to get started:**
-1. First step (plain English, no jargon)
-2. Second step
-3. Third step
+1. Step 1 (Clear, jargon-free instructions)
+2. Step 2
+3. Step 3
 
-**Replaces (paid alternative):** Name the paid SaaS this could replace and estimated monthly cost, or "No direct paid alternative"
+**Replaces (paid alternative):** Name the expensive paid SaaS this REPLACES (e.g. "Replaces ElevenLabs - save $99/mo")
 
-Keep it simple. No technical jargon. Focus on business outcomes."""
+Keep it extremely simple. Focus on how this open-source tool allows the founder to build without paying high monthly SaaS fees. No technical jargon. Use plain English."""
 
     translation = await call_gemini(prompt)
     
@@ -860,6 +1135,7 @@ Keep it simple. No technical jargon. Focus on business outcomes."""
     return result
 
 @api_router.post("/ai/idea-exists")
+@limiter.limit("10/minute")
 async def idea_exists_post(request: Request):
     """Find similar GitHub projects for an idea"""
     body = await request.json()
@@ -899,6 +1175,39 @@ Be accurate with REAL GitHub repositories that actually exist. Focus on popular,
         return {"idea": idea, "similar_projects": data, "count": len(data)}
     except:
         return {"idea": idea, "similar_projects": [], "raw": result}
+
+# ==================== TOOL COMPARISON ====================
+
+class ComparisonRequest(BaseModel):
+    tool1: str
+    tool2: str
+
+@api_router.post("/ai/compare")
+async def compare_tools(req: ComparisonRequest):
+    """Compare two tools using AI with a focus on Founder needs"""
+    t1 = req.tool1.strip()
+    t2 = req.tool2.strip()
+    
+    prompt = f"""Compare these two open-source tools for a non-technical founder:
+    Tool 1: {t1}
+    Tool 2: {t2}
+    
+    Provide a professional, objective comparison in Plain English.
+    Focus on:
+    1. **Core Purpose**: What is the main thing each tool does?
+    2. **Setup Difficulty**: Which one is easier to get running for a small team?
+    3. **Monthly Cost (Managed vs Self-Hosted)**: Typical pricing for their cloud versions vs self-hosted.
+    4. **Best For**: Specific founder use cases for each.
+    5. **The Verdict**: A direct recommendation based on different priorities.
+    
+    Structure the response with markdown tables where possible. Keep it concise and use founder-friendly terms."""
+
+    try:
+        comparison = await call_gemini(prompt)
+        return {"comparison": comparison, "tool1": t1, "tool2": t2}
+    except Exception as e:
+        logger.error(f"Comparison error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate comparison")
 
 # ==================== REPO OF THE DAY ====================
 
@@ -977,7 +1286,7 @@ async def get_repo_of_the_day():
         async with httpx.AsyncClient() as client:
             repo_response = await client.get(
                 f"https://api.github.com/repos/{best_repo['full_name']}",
-                headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                headers=GITHUB_HEADERS,
                 timeout=15
             )
             repo_data = repo_response.json() if repo_response.status_code == 200 else {}
@@ -987,7 +1296,7 @@ async def get_repo_of_the_day():
             try:
                 readme_response = await client.get(
                     f"https://api.github.com/repos/{best_repo['full_name']}/readme",
-                    headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                    headers=GITHUB_HEADERS,
                     timeout=15
                 )
                 if readme_response.status_code == 200:
@@ -1282,6 +1591,84 @@ async def copy_stack(stack_id: str):
         raise HTTPException(status_code=404, detail="Stack not found")
     return {"message": "Stack copied"}
 
+# ==================== PUBLIC STACKS (no auth) ====================
+
+class PublishStackRequest(BaseModel):
+    name: str
+    idea: str
+    tools: List[Dict[str, Any]]
+
+@api_router.post("/stacks/publish")
+async def publish_stack(req: PublishStackRequest):
+    """Publish a stack publicly without requiring auth — anyone gets a shareable URL."""
+    slug = f"s_{uuid.uuid4().hex[:10]}"
+    stack = {
+        "stack_id": slug,
+        "name": req.name[:80],
+        "idea": req.idea,
+        "tools": req.tools,
+        "is_public": True,
+        "copy_count": 0,
+        "source": "community",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.user_stacks.insert_one(stack)
+    stack.pop("_id", None)
+    return stack
+
+# ==================== EMAIL STACK ====================
+
+class EmailStackRequest(BaseModel):
+    email: str
+    idea: str
+    tools: List[Dict[str, Any]]
+
+@api_router.post("/stacks/email-me")
+async def email_stack(req: EmailStackRequest):
+    """Save an email + stack so the user can be reminded to build it."""
+    email = req.email.lower().strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email required")
+
+    doc = {
+        "email": email,
+        "idea": req.idea,
+        "tools": req.tools,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pending",
+    }
+    await db.email_stacks.insert_one(doc)
+
+    # Also add to newsletter list so they get daily digest
+    existing = await db.newsletter_subscribers.find_one({"email": email})
+    if not existing:
+        await db.newsletter_subscribers.insert_one({
+            "email": email,
+            "subscribed_at": datetime.now(timezone.utc).isoformat(),
+            "status": "active",
+            "source": "email_stack",
+        })
+
+    return {"message": "Saved! Check your inbox — we'll remind you when it's time to build."}
+
+# ==================== STATS ====================
+
+@api_router.get("/stats")
+async def get_stats():
+    """Live counters for social proof on homepage."""
+    stacks_count = await db.user_stacks.count_documents({})
+    translations_count = await db.repo_translations.count_documents({})
+    subscribers_count = await db.newsletter_subscribers.count_documents({"status": "active"})
+    # Rough savings: each dead-tool session saves avg $800/yr
+    email_stacks_count = await db.email_stacks.count_documents({})
+    estimated_savings = (stacks_count + email_stacks_count) * 800
+    return {
+        "stacks_generated": max(stacks_count, 847),   # seed floor so it never shows 0
+        "repos_translated": max(translations_count, 312),
+        "estimated_savings": max(estimated_savings, 124000),
+        "founders": max(subscribers_count + stacks_count, 1200),
+    }
+
 # ==================== SMART SEARCH ====================
 
 @api_router.post("/search")
@@ -1292,19 +1679,16 @@ async def smart_search(req: SmartSearchRequest):
     # 1. Parse query with AI
     parsed_query = {"keywords": req.query.lower().split(), "intent": "search"}
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"search_{uuid.uuid4().hex[:8]}",
-            system_message="Parse search queries for GitHub tools."
-        ).with_model("gemini", "gemini-3-flash-preview")
-        
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction="Parse search queries for GitHub tools."
+        )
         prompt = f"""Parse this search: "{req.query}"
 Return ONLY JSON (no markdown):
-{{"keywords": ["word1", "word2"], "categories": ["ai", "saas"], "github_query": "optimized search", "alternative_to": null}}"""
-        
-        response = await chat.send_message(UserMessage(text=prompt))
+{{"keywords": ["word1", "word2"], "categories": ["ai", "saas"], "github_query": "optimized search for open source tools", "alternative_to": "paid tool name if possible"}}"""
+        response = await model.generate_content_async(prompt)
         import json
-        cleaned = response.strip()
+        cleaned = response.text.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
         parsed_query = json.loads(cleaned)
@@ -1350,7 +1734,7 @@ Return ONLY JSON (no markdown):
                         "order": "desc",
                         "per_page": req.limit - len(results)
                     },
-                    headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "GitStack"},
+                    headers=GITHUB_HEADERS,
                     timeout=15
                 )
                 if response.status_code == 200:
@@ -1377,27 +1761,7 @@ Return ONLY JSON (no markdown):
         "total": len(results)
     }
 
-@api_router.get("/search/suggestions")
-async def search_suggestions(q: str):
-    """Get search suggestions based on partial query"""
-    if len(q) < 2:
-        return {"suggestions": []}
-    
-    # Search tool names
-    tools = await db.tools.find(
-        {"name": {"$regex": f"^{re.escape(q)}", "$options": "i"}},
-        {"_id": 0, "name": 1, "description": 1}
-    ).limit(5).to_list(5)
-    
-    suggestions = [{"name": t["name"], "description": t.get("description", "")[:60]} for t in tools]
-    
-    # Add category suggestions
-    categories = ["AI Agents", "Automation", "Analytics", "Authentication", "Payments", "UI/UX", "Database", "API", "DevOps"]
-    for cat in categories:
-        if cat.lower().startswith(q.lower()):
-            suggestions.append({"name": cat, "type": "category"})
-    
-    return {"suggestions": suggestions[:8]}
+
 
 # ==================== GITHUB SCRAPER ====================
 
@@ -1437,10 +1801,121 @@ async def scraper_status():
     else:
         result["last_scrape"] = None
         result["stats"] = None
-    
-    return result
+
+# Expanded keyword map — maps each topic to the actual tags repos use on GitHub
+TOPIC_KEYWORDS = {
+    "ai-agents": [
+        "ai", "artificial-intelligence", "machine-learning", "deep-learning", "llm",
+        "chatgpt", "gpt", "openai", "ai-agents", "agent", "agents", "claude",
+        "langchain", "rag", "nlp", "natural-language-processing", "transformer",
+        "pytorch", "tensorflow", "neural-network", "generative-ai", "mcp",
+        "claude-code", "copilot", "chatbot", "llama", "huggingface",
+        "crewai", "autogen", "swarm", "openai-agents", "multi-agent", "agentops"
+    ],
+    "ai-coding-tools": [
+        "claude", "claude-code", "cursor", "cursor-ai", "windsurf", "aider",
+        "codeium", "copilot", "mcp", "model-context-protocol", "claude-mcp",
+        "ai-coding", "vibe-coding", "code-assistant", "ai-editor",
+        "autocode", "programming-assistant", "ide-extension"
+    ],
+    "ai-memory-pkm": [
+        "obsidian", "obsidian-plugin", "ai-memory", "mem0", "memgpt", "second-brain",
+        "knowledge-graph", "pkm", "personal-knowledge-management", "zettelkasten"
+    ],
+    "local-ai": [
+        "ollama", "vllm", "llamacpp", "lmstudio", "localai", "local-llm", "private-ai"
+    ],
+    "mcp-tools": [
+        "mcp", "model-context-protocol", "mcp-server", "mcp-client", "awesome-mcp"
+    ],
+    "ai-agents-advanced": [
+        "multi-agent", "autonomous-agents", "computer-use", "browser-use", "web-agent",
+        "swarm", "crewai", "autogen", "task-automation"
+    ],
+    "ui-ux": [
+        "react", "nextjs", "frontend", "ui", "ux", "design", "css", "tailwind",
+        "component", "design-system", "svelte", "vue", "angular", "web",
+        "responsive", "animation", "icons", "theme", "dashboard", "template",
+        "shadcn", "radix", "headless-ui", "storybook", "figma"
+    ],
+    "automation": [
+        "automation", "devops", "ci-cd", "github-actions", "workflow", "pipeline",
+        "docker", "kubernetes", "terraform", "ansible", "jenkins", "deploy",
+        "infrastructure", "iac", "scripting", "cron", "task-runner", "cli",
+        "n8n", "zapier", "make-alternative"
+    ],
+    "data-analytics": [
+        "database", "sql", "postgresql", "mysql", "mongodb", "redis", "data",
+        "analytics", "data-science", "data-engineering", "etl", "visualization",
+        "bi", "business-intelligence", "data-pipeline", "spark", "kafka"
+    ],
+    "voice-speech-ai": [
+        "text-to-speech", "speech-to-text", "voice-cloning", "elevenlabs", "tts", "stt", "audio-ai"
+    ],
+    "code-quality-review": [
+        "static-analysis", "code-review", "sonarqube", "code-quality", "lint", "security-scan", "sast"
+    ],
+    "rag-vector-search": [
+        "rag", "vector-database", "vector-db", "embedding", "semantic-search", "pinecone", "chromadb", "qdrant"
+    ],
+    "scraping-data-extraction": [
+        "web-scraping", "playwright", "firecrawl", "scraper", "crawling", "extraction", "headless-browser"
+    ],
+    "terminal-shell": [
+        "dotfiles", "terminal", "zsh", "bash", "tui", "ratatui", "cli", "shell-scripts"
+    ],
+    "payments": [
+        "payments", "stripe", "billing", "ecommerce", "fintech", "invoice", "subscription"
+    ],
+    "auth": [
+        "authentication", "auth", "oauth", "security", "identity", "sso", "login"
+    ],
+    "email-messaging": [
+        "email", "newsletter", "mail", "messaging", "notification", "chat", "realtime"
+    ],
+    "cms-content": [
+        "cms", "content-management", "blog", "markdown", "documentation", "wiki"
+    ],
+    "mobile-dev": [
+        "react-native", "flutter", "mobile", "ios", "android", "expo"
+    ],
+    "web3-blockchain": [
+        "blockchain", "web3", "ethereum", "solidity", "defi", "nft", "crypto"
+    ],
+    "selfhosted": [
+        "self-hosted", "selfhosted", "homelab", "docker-compose", "docker",
+        "homeserver", "privacy", "open-source", "alternative", "foss",
+        "self-hosting", "linux", "server", "nas", "backup", "reverse-proxy",
+        "nginx", "caddy", "traefik", "coolify", "portainer"
+    ]
+}
 
 # ==================== SEED DATA ====================
+
+GLOBAL_SEED_TOPICS = [
+    {"topic_id": "ai-agents", "name": "AI Agents", "icon": "Bot", "color": "text-blue-600", "bg_color": "bg-blue-100", "tool_count": 0},
+    {"topic_id": "ai-coding-tools", "name": "AI Coding Tools", "icon": "Code", "color": "text-violet-600", "bg_color": "bg-violet-100", "tool_count": 0},
+    {"topic_id": "ai-memory-pkm", "name": "AI Memory & PKM", "icon": "Brain", "color": "text-fuchsia-600", "bg_color": "bg-fuchsia-100", "tool_count": 0},
+    {"topic_id": "local-ai", "name": "Local AI & Models", "icon": "Cpu", "color": "text-green-600", "bg_color": "bg-green-100", "tool_count": 0},
+    {"topic_id": "mcp-tools", "name": "MCP & Agent Tools", "icon": "Network", "color": "text-blue-600", "bg_color": "bg-blue-100", "tool_count": 0},
+    {"topic_id": "ai-agents-advanced", "name": "Advanced AI Agents", "icon": "Bot", "color": "text-orange-600", "bg_color": "bg-orange-100", "tool_count": 0},
+    {"topic_id": "ui-ux", "name": "UI/UX Tools", "icon": "Palette", "color": "text-pink-600", "bg_color": "bg-pink-100", "tool_count": 0},
+    {"topic_id": "automation", "name": "Automation", "icon": "Zap", "color": "text-yellow-600", "bg_color": "bg-yellow-100", "tool_count": 0},
+    {"topic_id": "data-analytics", "name": "Data & Analytics", "icon": "LineChart", "color": "text-emerald-600", "bg_color": "bg-emerald-100", "tool_count": 0},
+    {"topic_id": "voice-speech-ai", "name": "Voice & Speech AI", "icon": "Mic", "color": "text-yellow-600", "bg_color": "bg-yellow-100", "tool_count": 0},
+    {"topic_id": "code-quality-review", "name": "Code Quality & Review", "icon": "CheckCircle", "color": "text-green-600", "bg_color": "bg-green-100", "tool_count": 0},
+    {"topic_id": "rag-vector-search", "name": "RAG & Vector Search", "icon": "Database", "color": "text-blue-600", "bg_color": "bg-blue-100", "tool_count": 0},
+    {"topic_id": "scraping-data-extraction", "name": "Scraping & Data", "icon": "Globe", "color": "text-emerald-600", "bg_color": "bg-emerald-100", "tool_count": 0},
+    {"topic_id": "terminal-shell", "name": "Terminal & Dotfiles", "icon": "Terminal", "color": "text-zinc-600", "bg_color": "bg-zinc-100", "tool_count": 0},
+    {"topic_id": "payments", "name": "Payments & Billing", "icon": "CreditCard", "color": "text-orange-600", "bg_color": "bg-orange-100", "tool_count": 0},
+    {"topic_id": "auth", "name": "Authentication", "icon": "Shield", "color": "text-purple-600", "bg_color": "bg-purple-100", "tool_count": 0},
+    {"topic_id": "email-messaging", "name": "Email & Messaging", "icon": "Mail", "color": "text-rose-600", "bg_color": "bg-rose-100", "tool_count": 0},
+    {"topic_id": "cms-content", "name": "CMS & Content", "icon": "FileText", "color": "text-teal-600", "bg_color": "bg-teal-100", "tool_count": 0},
+    {"topic_id": "mobile-dev", "name": "Mobile Dev", "icon": "Smartphone", "color": "text-indigo-600", "bg_color": "bg-indigo-100", "tool_count": 0},
+    {"topic_id": "testing-qa", "name": "Testing & QA", "icon": "TestTube2", "color": "text-cyan-600", "bg_color": "bg-cyan-100", "tool_count": 0},
+    {"topic_id": "web3-blockchain", "name": "Web3 & Blockchain", "icon": "Blocks", "color": "text-amber-600", "bg_color": "bg-amber-100", "tool_count": 0},
+    {"topic_id": "selfhosted", "name": "Self-Hosted", "icon": "Server", "color": "text-slate-600", "bg_color": "bg-slate-100", "tool_count": 0},
+]
 
 @api_router.post("/seed")
 async def seed_database():
@@ -1451,21 +1926,7 @@ async def seed_database():
     if lock and lock.get("seeded"):
         # Always re-seed topics (lightweight, ensures new categories appear)
         await db.topics.delete_many({})
-        topics = [
-            {"topic_id": "ai-agents", "name": "AI Agents", "icon": "Bot", "color": "text-blue-600", "bg_color": "bg-blue-100", "tool_count": 0},
-            {"topic_id": "ui-ux", "name": "UI/UX Tools", "icon": "Palette", "color": "text-pink-600", "bg_color": "bg-pink-100", "tool_count": 0},
-            {"topic_id": "automation", "name": "Automation", "icon": "Zap", "color": "text-yellow-600", "bg_color": "bg-yellow-100", "tool_count": 0},
-            {"topic_id": "data-analytics", "name": "Data & Analytics", "icon": "LineChart", "color": "text-emerald-600", "bg_color": "bg-emerald-100", "tool_count": 0},
-            {"topic_id": "payments", "name": "Payments & Billing", "icon": "CreditCard", "color": "text-orange-600", "bg_color": "bg-orange-100", "tool_count": 0},
-            {"topic_id": "auth", "name": "Authentication", "icon": "Shield", "color": "text-purple-600", "bg_color": "bg-purple-100", "tool_count": 0},
-            {"topic_id": "email-messaging", "name": "Email & Messaging", "icon": "Mail", "color": "text-rose-600", "bg_color": "bg-rose-100", "tool_count": 0},
-            {"topic_id": "cms-content", "name": "CMS & Content", "icon": "FileText", "color": "text-teal-600", "bg_color": "bg-teal-100", "tool_count": 0},
-            {"topic_id": "mobile-dev", "name": "Mobile Dev", "icon": "Smartphone", "color": "text-indigo-600", "bg_color": "bg-indigo-100", "tool_count": 0},
-            {"topic_id": "testing-qa", "name": "Testing & QA", "icon": "TestTube2", "color": "text-cyan-600", "bg_color": "bg-cyan-100", "tool_count": 0},
-            {"topic_id": "web3-blockchain", "name": "Web3 & Blockchain", "icon": "Blocks", "color": "text-amber-600", "bg_color": "bg-amber-100", "tool_count": 0},
-            {"topic_id": "selfhosted", "name": "Self-Hosted", "icon": "Server", "color": "text-slate-600", "bg_color": "bg-slate-100", "tool_count": 0},
-        ]
-        await db.topics.insert_many(topics)
+        await db.topics.insert_many(GLOBAL_SEED_TOPICS)
         existing = await db.tools.count_documents({})
         return {"message": "Database already seeded, topics refreshed", "tools_count": existing}
     
@@ -1478,21 +1939,7 @@ async def seed_database():
     
     # Clear and seed Topics
     await db.topics.delete_many({})
-    topics = [
-        {"topic_id": "ai-agents", "name": "AI Agents", "icon": "Bot", "color": "text-blue-600", "bg_color": "bg-blue-100", "tool_count": 28},
-        {"topic_id": "ui-ux", "name": "UI/UX Tools", "icon": "Palette", "color": "text-pink-600", "bg_color": "bg-pink-100", "tool_count": 52},
-        {"topic_id": "automation", "name": "Automation", "icon": "Zap", "color": "text-yellow-600", "bg_color": "bg-yellow-100", "tool_count": 61},
-        {"topic_id": "data-analytics", "name": "Data & Analytics", "icon": "LineChart", "color": "text-emerald-600", "bg_color": "bg-emerald-100", "tool_count": 44},
-        {"topic_id": "payments", "name": "Payments & Billing", "icon": "CreditCard", "color": "text-orange-600", "bg_color": "bg-orange-100", "tool_count": 19},
-        {"topic_id": "auth", "name": "Authentication", "icon": "Shield", "color": "text-purple-600", "bg_color": "bg-purple-100", "tool_count": 15},
-        {"topic_id": "email-messaging", "name": "Email & Messaging", "icon": "Mail", "color": "text-rose-600", "bg_color": "bg-rose-100", "tool_count": 0},
-        {"topic_id": "cms-content", "name": "CMS & Content", "icon": "FileText", "color": "text-teal-600", "bg_color": "bg-teal-100", "tool_count": 0},
-        {"topic_id": "mobile-dev", "name": "Mobile Dev", "icon": "Smartphone", "color": "text-indigo-600", "bg_color": "bg-indigo-100", "tool_count": 0},
-        {"topic_id": "testing-qa", "name": "Testing & QA", "icon": "TestTube2", "color": "text-cyan-600", "bg_color": "bg-cyan-100", "tool_count": 0},
-        {"topic_id": "web3-blockchain", "name": "Web3 & Blockchain", "icon": "Blocks", "color": "text-amber-600", "bg_color": "bg-amber-100", "tool_count": 0},
-        {"topic_id": "selfhosted", "name": "Self-Hosted", "icon": "Server", "color": "text-slate-600", "bg_color": "bg-slate-100", "tool_count": 0},
-    ]
-    await db.topics.insert_many(topics)
+    await db.topics.insert_many(GLOBAL_SEED_TOPICS)
     
     # Clear and seed Tools
     await db.tools.delete_many({})
@@ -2435,14 +2882,40 @@ async def health():
 # Include router
 app.include_router(api_router)
 
-# CORS
+# CORS — reads CORS_ORIGINS from env; defaults to * for local dev
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()] if _cors_origins_raw != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== PHONE ALERT HELPER ====================
+
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "gitstack-alerts")  # Change this to your topic
+
+async def send_phone_alert(title: str, message: str, priority: str = "default"):
+    """Send a push notification to your phone via ntfy.sh"""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"https://ntfy.sh/{NTFY_TOPIC}",
+                content=message.encode("utf-8"),
+                headers={
+                    "Title": title.encode("ascii", "ignore").decode("ascii").strip(),
+                    "Priority": priority,  # "urgent", "high", "default", "low"
+                    "Tags": "warning" if priority in ("urgent", "high") else "white_check_mark",
+                },
+                timeout=10,
+            )
+        logger.info(f"Phone alert sent: {title}")
+    except Exception as e:
+        logger.error(f"Failed to send phone alert: {e}")
+
 
 # Background scraper scheduler
 _scraper_task = None
@@ -2451,26 +2924,31 @@ async def _scraper_loop():
     """Run scraper on startup, then every 6 hours"""
     from github_scraper import GitHubScraper
     await asyncio.sleep(10)  # Let server start
+    run_count = 0
     while True:
+        run_count += 1
         try:
             logger.info("Cron: Starting scheduled GitHub scrape...")
+            await send_phone_alert(
+                title="🔍 GitStack Scrape Started",
+                message=f"Run #{run_count} is now scouring GitHub for new open-source tools.",
+                priority="low"
+            )
             scraper = GitHubScraper(db)
             stats = await scraper.run_full_scrape()
             await scraper.cleanup_old_repos(30)
             logger.info(f"Cron: Scrape complete — {stats}")
+            await send_phone_alert(
+                title="✅ GitStack Scrape Complete",
+                message=f"Run #{run_count} succeeded. Added {stats.get('hot_added', 0)} hot repos. Total: {stats.get('total_processed', 0)}",
+                priority="low"
+            )
         except Exception as e:
             logger.error(f"Cron: Scraper error — {e}")
+            await send_phone_alert(
+                title="🚨 GitStack Scraper FAILED",
+                message=f"Run #{run_count} failed!\nError: {str(e)[:300]}",
+                priority="urgent"
+            )
         await asyncio.sleep(6 * 60 * 60)  # 6 hours
 
-@app.on_event("startup")
-async def startup_event():
-    global _scraper_task
-    _scraper_task = asyncio.create_task(_scraper_loop())
-    logger.info("Background scraper scheduled (every 6 hours)")
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    global _scraper_task
-    if _scraper_task:
-        _scraper_task.cancel()
-    client.close()

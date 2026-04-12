@@ -1,5 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider } from "./context/AuthContext";
 import { AuthCallback } from "./components/AuthCallback";
@@ -20,6 +21,10 @@ import CollectionsPage from "./pages/CollectionsPage";
 import CollectionDetailPage from "./pages/CollectionDetailPage";
 import TopicToolsPage from "./pages/TopicToolsPage";
 import Dashboard from "./pages/Dashboard";
+import RepoOfTheDayPage from "./pages/RepoOfTheDayPage";
+import ComparisonPage from "./pages/ComparisonPage";
+import PublicStackPage from "./pages/PublicStackPage";
+import NotFound from "./pages/NotFound";
 
 const AppRouter = () => {
   const location = useLocation();
@@ -41,22 +46,28 @@ const AppRouter = () => {
       <Route path="/tools" element={<ToolsPage />} />
       <Route path="/tools/:toolId" element={<ToolDetailPage />} />
       <Route path="/repo/:owner/:repo" element={<GitHubRepoPage />} />
+      <Route path="/repo-of-the-day" element={<RepoOfTheDayPage />} />
+      <Route path="/compare" element={<ComparisonPage />} />
       <Route path="/collections" element={<CollectionsPage />} />
       <Route path="/collections/:collectionId" element={<CollectionDetailPage />} />
       <Route path="/topics/:topicId" element={<TopicToolsPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/s/:slug" element={<PublicStackPage />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };
 
 function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRouter />
-        <Toaster position="bottom-right" />
-      </AuthProvider>
-    </BrowserRouter>
+    <HelmetProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRouter />
+          <Toaster position="bottom-right" />
+        </AuthProvider>
+      </BrowserRouter>
+    </HelmetProvider>
   );
 }
 

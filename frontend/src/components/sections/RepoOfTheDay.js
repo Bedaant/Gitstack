@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 import { Sparkles, Star, Github, ArrowRight } from "lucide-react";
 import { API } from "../../utils/api";
-import { sanitizeHtml } from "../../utils/sanitize";
+import { formatContent } from "../../utils/sanitize";
 
 export const RepoOfTheDay = () => {
   const [repo, setRepo] = useState(null);
@@ -67,13 +67,10 @@ export const RepoOfTheDay = () => {
             <div className="border-t-2 border-black pt-6">
               <div 
                 className="prose-gitstack text-sm"
-                dangerouslySetInnerHTML={{ 
-                  __html: sanitizeHtml(
-                    repo.translation
-                      ?.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                      .replace(/\n- /g, '<br/>• ')
-                      .replace(/\n/g, '<br/>')
-                      .slice(0, 800) + (repo.translation?.length > 800 ? '...' : '')
+                dangerouslySetInnerHTML={{
+                  __html: formatContent(
+                    (repo.translation?.slice(0, 800) ?? '') +
+                    (repo.translation?.length > 800 ? '...' : '')
                   )
                 }} 
               />

@@ -4,6 +4,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { Star, Clock, Sparkles, Github, Share2 } from "lucide-react";
 import { Header } from "../components/Header";
+import { Footer } from "../components/Footer";
 import { formatContent } from "../utils/sanitize";
 import { API } from "../utils/api";
 
@@ -64,19 +65,25 @@ export default function GitHubRepoPage() {
               <div>
                 <h1 className="text-4xl font-black mb-2">{data.name}</h1>
                 <p className="text-zinc-500 font-mono text-sm mb-4">{data.full_name}</p>
-                <div className="flex items-center gap-4">
-                  <span className={`text-sm font-bold px-3 py-1 ${
-                    data.difficulty === 'Beginner' ? 'badge-beginner' : 
-                    data.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
-                  }`}>
-                    {data.difficulty}
-                  </span>
-                  <span className="flex items-center gap-1 text-sm text-zinc-500">
-                    <Clock className="w-4 h-4" /> {data.setup_time}
-                  </span>
-                  <span className="flex items-center gap-1 text-sm font-semibold">
-                    <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {data.stars?.toLocaleString()}
-                  </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  {data.difficulty && (
+                    <span className={`text-sm font-bold px-3 py-1 ${
+                      data.difficulty === 'Beginner' ? 'badge-beginner' :
+                      data.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
+                    }`}>
+                      {data.difficulty}
+                    </span>
+                  )}
+                  {data.setup_time && (
+                    <span className="flex items-center gap-1 text-sm text-zinc-500">
+                      <Clock className="w-4 h-4" /> {data.setup_time}
+                    </span>
+                  )}
+                  {data.stars > 0 && (
+                    <span className="flex items-center gap-1 text-sm font-semibold">
+                      <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {data.stars?.toLocaleString()}
+                    </span>
+                  )}
                   {data.forks > 0 && (
                     <span className="text-sm text-zinc-500">{data.forks?.toLocaleString()} forks</span>
                   )}
@@ -140,6 +147,8 @@ export default function GitHubRepoPage() {
           </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }
+
