@@ -1,26 +1,26 @@
-import sys
 import os
-import uvicorn
+import sys
 
-print("--- [DEBUG] GITSTACK BOOT SEQUENCE STARTING ---")
-
+print("\n" + "="*50)
+print("📂 DIRECTORY AUDIT START")
+print(f"Current Path: {os.getcwd()}")
 try:
-    print(f"--- [DEBUG] Current Directory: {os.getcwd()}")
-    print(f"--- [DEBUG] Files in dir: {os.listdir('.')}")
-    
-    print("--- [DEBUG] Importing server.py...")
-    from server import app
-    print("--- [DEBUG] Import successful! Starting Uvicorn...")
-    
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
-
+    print(f"Directory Contents: {os.listdir('.')}")
 except Exception as e:
-    print("\n" + "="*50)
-    print("💥 CRITICAL BOOT FAILURE 💥")
-    print(f"Error Type: {type(e).__name__}")
-    print(f"Error Message: {str(e)}")
-    print("="*50)
+    print(f"Error listing dir: {e}")
+
+print("\n📦 CHECKING IMPORTS")
+try:
+    import fastapi
+    print("✅ FastAPI is installed")
+    import motor
+    print("✅ Motor is installed")
+    import server
+    print("✅ server.py was found and imported!")
+except Exception as e:
+    print(f"❌ IMPORT ERROR: {e}")
     import traceback
     traceback.print_exc()
-    sys.exit(1)
+
+print("="*50 + "\n")
+sys.exit(0) # Exit with 0 so Render sees it as a "success" for this test
