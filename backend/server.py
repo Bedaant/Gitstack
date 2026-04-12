@@ -68,6 +68,10 @@ async def lifespan(_app: FastAPI):
     global _scraper_task
     _scraper_task = asyncio.create_task(_scraper_loop())
     logger.info("Background scraper scheduled (every 6 hours)")
+    
+    # One-time seed for production boot
+    asyncio.create_task(seed_database())
+    logger.info("Database seeding started...")
     asyncio.create_task(send_phone_alert(
         title="🚀 GitStack Server Started",
         message="Backend is live and cron is running (every 6 hours).",
