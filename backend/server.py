@@ -23,13 +23,37 @@ from bs4 import BeautifulSoup
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Configure Logging first so we can see errors
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Configure Google Gemini
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+try:
+    # MongoDB connection
+    mongo_url = os.environ.get('MONGO_URL')
+    db_name = os.environ.get('DB_NAME', 'gitstack')
+    
+    if not mongo_url:
+        logger.error("❌ CRITICAL: MONGO_URL environment variable is missing!")
+        raise ValueError("MONGO_URL is required")
+
+    logger.info(f"Connecting to MongoDB: {mongo_url.split('@')[-1]}") # Log only the host part for security
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[db_name]
+    
+    # Test connection immediately
+    # Note: Motor is async, so we'll test it in the lifespan
+    
+    # Configure Google Gemini
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_key:
+        logger.warning("⚠️ GEMINI_API_KEY is missing. AI features will fail.")
+    genai.configure(api_key=gemini_key)
+
+except Exception as e:
+    logger.error(f"💥 STARTUP ERROR: {str(e)}")
+    import traceback
+    logger.error(traceback.format_exc())
+    # We don't re-raise here so the process stays alive long enough for us to see the log
 
 # GitHub API headers — token raises rate limit from 60 to 5000 req/hr
 _gh_token = os.environ.get("GITHUB_TOKEN", "")
@@ -61,15 +85,12 @@ async def lifespan(_app: FastAPI):
         priority="high"
     ))
 
+# limiter and app setup
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # ==================== MODELS ====================
 
