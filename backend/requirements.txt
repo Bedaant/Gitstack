@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 motor
 python-dotenv
 pydantic
@@ -7,4 +7,5 @@ httpx
 beautifulsoup4
 google-generativeai
 slowapi
-pymongo
+pymongo[srv]
+dnspython
