@@ -12,11 +12,11 @@ None. This phase is fully independent of all other phases.
 
 ## Status
 
-- [ ] Task 1 — Create `mcp/` directory scaffold (package.json, tsconfig.json)
-- [ ] Task 2 — Create `mcp/src/api.ts` — typed Gitstack API client
-- [ ] Task 3 — Create `mcp/src/tools.ts` — MCP tool definitions
-- [ ] Task 4 — Create `mcp/src/index.ts` — MCP server entry point
-- [ ] Task 5 — Create `mcp/README.md` — install + config guide
+- [x] Task 1 — Create `mcp/` directory scaffold (package.json, tsconfig.json)
+- [x] Task 2 — Create `mcp/src/api.ts` — typed Gitstack API client
+- [x] Task 3 — Create `mcp/src/tools.ts` — MCP tool definitions (inlined in index.ts)
+- [x] Task 4 — Create `mcp/src/index.ts` — MCP server entry point
+- [x] Task 5 — Create `mcp/README.md` — install + config guide
 
 ---
 

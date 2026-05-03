@@ -1,9 +1,16 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
+import { ThemeProvider } from "next-themes";
+import { ClerkProvider } from "@clerk/clerk-react";
 import { Toaster } from "./components/ui/sonner";
-import { AuthProvider } from "./context/AuthContext";
-import { AuthCallback } from "./components/AuthCallback";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { RequireAuth } from "./components/RequireAuth";
+import { ErrorBoundary } from "react-error-boundary";
+import { AlertTriangle } from "lucide-react";
+import { NewsletterPopup } from "./components/ui/NewsletterPopup";
+
+const CLERK_KEY = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
 
 // Pages
 import HomePage from "./pages/HomePage";
@@ -25,14 +32,52 @@ import RepoOfTheDayPage from "./pages/RepoOfTheDayPage";
 import ComparisonPage from "./pages/ComparisonPage";
 import PublicStackPage from "./pages/PublicStackPage";
 import NotFound from "./pages/NotFound";
+import UserProfilePage from "./pages/UserProfilePage";
+import MarketplacePage from "./pages/MarketplacePage";
+import MarketplaceProductPage from "./pages/MarketplaceProductPage";
+import SellPage from "./pages/SellPage";
+import AlternativesPage from "./pages/AlternativesPage";
+import EmbedRepoPage from "./pages/EmbedRepoPage";
+import RepoXrayPage from "./pages/RepoXrayPage";
+import ReadmeBadgePage from "./pages/ReadmeBadgePage";
+import { TermsPage, PrivacyPage, AboutPage } from "./pages/LegalPage";
+
+const MeRedirect = () => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/" replace />;
+  return <Navigate to={`/u/${user.user_id}`} replace />;
+};
+
+const RepoRedirect = () => {
+  const { owner, repo } = useParams();
+  return <Navigate to={`/r/${owner}/${repo}`} replace />;
+};
+
+const RepoShortlink = () => {
+  const { owner, repo } = useParams();
+  return <Navigate to={`/r/${owner}/${repo}`} replace />;
+};
+
+const ErrorFallback = ({ error, resetErrorBoundary }) => {
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="neo-card p-8 max-w-md w-full text-center">
+        <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+        <h1 className="text-2xl font-black uppercase mb-2">Something went wrong</h1>
+        <p className="text-sm text-muted-foreground mb-4">{error.message}</p>
+        <button
+          onClick={resetErrorBoundary}
+          className="neo-btn neo-btn-primary px-6 py-2 font-black text-sm"
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const AppRouter = () => {
-  const location = useLocation();
-  
-  if (location.hash?.includes('session_id=')) {
-    return <AuthCallback />;
-  }
-
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
@@ -45,14 +90,29 @@ const AppRouter = () => {
       <Route path="/error-explainer" element={<ErrorExplainer />} />
       <Route path="/tools" element={<ToolsPage />} />
       <Route path="/tools/:toolId" element={<ToolDetailPage />} />
-      <Route path="/repo/:owner/:repo" element={<GitHubRepoPage />} />
+      <Route path="/r/:owner/:repo" element={<GitHubRepoPage />} />
+      <Route path="/repo/:owner/:repo" element={<RepoRedirect />} />
       <Route path="/repo-of-the-day" element={<RepoOfTheDayPage />} />
       <Route path="/compare" element={<ComparisonPage />} />
       <Route path="/collections" element={<CollectionsPage />} />
       <Route path="/collections/:collectionId" element={<CollectionDetailPage />} />
       <Route path="/topics/:topicId" element={<TopicToolsPage />} />
-      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+      <Route path="/u/me" element={<MeRedirect />} />
+      <Route path="/marketplace" element={<MarketplacePage />} />
+      <Route path="/marketplace/:productId" element={<MarketplaceProductPage />} />
+      <Route path="/sell" element={<RequireAuth><SellPage /></RequireAuth>} />
+      <Route path="/alternatives/:tool" element={<AlternativesPage />} />
+      <Route path="/embed/r/:owner/:repo" element={<EmbedRepoPage />} />
+      <Route path="/repo-xray" element={<RepoXrayPage />} />
+      <Route path="/readme-badge" element={<ReadmeBadgePage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/u/:userId" element={<UserProfilePage />} />
       <Route path="/s/:slug" element={<PublicStackPage />} />
+      {/* gitstack.pro/:owner/:repo shortlink — must be last before the 404 catch-all */}
+      <Route path="/:owner/:repo" element={<RepoShortlink />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -60,15 +120,23 @@ const AppRouter = () => {
 
 function App() {
   return (
-    <HelmetProvider>
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRouter />
-          <Toaster position="bottom-right" />
-        </AuthProvider>
-      </BrowserRouter>
-    </HelmetProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <HelmetProvider>
+        <ClerkProvider publishableKey={CLERK_KEY}>
+          <BrowserRouter>
+            <AuthProvider>
+              <ErrorBoundary FallbackComponent={ErrorFallback}>
+                <AppRouter />
+                <NewsletterPopup />
+              </ErrorBoundary>
+              <Toaster position="bottom-right" />
+            </AuthProvider>
+          </BrowserRouter>
+        </ClerkProvider>
+      </HelmetProvider>
+    </ThemeProvider>
   );
 }
 
 export default App;
+

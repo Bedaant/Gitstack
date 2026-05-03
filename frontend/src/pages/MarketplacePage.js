@@ -1,0 +1,179 @@
+import React, { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
+import axios from "axios";
+import { Header } from "../components/Header";
+import { Footer } from "../components/Footer";
+import { SEO } from "../components/SEO";
+import { ProductCard } from "../components/ui/ProductCard";
+import { VirtualProductGrid } from "../components/marketplace/VirtualProductGrid";
+import { API } from "../utils/api";
+import { Search, ShoppingBag, Briefcase, ArrowUpDown, SlidersHorizontal } from "lucide-react";
+
+// Track window width reactively so VirtualProductGrid rebalances columns on rotate/resize
+function useWindowWidth() {
+  const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handler = () => setW(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return w;
+}
+
+const CATEGORIES = [
+  "All", "SaaS", "MCP Servers", "Computer Vision", "Templates", "Skills", "Other"
+];
+
+const SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "best_sellers", label: "Best Sellers" },
+  { value: "top_rated", label: "Top Rated" },
+  { value: "price_asc", label: "Price: Low to High" },
+  { value: "price_desc", label: "Price: High to Low" },
+];
+
+export default function MarketplacePage() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState("All");
+  const [sort, setSort] = useState("newest");
+  const [page, setPage] = useState(1);
+  const windowWidth = useWindowWidth();
+
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set("q", q.trim());
+      if (category && category !== "All") params.set("category", category);
+      if (sort) params.set("sort", sort);
+      params.set("page", String(page));
+      const { data } = await axios.get(`${API}/marketplace/products?${params.toString()}`);
+      setProducts(data.products || []);
+    } catch {
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [q, category, sort, page]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background">
+      <SEO
+        title="Marketplace — GitStack"
+        description="Buy indie dev tools as a one-time purchase. SaaS alternatives, MCP servers, templates, and more — pay once, own forever."
+      />
+      <Header />
+      <main className="flex-1">
+        <section className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight mb-2">Marketplace</h1>
+              <p className="text-muted-foreground max-w-xl">Pay once, own forever. Indie alternatives to monthly SaaS tools.</p>
+            </div>
+            <Link to="/sell" className="neo-btn neo-btn-primary px-6 py-3 font-black inline-flex items-center gap-2">
+              <Briefcase className="w-4 h-4" /> Sell a Product
+            </Link>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-3 mb-6">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={q}
+                onChange={(e) => { setQ(e.target.value); setPage(1); }}
+                className="neo-input w-full pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <select
+                  value={sort}
+                  onChange={(e) => { setSort(e.target.value); setPage(1); }}
+                  className="neo-input pl-9 pr-8 appearance-none cursor-pointer"
+                >
+                  {SORT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-8">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                onClick={() => { setCategory(c); setPage(1); }}
+                className={`px-3 py-1.5 text-xs font-black border-2 border-foreground uppercase tracking-wide transition-colors ${
+                  category === c
+                    ? "bg-foreground text-background"
+                    : "bg-background text-foreground hover:bg-muted"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="neo-card overflow-hidden animate-pulse">
+                  <div className="aspect-video bg-muted border-b-4 border-black" />
+                  <div className="p-4 space-y-2">
+                    <div className="h-4 bg-muted rounded w-3/4" />
+                    <div className="h-3 bg-muted rounded w-full" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : products.length === 0 ? (
+            q.trim() || (category && category !== "All") ? (
+              <div className="neo-card p-10 text-center bg-muted/20 max-w-2xl mx-auto">
+                <Search className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <h2 className="text-2xl font-black uppercase mb-2">No results found</h2>
+                <p className="text-muted-foreground mb-5">
+                  {q.trim() ? <>Nothing matches <span className="font-bold text-foreground">"{q}"</span>{category !== "All" && <> in <span className="font-bold text-foreground">{category}</span></>}.</> : <>No products in <span className="font-bold text-foreground">{category}</span> yet.</>}
+                  {" "}Try different keywords or browse other categories.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                  <button
+                    onClick={() => { setQ(""); setCategory("All"); setPage(1); }}
+                    className="neo-btn neo-btn-primary px-5 py-2.5 font-black"
+                  >
+                    Clear filters
+                  </button>
+                  <Link to="/marketplace" className="neo-btn px-5 py-2.5 font-black border-2 border-foreground">
+                    Browse all
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="neo-card p-10 text-center bg-muted/20 max-w-2xl mx-auto">
+                <ShoppingBag className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <h2 className="text-2xl font-black uppercase mb-2">The Marketplace is open</h2>
+                <p className="text-muted-foreground mb-5">Be the first to list your indie tool, MCP server, or boilerplate. Set it up in 5 minutes.</p>
+                <Link to="/sell" className="neo-btn neo-btn-primary px-6 py-3 font-black inline-flex items-center gap-2">
+                  <Briefcase className="w-4 h-4" /> Become a Seller
+                </Link>
+              </div>
+            )
+          ) : (
+            <VirtualProductGrid products={products} width={windowWidth} />
+          )}
+        </section>
+      </main>
+      <Footer />
+    </div>
+  );
+}

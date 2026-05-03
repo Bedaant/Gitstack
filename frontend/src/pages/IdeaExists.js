@@ -70,7 +70,7 @@ export default function IdeaExists() {
             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-4" data-testid="idea-exists-title">
               Your Idea Already Exists
             </h1>
-            <p className="text-lg text-zinc-600 max-w-2xl mx-auto font-medium">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium">
               Don't start from zero. Find existing open-source engines you can fork, improve, or learn from.
             </p>
           </div>
@@ -80,7 +80,7 @@ export default function IdeaExists() {
               value={idea}
               onChange={(e) => setIdea(e.target.value)}
               placeholder="e.g. I want to build an AI agent that manages my LinkedIn and replies to recruiters..."
-              className="neo-input h-32 resize-none mb-4 focus:ring-4 ring-pastel-mint/30"
+              className="neo-input p-4 h-32 resize-none mb-4 focus:ring-4 ring-pastel-mint/30"
               data-testid="idea-input"
             />
             <button 
@@ -102,7 +102,7 @@ export default function IdeaExists() {
 
           {loading && (
             <div className="text-center py-16">
-              <div className="spinner mx-auto mb-6 w-12 h-12 border-4" style={{ borderTopColor: '#10B981' }}></div>
+              <div className="spinner mx-auto mb-6 w-12 h-12 border-4" style={{ borderTopColor: 'hsl(var(--primary))' }}></div>
               <AnimatePresence mode="wait">
                 <motion.p
                   key={loadingStep}
@@ -114,7 +114,7 @@ export default function IdeaExists() {
                   {LOADING_STEPS[loadingStep]}
                 </motion.p>
               </AnimatePresence>
-              <p className="text-zinc-500 font-mono text-sm mt-2">Usually takes 10–20 seconds</p>
+              <p className="text-muted-foreground font-mono text-sm mt-2">Usually takes 10–20 seconds</p>
             </div>
           )}
 
@@ -122,10 +122,10 @@ export default function IdeaExists() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="neo-card p-10 text-center bg-pastel-pink border-4 border-black"
+              className="p-10 text-center bg-pastel-pink border-4 border-black shadow-[8px_8px_0px_0px_hsl(var(--foreground))] text-black"
             >
               <p className="text-2xl font-black uppercase mb-2">Search Failed</p>
-              <p className="text-zinc-600 font-medium mb-6">Something went wrong on our end. Check your connection and try again.</p>
+              <p className="text-foreground/70 font-medium mb-6">Something went wrong on our end. Check your connection and try again.</p>
               <button
                 onClick={() => { setApiError(false); }}
                 className="neo-btn neo-btn-primary px-8 py-3 font-black"
@@ -142,11 +142,11 @@ export default function IdeaExists() {
                 animate={{ opacity: 1 }}
                 className="space-y-6"
               >
-                <div className="neo-card p-6 bg-pastel-mint text-center border-4 border-black relative overflow-hidden">
-                  <Sparkles className="absolute right-4 top-4 w-12 h-12 text-black/10" />
+                <div className="p-6 bg-pastel-mint text-center border-4 border-black shadow-[8px_8px_0px_0px_hsl(var(--foreground))] relative overflow-hidden text-black">
+                  <Sparkles className="absolute right-4 top-4 w-12 h-12 text-foreground/10" />
                   <p className="text-sm font-mono uppercase tracking-widest mb-1 font-bold">Discovery Report</p>
                   <p className="text-4xl font-black italic">Found {results.count} Engines</p>
-                  <p className="text-sm font-bold mt-2 text-zinc-700">These projects have already solved the hard parts of your idea.</p>
+                  <p className="text-sm font-bold mt-2 text-foreground/70">These projects have already solved the hard parts of your idea.</p>
                 </div>
 
                 <div className="space-y-6">
@@ -156,7 +156,7 @@ export default function IdeaExists() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: idx * 0.1 }}
-                      className="neo-card p-8 group hover:border-primary transition-all shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white" 
+                      className="p-8 group hover:border-primary transition-all shadow-[8px_8px_0px_0px_hsl(var(--foreground))] bg-background border-2 border-foreground" 
                       data-testid={`similar-project-${project.name}`}
                     >
                       <div className="flex flex-col md:flex-row md:items-start justify-between mb-4 gap-4">
@@ -164,35 +164,35 @@ export default function IdeaExists() {
                           <h3 className="text-2xl font-black uppercase tracking-tight group-hover:text-primary transition-colors underline decoration-black/10 underline-offset-8 decoration-4">
                             {project.name}
                           </h3>
-                          <p className="text-xs font-mono text-zinc-400 mt-2 font-bold">{project.full_name}</p>
+                          <p className="text-xs font-mono text-muted-foreground mt-2 font-bold">{project.full_name}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-black bg-zinc-100 px-3 py-1 border-2 border-black uppercase">{project.language}</span>
-                          <span className="flex items-center gap-1 text-sm font-black border-2 border-black px-3 py-1 bg-pastel-yellow">
-                            <Star className="w-4 h-4 text-black" fill="currentColor" /> {project.stars}
+                          <span className="text-xs font-black bg-muted px-3 py-1 border-2 border-foreground uppercase">{project.language}</span>
+                          <span className="flex items-center gap-1 text-sm font-black border-2 border-foreground px-3 py-1 bg-pastel-yellow text-black">
+                            <Star className="w-4 h-4 text-foreground" fill="currentColor" /> {project.stars}
                           </span>
                         </div>
                       </div>
                       
-                      <p className="text-zinc-600 mb-6 leading-relaxed text-lg font-medium italic">"{project.description}"</p>
+                      <p className="text-muted-foreground mb-6 leading-relaxed text-lg font-medium italic">"{project.description}"</p>
                       
-                      <div className="bg-zinc-50 border-l-8 border-black p-6 mb-6 space-y-4">
+                      <div className="bg-muted border-l-8 border-foreground p-6 mb-6 space-y-4">
                         <div>
-                          <p className="text-xs font-black uppercase text-zinc-400 mb-1">Founder's Take:</p>
-                          <p className="text-base font-bold italic text-zinc-800">“{project.whyRelevant}”</p>
+                          <p className="text-xs font-black uppercase text-muted-foreground mb-1">Founder's Take:</p>
+                          <p className="text-base font-bold italic text-foreground">“{project.whyRelevant}”</p>
                         </div>
                         <div>
                           <p className="text-xs font-black uppercase text-primary mb-1">How to execute:</p>
-                          <p className="text-base font-black text-black">{project.howToUse}</p>
+                          <p className="text-base font-black text-foreground">{project.howToUse}</p>
                         </div>
                       </div>
                       
-                      <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t-2 border-black/5">
+                      <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t-2 border-foreground/5">
                         <a 
                           href={project.githubUrl} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="neo-btn neo-btn-secondary px-8 py-3 font-bold bg-white"
+                          className="neo-btn neo-btn-secondary px-8 py-3 font-bold bg-background"
                         >
                           <Github className="w-5 h-5 mr-3" /> Source Code
                         </a>
@@ -214,11 +214,11 @@ export default function IdeaExists() {
             <motion.div 
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
-              className="neo-card p-12 text-center bg-pastel-yellow border-4 border-black"
+              className="neo-card p-12 text-center bg-pastel-yellow border-4 border-black text-black"
             >
               <Lightbulb className="w-16 h-16 mx-auto mb-4" />
               <h2 className="text-3xl font-black uppercase italic mb-2">Zero Precedents Found!</h2>
-              <p className="text-zinc-600 font-bold max-w-md mx-auto">This idea is dangerously unique. You might be onto something massive. Let's build a custom stack for it.</p>
+              <p className="text-muted-foreground font-bold max-w-md mx-auto">This idea is dangerously unique. You might be onto something massive. Let's build a custom stack for it.</p>
               <Link to="/stack-generator" className="neo-btn neo-btn-primary px-10 py-4 mt-8 font-black uppercase text-lg">
                 Finalize My Stack
               </Link>

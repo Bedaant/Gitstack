@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame, AlertTriangle, Scale } from "lucide-react";
+import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame, AlertTriangle, Scale, ShoppingBag, Briefcase, Shield } from "lucide-react";
 
 const productLinks = [
   { name: "Stack Generator", path: "/stack-generator", icon: Sparkles },
@@ -13,15 +13,23 @@ const productLinks = [
 ];
 
 const navLinks = [
+  { name: "Marketplace", path: "/marketplace", icon: ShoppingBag },
+  { name: "Sell on GitStack", path: "/sell", icon: Briefcase },
+  { name: "README Badge", path: "/readme-badge", icon: Shield },
   { name: "Collections", path: "/collections" },
   { name: "All Tools", path: "/tools" },
-  { name: "Trending", path: "/#trending" },
   { name: "Founder Stacks", path: "/founder-stacks" },
+];
+
+const legalLinks = [
+  { name: "About", path: "/about" },
+  { name: "Terms", path: "/terms" },
+  { name: "Privacy", path: "/privacy" },
 ];
 
 export const Footer = () => {
   return (
-    <footer className="bg-black text-white border-t-4 border-primary">
+    <footer className="bg-foreground text-background border-t-4 border-primary">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
           {/* Brand */}
@@ -30,18 +38,18 @@ export const Footer = () => {
               <img src="/logo-white.svg" alt="GitStack" className="w-8 h-8" />
               <span className="text-xl font-extrabold tracking-tight">GitStack</span>
             </Link>
-            <p className="text-sm text-zinc-400 leading-relaxed">
+            <p className="text-sm text-background/70 leading-relaxed">
               The layer between GitHub tools existing and you actually using them. Built for non-tech founders.
             </p>
           </div>
 
           {/* AI Tools */}
           <div>
-            <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-zinc-300">AI Tools</h4>
+            <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-background/50">AI Tools</h4>
             <ul className="space-y-2">
               {productLinks.map(link => (
                 <li key={link.path}>
-                  <Link to={link.path} className="text-sm text-zinc-400 hover:text-white transition-colors flex items-center gap-2">
+                  <Link to={link.path} className="text-sm text-background/70 hover:text-background transition-colors flex items-center gap-2">
                     <link.icon className="w-3 h-3" /> {link.name}
                   </Link>
                 </li>
@@ -51,12 +59,12 @@ export const Footer = () => {
 
           {/* Explore */}
           <div>
-            <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-zinc-300">Explore</h4>
+            <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-background/50">Explore</h4>
             <ul className="space-y-2">
               {navLinks.map(link => (
                 <li key={link.path}>
-                  <Link to={link.path} className="text-sm text-zinc-400 hover:text-white transition-colors">
-                    {link.name}
+                  <Link to={link.path} className="text-sm text-background/70 hover:text-background transition-colors flex items-center gap-2">
+                    {link.icon && <link.icon className="w-3 h-3" />} {link.name}
                   </Link>
                 </li>
               ))}
@@ -65,24 +73,24 @@ export const Footer = () => {
 
           {/* Team */}
           <div>
-            <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-zinc-300">Built By</h4>
+            <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-background/50">Built By</h4>
             <div className="space-y-4">
               <div>
                 <p className="font-semibold text-sm">Bedaant Srivastav</p>
                 <div className="flex items-center gap-3 mt-1">
-                  <a href="mailto:bedaantsrivastav2001@gmail.com" className="text-zinc-400 hover:text-white transition-colors" aria-label="Email Bedaant" data-testid="footer-email-bedaant">
+                  <a href="mailto:bedaantsrivastav2001@gmail.com" className="text-background/70 hover:text-background transition-colors" aria-label="Email Bedaant" data-testid="footer-email-bedaant">
                     <Mail className="w-4 h-4" />
                   </a>
-                  <a href="https://www.linkedin.com/in/bedaant-srivastav-18510a120/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors" aria-label="LinkedIn Bedaant" data-testid="footer-linkedin-bedaant">
+                  <a href="https://www.linkedin.com/in/bedaant-srivastav-18510a120/" target="_blank" rel="noopener noreferrer" className="text-background/70 hover:text-background transition-colors" aria-label="LinkedIn Bedaant" data-testid="footer-linkedin-bedaant">
                     <Linkedin className="w-4 h-4" />
                   </a>
                 </div>
               </div>
               <div>
                 <p className="font-semibold text-sm">Atul Raj Sharan</p>
-                <p className="text-xs text-zinc-500">Working Partner</p>
+                <p className="text-xs text-background/60">Working Partner</p>
                 <div className="flex items-center gap-3 mt-1">
-                  <a href="https://www.linkedin.com/in/atul-raj-sharan-03b356a2/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition-colors" aria-label="LinkedIn Atul" data-testid="footer-linkedin-atul">
+                  <a href="https://www.linkedin.com/in/atul-raj-sharan-03b356a2/" target="_blank" rel="noopener noreferrer" className="text-background/70 hover:text-background transition-colors" aria-label="LinkedIn Atul" data-testid="footer-linkedin-atul">
                     <Linkedin className="w-4 h-4" />
                   </a>
                 </div>
@@ -92,15 +100,22 @@ export const Footer = () => {
         </div>
 
         {/* Bottom bar */}
-        <div className="border-t border-zinc-800 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="font-mono text-xs text-zinc-500">
+        <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="font-mono text-xs text-background/60">
             GitStack {new Date().getFullYear()} — GitHub, simplified for founders
           </p>
+          <div className="flex items-center gap-4 flex-wrap justify-center">
+            {legalLinks.map(l => (
+              <Link key={l.path} to={l.path} className="text-xs text-background/70 hover:text-background transition-colors">
+                {l.name}
+              </Link>
+            ))}
+          </div>
           <div className="flex items-center gap-4">
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-white transition-colors">
+            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-background/70 hover:text-background transition-colors">
               <Github className="w-4 h-4" />
             </a>
-            <a href="mailto:bedaantsrivastav2001@gmail.com" className="text-zinc-500 hover:text-white transition-colors">
+            <a href="mailto:bedaantsrivastav2001@gmail.com" className="text-background/70 hover:text-background transition-colors">
               <Mail className="w-4 h-4" />
             </a>
           </div>

@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import { Copy, Share2, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
+import { GitHubLink } from "../components/ui/GitHubLink";
 
 export default function PublicStackPage() {
   const { slug } = useParams();
@@ -57,7 +59,7 @@ export default function PublicStackPage() {
         <main className="py-24 px-4 text-center">
           <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-red-500" />
           <h1 className="text-4xl font-black uppercase mb-4">Stack Not Found</h1>
-          <p className="text-zinc-500 mb-8">This stack link may have expired or never existed.</p>
+          <p className="text-muted-foreground mb-8">This stack link may have expired or never existed.</p>
           <Link to="/stack-generator" className="neo-btn neo-btn-primary px-8 py-4 font-black">
             Build Your Own Stack
           </Link>
@@ -70,15 +72,23 @@ export default function PublicStackPage() {
   const tools = stack?.tools || [];
   const idea = stack?.idea || "Untitled Stack";
 
+  const toolNames = tools.slice(0, 5).map(t => t.name).join(", ");
+  const seoDescription = `${idea}: a tech stack with ${tools.length} open-source tools${toolNames ? ` including ${toolNames}` : ""}. Free alternatives for non-technical founders.`;
+
   return (
     <div className="min-h-screen">
+      <SEO
+        title={`${idea} — Tech Stack`}
+        description={seoDescription.slice(0, 160)}
+        path={`/s/${slug}`}
+      />
       <Header />
       <main className="py-12 px-4">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-10">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-400 mb-2 font-black">Shared Stack</p>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 font-black">Shared Stack</p>
             <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight mb-3">{idea}</h1>
-            <p className="text-zinc-500 text-sm">
+            <p className="text-muted-foreground text-sm">
               {tools.length} tools · Built with GitStack
             </p>
           </div>
@@ -87,47 +97,44 @@ export default function PublicStackPage() {
             {tools.map((tool, idx) => (
               <div
                 key={`${tool.name}-${idx}`}
-                className="neo-card p-5 bg-white border-2 border-black flex items-start gap-4"
+                className="neo-card p-5 bg-background border-2 border-foreground flex items-start gap-4"
               >
-                <span className="w-8 h-8 bg-black text-white text-xs font-black flex items-center justify-center flex-shrink-0">
+                <span className="w-8 h-8 bg-foreground text-background text-xs font-black flex items-center justify-center flex-shrink-0">
                   {String(idx + 1).padStart(2, "0")}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-black text-lg">{tool.name}</h3>
                     {tool.difficulty && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 border border-black ${
-                        tool.difficulty === "Beginner" ? "bg-green-100" :
-                        tool.difficulty === "Intermediate" ? "bg-yellow-100" : "bg-red-100"
+                      <span className={`text-[10px] font-bold px-2 py-0.5 border border-foreground text-foreground ${
+                        tool.difficulty === "Beginner" ? "bg-pastel-mint" :
+                        tool.difficulty === "Intermediate" ? "bg-pastel-yellow" : "bg-pastel-pink"
                       }`}>
                         {tool.difficulty}
                       </span>
                     )}
                     {tool.isFree && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 border border-black bg-pastel-mint">FREE</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 border border-foreground bg-pastel-mint text-black">FREE</span>
                     )}
                   </div>
-                  {tool.role && <p className="text-zinc-500 text-sm font-medium">{tool.role}</p>}
-                  {tool.reason && <p className="text-zinc-600 text-sm mt-1">{tool.reason}</p>}
+                  {tool.role && <p className="text-muted-foreground text-sm font-medium">{tool.role}</p>}
+                  {tool.reason && <p className="text-muted-foreground text-sm mt-1">{tool.reason}</p>}
                   {tool.githubUrl && (
-                    <a
-                      href={tool.githubUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary font-bold mt-2 hover:underline"
-                    >
-                      View on GitHub <ExternalLink className="w-3 h-3" />
-                    </a>
+                    <GitHubLink
+                      url={tool.githubUrl}
+                      label="View on GitHub"
+                      className="text-xs text-primary font-bold mt-2"
+                    />
                   )}
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="neo-card p-6 bg-zinc-50 border-2 border-black flex flex-col sm:flex-row gap-4 items-center justify-between mb-12">
+          <div className="neo-card p-6 bg-muted border-2 border-foreground flex flex-col sm:flex-row gap-4 items-center justify-between mb-12">
             <div>
               <p className="font-black uppercase text-sm">Build a stack for your own idea</p>
-              <p className="text-zinc-500 text-xs mt-0.5">Free, no account needed</p>
+              <p className="text-muted-foreground text-xs mt-0.5">Free, no account needed</p>
             </div>
             <div className="flex gap-3 flex-shrink-0">
               <button onClick={handleCopyLink} className="neo-btn neo-btn-secondary px-4 py-2 font-bold text-sm flex items-center gap-2">

@@ -5,6 +5,7 @@ import { Sparkles, Star, Github, ArrowRight, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
 import { formatContent } from "../utils/sanitize";
 
@@ -48,10 +49,15 @@ export default function RepoOfTheDayPage() {
 
   if (!repo) return (
     <div className="min-h-screen">
+      <SEO
+        title="Repo of the Day — Open Source Project Spotlight"
+        description="Discover a new open-source project every day. We explain the best GitHub repos in plain English for non-technical founders."
+        path="/repo-of-the-day"
+      />
       <Header />
       <div className="max-w-4xl mx-auto py-20 px-4 text-center">
         <h1 className="text-3xl font-bold">No repo featured for today!</h1>
-        <p className="mt-4 text-zinc-500">Check back tomorrow.</p>
+        <p className="mt-4 text-muted-foreground">Check back tomorrow.</p>
         <Link to="/" className="neo-btn neo-btn-primary px-6 py-3 mt-8 inline-block">Go Home</Link>
       </div>
       <Footer />
@@ -60,42 +66,47 @@ export default function RepoOfTheDayPage() {
 
   return (
     <div className="min-h-screen">
+      <SEO
+        title={`Repo of the Day — ${repo.name}`}
+        description={`Discover ${repo.name}: ${repo.description?.slice(0, 120) || 'Open source project explained in plain English for non-technical founders.'}`}
+        path="/repo-of-the-day"
+      />
       <Header />
       <main className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-pastel-yellow border-4 border-black neo-shadow-lg mb-6">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-pastel-yellow border-4 border-black neo-shadow-lg mb-6 text-black">
               <Sparkles className="w-10 h-10" strokeWidth={2} />
             </div>
             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-4" data-testid="repo-day-title">
               Repo of the Day
             </h1>
-            <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Every day we feature one amazing open-source project and translate it for you.
             </p>
           </div>
 
-          <div className="neo-card p-8 bg-white" data-testid="repo-day-content">
+          <div className="neo-card p-8 bg-background" data-testid="repo-day-content">
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h3 className="text-3xl font-black">{repo.name}</h3>
-                <p className="text-sm font-mono text-zinc-500">{repo.full_name}</p>
-                <p className="text-xs text-zinc-400 mt-1 uppercase font-bold tracking-widest">{new Date(repo.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                <p className="text-sm font-mono text-muted-foreground">{repo.full_name}</p>
+                <p className="text-xs text-muted-foreground mt-1 uppercase font-bold tracking-widest">{new Date(repo.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
               </div>
               <div className="flex flex-col items-end gap-2">
                 <span className="flex items-center gap-1 text-lg font-black">
                   <Star className="w-5 h-5 text-yellow-500" fill="currentColor" /> {repo.stars?.toLocaleString()}
                 </span>
-                <span className="text-sm font-mono bg-zinc-100 px-3 py-1 border-2 border-black">{repo.language}</span>
+                <span className="text-sm font-mono bg-muted px-3 py-1 border-2 border-foreground">{repo.language}</span>
               </div>
             </div>
             
-            <p className="text-xl text-zinc-700 mb-8 border-l-4 border-primary pl-4 italic">
+            <p className="text-xl text-foreground mb-8 border-l-4 border-primary pl-4 italic">
               {repo.description}
             </p>
             
             {repo.translation && (
-              <div className="bg-zinc-50 border-4 border-black p-8 neo-shadow mb-8">
+              <div className="bg-muted border-4 border-foreground p-8 neo-shadow mb-8">
                 <div 
                   className="prose-gitstack"
                   dangerouslySetInnerHTML={{ __html: formatContent(repo.translation) }} 

@@ -28,9 +28,9 @@ const parseStars = (stars) => {
 const difficultyOrder = { 'Beginner': 0, 'Intermediate': 1, 'Advanced': 2 };
 
 const AI_LABS = [
-  { id: 'stack-gen', title: 'Stack Generator', desc: 'Build your entire tech stack from an idea', icon: "Sparkles", path: '/stack-generator', color: 'bg-primary text-white' },
+  { id: 'stack-gen', title: 'Stack Generator', desc: 'Build your entire tech stack from an idea', icon: "Sparkles", path: '/stack-generator', color: 'bg-primary text-primary-foreground' },
   { id: 'dead-tool', title: 'Dead Tool Detector', desc: 'Find free open-source alternatives to paid SaaS', icon: "Skull", path: '/dead-tool-detector', color: 'bg-pastel-pink' },
-  { id: 'translator', title: 'Repo Translator', desc: 'Explain any GitHub repo in plain English', icon: "BookOpen", path: '/repo-translator', color: 'bg-blue-100' },
+  { id: 'translator', title: 'Repo Translator', desc: 'Explain any GitHub repo in plain English', icon: "BookOpen", path: '/repo-translator', color: 'bg-muted' },
   { id: 'roast', title: 'Roast My Stack', desc: 'Get brutally honest feedback on your tools', icon: "Flame", path: '/roast-my-stack', color: 'bg-pastel-yellow' },
   { id: 'idea', title: 'Your Idea Exists', desc: 'Find projects already building your idea', icon: "Lightbulb", path: '/idea-exists', color: 'bg-pastel-mint' },
   { id: 'compare', title: 'Comparison Engine', desc: 'Side-by-side analysis for founders', icon: "Scale", path: '/compare', color: 'bg-pastel-lavender' },
@@ -113,13 +113,13 @@ export default function ToolsPage() {
             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight" data-testid="tools-page-title">
               All Tools
             </h1>
-            <span className="text-sm font-mono text-zinc-400">{totalCount > 0 ? `${totalCount}+` : '...'} indexed</span>
+            <span className="text-sm font-mono text-muted-foreground">{totalCount > 0 ? `${totalCount}+` : '...'} indexed</span>
           </div>
-          <p className="text-zinc-500 mb-6">Open-source tools, explained in plain English.</p>
+          <p className="text-muted-foreground mb-6">Open-source tools, explained in plain English.</p>
 
           {/* AI Labs Section */}
           <div className="mb-12">
-            <h2 className="text-sm font-mono uppercase tracking-widest text-zinc-400 mb-4 font-bold flex items-center gap-2">
+            <h2 className="text-sm font-mono uppercase tracking-widest text-muted-foreground mb-4 font-bold flex items-center gap-2">
               <Sparkles className="w-4 h-4" /> GitStack Labs / AI Tools
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -144,13 +144,13 @@ export default function ToolsPage() {
           {/* Search + Filter Bar */}
           <div className="flex gap-3 mb-4">
             <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search tools..."
-                className="neo-input pl-12"
+                className="neo-input pl-12 pr-4 py-3"
                 data-testid="tools-search"
               />
             </div>
@@ -162,25 +162,25 @@ export default function ToolsPage() {
               <SlidersHorizontal className="w-4 h-4" />
               Filters
               {activeFilters > 0 && (
-                <span className="w-5 h-5 bg-primary text-white text-xs font-bold flex items-center justify-center">{activeFilters}</span>
+                <span className="w-5 h-5 bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">{activeFilters}</span>
               )}
             </button>
           </div>
 
           {/* Filter Panel */}
           {showFilters && (
-            <div className="neo-card p-4 mb-6 bg-zinc-50" data-testid="filter-panel">
+            <div className="neo-card p-4 mb-6 bg-muted" data-testid="filter-panel">
               <div className="flex flex-wrap gap-6">
                 {/* Difficulty */}
                 <div>
-                  <label className="text-xs font-mono uppercase tracking-wider text-zinc-500 mb-2 block">Difficulty</label>
+                  <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2 block">Difficulty</label>
                   <div className="flex gap-1">
                     {DIFFICULTIES.map(d => (
                       <button
                         key={d}
                         onClick={() => setDifficulty(d)}
-                        className={`px-3 py-1 text-xs font-semibold border-2 border-black transition-all ${
-                          difficulty === d ? 'bg-black text-white' : 'bg-white hover:bg-pastel-yellow'
+                        className={`px-3 py-1 text-xs font-semibold border-2 border-foreground transition-all ${
+                          difficulty === d ? 'bg-foreground text-background' : 'bg-background hover:bg-pastel-yellow hover:text-black'
                         }`}
                         data-testid={`filter-diff-${d.toLowerCase()}`}
                       >
@@ -192,11 +192,11 @@ export default function ToolsPage() {
 
                 {/* Language */}
                 <div>
-                  <label className="text-xs font-mono uppercase tracking-wider text-zinc-500 mb-2 block">Language</label>
+                  <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2 block">Language</label>
                   <select
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
-                    className="px-3 py-1 text-sm font-semibold border-2 border-black bg-white"
+                    className="px-3 py-1 text-sm font-semibold border-2 border-foreground bg-background"
                     data-testid="filter-language"
                   >
                     {languages.map(l => (
@@ -207,14 +207,14 @@ export default function ToolsPage() {
 
                 {/* Sort */}
                 <div>
-                  <label className="text-xs font-mono uppercase tracking-wider text-zinc-500 mb-2 block">Sort By</label>
+                  <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-2 block">Sort By</label>
                   <div className="flex gap-1">
                     {SORT_OPTIONS.map(opt => (
                       <button
                         key={opt.value}
                         onClick={() => setSortBy(opt.value)}
-                        className={`px-3 py-1 text-xs font-semibold border-2 border-black transition-all flex items-center gap-1 ${
-                          sortBy === opt.value ? 'bg-black text-white' : 'bg-white hover:bg-pastel-yellow'
+                        className={`px-3 py-1 text-xs font-semibold border-2 border-foreground transition-all flex items-center gap-1 ${
+                          sortBy === opt.value ? 'bg-foreground text-background' : 'bg-background hover:bg-pastel-yellow hover:text-black'
                         }`}
                         data-testid={`sort-${opt.value}`}
                       >
@@ -241,7 +241,7 @@ export default function ToolsPage() {
           )}
 
           {/* Results count */}
-          <p className="text-sm text-zinc-400 mb-4" data-testid="results-count">
+          <p className="text-sm text-muted-foreground mb-4" data-testid="results-count">
             Showing {filteredTools.length} of {tools.length} curated tools
           </p>
 
@@ -250,9 +250,9 @@ export default function ToolsPage() {
               <div className="spinner mx-auto"></div>
             </div>
           ) : filteredTools.length === 0 ? (
-            <div className="neo-card p-12 text-center bg-pastel-yellow">
+            <div className="neo-card p-12 text-center bg-pastel-yellow text-black">
               <p className="font-bold text-lg">No tools match your filters</p>
-              <p className="text-zinc-600 text-sm mt-2">Try adjusting your search or filters.</p>
+              <p className="opacity-70 text-sm mt-2">Try adjusting your search or filters.</p>
             </div>
           ) : (
             <div className="grid md:grid-cols-2 gap-4">
@@ -260,7 +260,7 @@ export default function ToolsPage() {
                 <button
                   key={tool.tool_id}
                   onClick={() => navigate(`/tools/${tool.tool_id}`)}
-                  className="neo-card p-6 text-left hover:border-primary transition-colors"
+                  className="neo-card p-6 text-left bg-background hover:border-primary transition-colors"
                   data-testid={`tool-card-${tool.tool_id}`}
                 >
                   <div className="flex items-start justify-between mb-2">
@@ -272,9 +272,9 @@ export default function ToolsPage() {
                       {tool.difficulty}
                     </span>
                   </div>
-                  <p className="text-sm text-zinc-600 mb-3 line-clamp-2">{tool.description}</p>
-                  <div className="flex items-center gap-4 text-xs text-zinc-500">
-                    <span className="font-mono bg-zinc-100 px-2 py-1 border border-zinc-200">{tool.language}</span>
+                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{tool.description}</p>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="font-mono bg-muted px-2 py-1 border border-border">{tool.language}</span>
                     <span className="flex items-center gap-1">
                       <Star className="w-3 h-3 text-yellow-500" fill="currentColor" /> {tool.stars}
                     </span>

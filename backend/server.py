@@ -1,5 +1,8 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks, UploadFile, File
 from fastapi.responses import JSONResponse
+import json
+import hmac
+import hashlib
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -8,29 +11,40 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
-import logging
+import sys
 import uuid
 import httpx
 import asyncio
 import re
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
 import google.generativeai as genai
 from bs4 import BeautifulSoup
+import jwt
+from jwt import PyJWKClient
+from og_image import router as og_router
+from utils.email import send_purchase_confirmation, send_setup_request_notification, send_payout_notification
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
+from fastapi_health import health
+from loguru import logger
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger.remove(0)
+logger.add(sys.stderr, format="{time:YYYY-MM-DD at HH:mm:ss!UTC} | {level} | {message}")
 
 # MongoDB & AI Config (Robust Initialization)
 mongo_url = os.environ.get('MONGO_URL')
 db_name = os.environ.get('DB_NAME', 'gitstack')
 gemini_key = os.environ.get("GEMINI_API_KEY")
+clerk_jwks_url = os.environ.get('CLERK_JWKS_URL')
+cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000')
 
 # Initialize globals as None first to avoid NameErrors
 client = None
@@ -38,21 +52,21 @@ db = None
 
 try:
     if not mongo_url:
-        print("❌ CRITICAL ERROR: MONGO_URL is not set!")
+        print("[CRITICAL ERROR] MONGO_URL is not set!")
     else:
         # Use a longer timeout for the initial connection check
         client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
         db = client[db_name]
-        print(f"✅ MongoDB client initialized for {db_name}")
+        print(f"[OK] MongoDB client initialized for {db_name}")
 
     if gemini_key:
         genai.configure(api_key=gemini_key)
-        print("✅ Gemini AI configured")
+        print("[OK] Gemini AI configured")
     else:
-        print("⚠️ GEMINI_API_KEY is missing")
+        print("[WARN] GEMINI_API_KEY is missing")
 
 except Exception as e:
-    print(f"💥 PRE-BOOT ERROR: {str(e)}")
+    print(f"[PRE-BOOT ERROR] {str(e)}")
 
 # GitHub API headers — token raises rate limit from 60 to 5000 req/hr
 _gh_token = os.environ.get("GITHUB_TOKEN", "")
@@ -72,6 +86,49 @@ async def lifespan(_app: FastAPI):
     # One-time seed for production boot
     asyncio.create_task(seed_database())
     logger.info("Database seeding started...")
+    
+    # Create user_activity indexes (TTL for 90 days, compound index for queries)
+    try:
+        await db.user_activity.create_index("created_at", expireAfterSeconds=90 * 24 * 3600)
+        await db.user_activity.create_index([("user_id", 1), ("created_at", -1)])
+        logger.info("user_activity indexes created")
+    except Exception as e:
+        logger.warning(f"user_activity index creation skipped: {e}")
+
+    # Initialize cache (in-memory for dev, Redis in production)
+    try:
+        redis_url = os.environ.get("REDIS_URL")
+        if redis_url and redis_url.startswith("redis://"):
+            from fastapi_cache.backends.redis import RedisBackend
+            import redis.asyncio as aioredis
+            r = aioredis.from_url(redis_url)
+            FastAPICache.init(RedisBackend(r), prefix="gitstack")
+            logger.info("Redis cache initialized")
+        else:
+            FastAPICache.init(InMemoryBackend(), prefix="gitstack")
+            logger.info("In-memory cache initialized")
+    except Exception as e:
+        logger.warning(f"Cache init skipped: {e}")
+
+    # Create marketplace indexes (Phase 3)
+    try:
+        await db.marketplace_products.create_index([("seller_user_id", 1)])
+        await db.marketplace_products.create_index([("published", 1), ("created_at", -1)])
+        await db.marketplace_products.create_index([("category", 1), ("published", 1)])
+        await db.marketplace_products.create_index([("github_repo_url", 1)])
+        await db.marketplace_purchases.create_index([("buyer_user_id", 1), ("status", 1)])
+        await db.marketplace_purchases.create_index("razorpay_order_id", unique=True, sparse=True)
+        await db.setup_requests.create_index([("seller_user_id", 1), ("status", 1)])
+        await db.setup_requests.create_index([("auto_release_at", 1)])
+        await db.product_reviews.create_index([("product_id", 1), ("created_at", -1)])
+        await db.product_reviews.create_index([("buyer_user_id", 1), ("product_id", 1)], unique=True)
+        await db.seller_wallets.create_index("seller_user_id", unique=True)
+        await db.wallet_transactions.create_index([("seller_user_id", 1), ("created_at", -1)])
+        logger.info("marketplace indexes created")
+    except Exception as e:
+        logger.warning(f"marketplace index creation skipped: {e}")
+    # Marketplace auto-release escrow worker (hourly)
+    asyncio.create_task(auto_release_escrow_loop())
     asyncio.create_task(send_phone_alert(
         title="🚀 GitStack Server Started",
         message="Backend is live and cron is running (every 6 hours).",
@@ -81,12 +138,18 @@ async def lifespan(_app: FastAPI):
     # Shutdown
     if _scraper_task:
         _scraper_task.cancel()
-    client.close()
-    asyncio.create_task(send_phone_alert(
-        title="⚠️ GitStack Server Shutting Down",
-        message="The backend server is shutting down.",
-        priority="high"
-    ))
+    # BUG-03 FIX: guard against client being None if MongoDB never connected;
+    # use await directly (not create_task) — the event loop is still running here.
+    try:
+        await send_phone_alert(
+            title="⚠️ GitStack Server Shutting Down",
+            message="The backend server is shutting down.",
+            priority="high"
+        )
+    except Exception:
+        pass
+    if client:
+        client.close()
 
 # limiter and app setup
 limiter = Limiter(key_func=get_remote_address)
@@ -94,6 +157,24 @@ app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
+
+# Health check endpoint
+async def _check_mongo() -> dict:
+    try:
+        await db.command("ping")
+        return {"status": "up", "database": "connected"}
+    except Exception as e:
+        return {"status": "down", "database": str(e)}
+
+app.add_api_route("/health", health([_check_mongo]), tags=["Health"])
+
+# Clerk JWKS client (caches keys automatically)
+_jwks_client = None
+if clerk_jwks_url:
+    _jwks_client = PyJWKClient(clerk_jwks_url, cache_keys=True)
+    print("[OK] Clerk JWKS client configured")
+else:
+    print("[WARN] CLERK_JWKS_URL not set -- auth will not work")
 
 # ==================== MODELS ====================
 
@@ -138,6 +219,18 @@ class UserModel(BaseModel):
     name: str
     picture: Optional[str] = None
     created_at: datetime
+    github_username: Optional[str] = None
+    bio: Optional[str] = None
+    website: Optional[str] = None
+    skills: List[str] = []
+    public_profile: bool = True
+
+class UpdateProfileRequest(BaseModel):
+    github_username: Optional[str] = Field(None, max_length=50, pattern=r'^[a-zA-Z0-9\-]+$')
+    bio: Optional[str] = Field(None, max_length=300)
+    website: Optional[str] = Field(None, max_length=200)
+    skills: Optional[List[str]] = Field(None, max_length=20)
+    public_profile: Optional[bool] = None
 
 class UserStack(BaseModel):
     stack_id: str
@@ -176,30 +269,37 @@ class SmartSearchRequest(BaseModel):
 class RepoTranslateRequest(BaseModel):
     full_name: str
 
+class ActivityEvent(BaseModel):
+    event_type: str = Field(..., pattern="^(tool_viewed|repo_viewed|stack_saved|topic_visited)$")
+    entity_id: str = Field(..., min_length=1, max_length=200)
+
 # ==================== AUTH HELPERS ====================
 
 async def get_current_user(request: Request) -> Optional[UserModel]:
-    session_token = request.cookies.get("session_token")
-    if not session_token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            session_token = auth_header.split(" ")[1]
-    if not session_token:
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
         return None
-    session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
-    if not session:
+    token = auth_header.split(" ")[1]
+    if not _jwks_client:
         return None
-    expires_at = session.get("expires_at")
-    if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False}
+        )
+        clerk_user_id = payload.get("sub")
+        if not clerk_user_id:
+            return None
+        user = await db.users.find_one({"user_id": clerk_user_id}, {"_id": 0})
+        if not user:
+            return None
+        return UserModel(**user)
+    except Exception as e:
+        logger.warning(f"JWT verification failed: {e}")
         return None
-    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
-    if not user:
-        return None
-    return UserModel(**user)
 
 async def require_auth(request: Request) -> UserModel:
     user = await get_current_user(request)
@@ -233,70 +333,43 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
 
 # ==================== AUTH ROUTES ====================
 
-@api_router.post("/auth/session")
-async def exchange_session(request: Request, response: Response):
-    body = await request.json()
-    session_id = body.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
-    
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id}
+@api_router.post("/auth/sync")
+async def sync_user(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth_header.split(" ")[1]
+    if not _jwks_client:
+        raise HTTPException(status_code=503, detail="Auth not configured")
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(token, signing_key.key, algorithms=["RS256"], options={"verify_aud": False})
+        clerk_user_id = payload.get("sub")
+        if not clerk_user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        body = await request.json()
+        email = body.get("email", "")
+        name = body.get("name") or email
+        picture = body.get("picture")
+        await db.users.update_one(
+            {"user_id": clerk_user_id},
+            {"$set": {"email": email, "name": name, "picture": picture},
+             "$setOnInsert": {"user_id": clerk_user_id, "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
         )
-        if resp.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid session")
-        data = resp.json()
-    
-    user_id = f"user_{uuid.uuid4().hex[:12]}"
-    existing = await db.users.find_one({"email": data["email"]}, {"_id": 0})
-    if existing:
-        user_id = existing["user_id"]
-    else:
-        await db.users.insert_one({
-            "user_id": user_id,
-            "email": data["email"],
-            "name": data["name"],
-            "picture": data.get("picture"),
-            "created_at": datetime.now(timezone.utc).isoformat()
-        })
-    
-    session_token = data["session_token"]
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    await db.user_sessions.update_one(
-        {"user_id": user_id},
-        {"$set": {
-            "session_token": session_token,
-            "expires_at": expires_at.isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }},
-        upsert=True
-    )
-    
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
-        max_age=7 * 24 * 60 * 60
-    )
-    
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    return user
+        user = await db.users.find_one({"user_id": clerk_user_id}, {"_id": 0})
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 @api_router.get("/auth/me")
 async def get_me(user: UserModel = Depends(require_auth)):
     return user.model_dump()
 
 @api_router.post("/auth/logout")
-async def logout(request: Request, response: Response):
-    session_token = request.cookies.get("session_token")
-    if session_token:
-        await db.user_sessions.delete_one({"session_token": session_token})
-    response.delete_cookie(key="session_token", path="/", secure=True, samesite="none")
+async def logout():
     return {"message": "Logged out"}
 
 # ==================== TOOLS ROUTES ====================
@@ -1826,93 +1899,12 @@ async def scraper_status():
         result["last_scrape"] = None
         result["stats"] = None
 
-# Expanded keyword map — maps each topic to the actual tags repos use on GitHub
-TOPIC_KEYWORDS = {
-    "ai-agents": [
-        "ai", "artificial-intelligence", "machine-learning", "deep-learning", "llm",
-        "chatgpt", "gpt", "openai", "ai-agents", "agent", "agents", "claude",
-        "langchain", "rag", "nlp", "natural-language-processing", "transformer",
-        "pytorch", "tensorflow", "neural-network", "generative-ai", "mcp",
-        "claude-code", "copilot", "chatbot", "llama", "huggingface",
-        "crewai", "autogen", "swarm", "openai-agents", "multi-agent", "agentops"
-    ],
-    "ai-coding-tools": [
-        "claude", "claude-code", "cursor", "cursor-ai", "windsurf", "aider",
-        "codeium", "copilot", "mcp", "model-context-protocol", "claude-mcp",
-        "ai-coding", "vibe-coding", "code-assistant", "ai-editor",
-        "autocode", "programming-assistant", "ide-extension"
-    ],
-    "ai-memory-pkm": [
-        "obsidian", "obsidian-plugin", "ai-memory", "mem0", "memgpt", "second-brain",
-        "knowledge-graph", "pkm", "personal-knowledge-management", "zettelkasten"
-    ],
-    "local-ai": [
-        "ollama", "vllm", "llamacpp", "lmstudio", "localai", "local-llm", "private-ai"
-    ],
-    "mcp-tools": [
-        "mcp", "model-context-protocol", "mcp-server", "mcp-client", "awesome-mcp"
-    ],
-    "ai-agents-advanced": [
-        "multi-agent", "autonomous-agents", "computer-use", "browser-use", "web-agent",
-        "swarm", "crewai", "autogen", "task-automation"
-    ],
-    "ui-ux": [
-        "react", "nextjs", "frontend", "ui", "ux", "design", "css", "tailwind",
-        "component", "design-system", "svelte", "vue", "angular", "web",
-        "responsive", "animation", "icons", "theme", "dashboard", "template",
-        "shadcn", "radix", "headless-ui", "storybook", "figma"
-    ],
-    "automation": [
-        "automation", "devops", "ci-cd", "github-actions", "workflow", "pipeline",
-        "docker", "kubernetes", "terraform", "ansible", "jenkins", "deploy",
-        "infrastructure", "iac", "scripting", "cron", "task-runner", "cli",
-        "n8n", "zapier", "make-alternative"
-    ],
-    "data-analytics": [
-        "database", "sql", "postgresql", "mysql", "mongodb", "redis", "data",
-        "analytics", "data-science", "data-engineering", "etl", "visualization",
-        "bi", "business-intelligence", "data-pipeline", "spark", "kafka"
-    ],
-    "voice-speech-ai": [
-        "text-to-speech", "speech-to-text", "voice-cloning", "elevenlabs", "tts", "stt", "audio-ai"
-    ],
-    "code-quality-review": [
-        "static-analysis", "code-review", "sonarqube", "code-quality", "lint", "security-scan", "sast"
-    ],
-    "rag-vector-search": [
-        "rag", "vector-database", "vector-db", "embedding", "semantic-search", "pinecone", "chromadb", "qdrant"
-    ],
-    "scraping-data-extraction": [
-        "web-scraping", "playwright", "firecrawl", "scraper", "crawling", "extraction", "headless-browser"
-    ],
-    "terminal-shell": [
-        "dotfiles", "terminal", "zsh", "bash", "tui", "ratatui", "cli", "shell-scripts"
-    ],
-    "payments": [
-        "payments", "stripe", "billing", "ecommerce", "fintech", "invoice", "subscription"
-    ],
-    "auth": [
-        "authentication", "auth", "oauth", "security", "identity", "sso", "login"
-    ],
-    "email-messaging": [
-        "email", "newsletter", "mail", "messaging", "notification", "chat", "realtime"
-    ],
-    "cms-content": [
-        "cms", "content-management", "blog", "markdown", "documentation", "wiki"
-    ],
-    "mobile-dev": [
-        "react-native", "flutter", "mobile", "ios", "android", "expo"
-    ],
-    "web3-blockchain": [
-        "blockchain", "web3", "ethereum", "solidity", "defi", "nft", "crypto"
-    ],
-    "selfhosted": [
-        "self-hosted", "selfhosted", "homelab", "docker-compose", "docker",
-        "homeserver", "privacy", "open-source", "alternative", "foss",
-        "self-hosting", "linux", "server", "nas", "backup", "reverse-proxy",
-        "nginx", "caddy", "traefik", "coolify", "portainer"
-    ]
-}
+    # BUG-01 FIX: function was missing its return statement, causing FastAPI to return null.
+    return result
+
+# BUG-02 FIX: Removed duplicate TOPIC_KEYWORDS dict that was defined here a second time.
+# The canonical TOPIC_KEYWORDS definition is at the top of the file (~L560).
+# This block shadowed it with a shorter, less-complete version.
 
 # ==================== SEED DATA ====================
 
@@ -2903,8 +2895,1232 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+# ==================== ACTIVITY & RECOMMENDATIONS ====================
+
+@api_router.post("/activity")
+@limiter.limit("60/minute")
+async def track_activity(data: ActivityEvent, request: Request):
+    """Track user activity for personalized recommendations"""
+    user = await get_current_user(request)
+    if not user:
+        return {"ok": False}  # silently ignore guest events — never error
+
+    await db.user_activity.insert_one({
+        "user_id": user.user_id,
+        "event_type": data.event_type,
+        "entity_id": data.entity_id,
+        "created_at": datetime.now(timezone.utc),
+    })
+    return {"ok": True}
+
+@api_router.get("/recommendations")
+@limiter.limit("10/minute")
+async def get_recommendations(request: Request):
+    """Get personalized tool recommendations based on user activity"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Check 2-hour cache on user record
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    cache = user_doc.get("recommendations_cache") if user_doc else None
+    if cache:
+        cached_at = cache.get("cached_at")
+        if cached_at:
+            try:
+                # Parse ISO datetime and check age
+                cached_dt = datetime.fromisoformat(cached_at.replace('Z', '+00:00'))
+                age_seconds = (datetime.now(timezone.utc) - cached_dt).total_seconds()
+                if age_seconds < 7200:  # 2 hours
+                    return {"recommendations": cache["tools"]}
+            except Exception:
+                pass
+
+    # Fetch last 30 activity events
+    events = await db.user_activity.find(
+        {"user_id": user.user_id},
+        {"_id": 0, "entity_id": 1, "event_type": 1},
+    ).sort("created_at", -1).limit(30).to_list(30)
+
+    if not events:
+        # New user — return a default set of highly-rated tools (sorted by stars)
+        defaults = await db.tools.find(
+            {}, {"_id": 0, "tool_id": 1, "name": 1, "description": 1, "github_url": 1, "stars": 1, "category": 1, "tags": 1}
+        ).sort("stars", -1).limit(6).to_list(6)
+        return {"recommendations": defaults}
+
+    seen_ids = {e["entity_id"] for e in events}
+    activity_summary = ", ".join(e["entity_id"] for e in events[:15])
+
+    # Fetch the actual catalog so Gemini doesn't hallucinate names
+    catalog_tools = await db.tools.find(
+        {}, {"_id": 0, "tool_id": 1, "name": 1, "category": 1, "description": 1}
+    ).limit(200).to_list(200)
+    
+    # Filter out already-seen tools
+    available = [t for t in catalog_tools if t.get("tool_id") not in seen_ids]
+    if not available:
+        # All tools seen — fall back to top 6 by stars
+        defaults = await db.tools.find(
+            {}, {"_id": 0, "tool_id": 1, "name": 1, "description": 1, "github_url": 1, "stars": 1, "category": 1, "tags": 1}
+        ).sort("stars", -1).limit(6).to_list(6)
+        return {"recommendations": defaults}
+
+    # Build a numbered catalog string for Gemini
+    catalog_str = "\n".join(f"{i+1}. {t['name']} ({t.get('category', 'tool')}) — {t.get('description', '')[:80]}" for i, t in enumerate(available[:100]))
+
+    prompt = f"""A user has been exploring these tools/repos on GitStack: {activity_summary}.
+
+Available tools to recommend from (you MUST pick from this list only):
+{catalog_str}
+
+Pick exactly 6 tools from the numbered list above that the user would likely find useful based on their activity. Avoid recommending things too similar to what they've already seen.
+
+Return ONLY a JSON array of the EXACT tool names from the list (no extra text), e.g.: ["Exact Tool Name 1", "Exact Tool Name 2", ...]"""
+
+    recommended_names = []
+    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]:
+        try:
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            text = response.text.strip()
+            import re, json
+            match = re.search(r'\[.*?\]', text, re.DOTALL)
+            if match:
+                recommended_names = json.loads(match.group())
+                break
+        except Exception:
+            continue
+
+    # Map names back to full tool docs (exact match first, then fuzzy)
+    available_by_name = {t["name"].lower(): t["tool_id"] for t in available}
+    results = []
+    seen_results = set()
+    for name in recommended_names[:6]:
+        name_lower = str(name).lower().strip()
+        tool_id = available_by_name.get(name_lower)
+        if not tool_id:
+            # Fuzzy: find first available tool whose name contains the LLM's suggestion
+            for t in available:
+                if name_lower in t["name"].lower() or t["name"].lower() in name_lower:
+                    tool_id = t["tool_id"]
+                    break
+        if tool_id and tool_id not in seen_results:
+            full_tool = await db.tools.find_one({"tool_id": tool_id}, {"_id": 0})
+            if full_tool:
+                results.append(full_tool)
+                seen_results.add(tool_id)
+        if len(results) >= 6:
+            break
+
+    # Backfill if Gemini returned fewer than 6 — use top-starred unseen tools
+    if len(results) < 6:
+        backfill = await db.tools.find(
+            {"tool_id": {"$nin": list(seen_ids) + list(seen_results)}},
+            {"_id": 0}
+        ).sort("stars", -1).limit(6 - len(results)).to_list(6 - len(results))
+        results.extend(backfill)
+
+    # Cache on user doc
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"recommendations_cache": {"tools": results, "cached_at": datetime.now(timezone.utc).isoformat()}}},
+    )
+
+    return {"recommendations": results}
+
+# ==================== USER PROFILES ====================
+
+@api_router.patch("/users/me")
+async def update_my_profile(data: UpdateProfileRequest, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    update: dict = {}
+    if data.github_username is not None:
+        update["github_username"] = data.github_username
+    if data.bio is not None:
+        update["bio"] = data.bio
+    if data.website is not None:
+        if data.website and not data.website.startswith(("https://", "http://")):
+            raise HTTPException(status_code=400, detail="Website must be a valid URL")
+        update["website"] = data.website
+    if data.skills is not None:
+        update["skills"] = [s.strip()[:30] for s in data.skills if s.strip()][:20]
+    if data.public_profile is not None:
+        update["public_profile"] = data.public_profile
+
+    if update:
+        await db.users.update_one({"user_id": user.user_id}, {"$set": update})
+
+    updated = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "email": 0})
+    return updated
+
+@api_router.get("/users/{user_id}/repos")
+async def get_user_repos(user_id: str):
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "github_username": 1, "public_profile": 1})
+    if not user or not user.get("public_profile", True):
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    github_username = user.get("github_username")
+    if not github_username:
+        return {"repos": []}
+
+    headers = {"Accept": "application/vnd.github+json"}
+    if os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+
+    import httpx
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(
+                f"https://api.github.com/users/{github_username}/repos",
+                params={"sort": "stars", "per_page": 10, "type": "owner"},
+                headers=headers,
+                timeout=10,
+            )
+            res.raise_for_status()
+            repos = res.json()
+        except Exception:
+            return {"repos": []}
+
+    result = []
+    for repo in repos[:10]:
+        if repo.get("fork"):
+            continue
+        owner = repo.get("owner", {}).get("login", github_username)
+        name = repo.get("name", "")
+        translation = await db.repo_translations.find_one(
+            {"owner": owner, "repo": name}, {"_id": 0, "translation": 1, "summary": 1}
+        )
+        result.append({
+            "name": name,
+            "full_name": repo.get("full_name"),
+            "description": repo.get("description"),
+            "url": repo.get("html_url"),
+            "stars": repo.get("stargazers_count", 0),
+            "language": repo.get("language"),
+            "translation": translation.get("translation") or translation.get("summary") if translation else None,
+        })
+
+    return {"repos": result}
+
+@api_router.get("/users/{user_id}")
+async def get_user_profile(user_id: str):
+    user = await db.users.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "email": 0},
+    )
+    if not user or not user.get("public_profile", True):
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    # BUG-19 FIX: collection is `user_stacks`, not `stacks` (which doesn't exist).
+    stacks = await db.user_stacks.find(
+        {"user_id": user_id, "is_public": True},
+        {"_id": 0, "name": 1, "tools": 1, "copy_count": 1, "stack_id": 1, "created_at": 1},
+    ).sort("copy_count", -1).limit(10).to_list(10)
+
+    try:
+        products = await db.marketplace_products.find(
+            {"seller_user_id": user_id, "r2_file_key": {"$ne": None}},
+            {"_id": 0, "description": 0, "r2_file_key": 0},
+        ).limit(12).to_list(12)
+    except Exception:
+        products = []
+
+    return {
+        "user": user,
+        "stacks": stacks,
+        "products": products,
+    }
+
+# ==================== MARKETPLACE (Phase 3) ====================
+
+# ---- Pydantic Models (Task 4) ----
+
+class MarketplaceProductCreate(BaseModel):
+    title: str = Field(..., min_length=3, max_length=100)
+    tagline: str = Field(..., min_length=10, max_length=200)
+    description: str = Field(..., min_length=50, max_length=5000)
+    source_price_cents: int = Field(..., ge=100, le=100000)
+    category: Literal["saas", "mcp-server", "computer-vision", "template", "skill", "other"]
+    github_repo_url: Optional[str] = Field(None, max_length=200)
+    demo_video_url: Optional[str] = Field(None, max_length=300)
+    setup_available: bool = False
+    setup_price_cents: Optional[int] = Field(None, ge=100, le=100000)
+    setup_description: Optional[str] = Field(None, max_length=1000)
+    setup_delivery_days: Optional[int] = Field(None, ge=1, le=30)
+
+class MarketplaceProductUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=3, max_length=100)
+    tagline: Optional[str] = Field(None, min_length=10, max_length=200)
+    description: Optional[str] = Field(None, min_length=50, max_length=5000)
+    source_price_cents: Optional[int] = Field(None, ge=100, le=100000)
+    category: Optional[Literal["saas", "mcp-server", "computer-vision", "template", "skill", "other"]] = None
+    github_repo_url: Optional[str] = Field(None, max_length=200)
+    demo_video_url: Optional[str] = Field(None, max_length=300)
+    setup_available: Optional[bool] = None
+    setup_price_cents: Optional[int] = Field(None, ge=100, le=100000)
+    setup_description: Optional[str] = Field(None, max_length=1000)
+    setup_delivery_days: Optional[int] = Field(None, ge=1, le=30)
+
+class SellerOnboardRequest(BaseModel):
+    display_name: str = Field(..., min_length=2, max_length=100)
+    bio: str = Field(default="", max_length=500)
+    payout_method: Literal["upi", "bank", "paypal"]
+    payout_details: Dict[str, Any]
+    available_for_hire: bool = False
+    hire_contact: Optional[str] = Field(None, max_length=200)
+
+class WithdrawalRequest(BaseModel):
+    amount_cents: int = Field(..., ge=1000)
+
+class CreateOrderRequest(BaseModel):
+    product_id: str
+    purchase_type: Literal["source", "source_and_setup"]
+
+class VerifyPaymentRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+class SetupStatusUpdate(BaseModel):
+    status: Literal["in_progress", "completed"]
+    note: Optional[str] = Field(None, max_length=500)
+
+class ReviewCreate(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    text: str = Field(..., min_length=1, max_length=500)
+
+class PublishToggle(BaseModel):
+    published: bool
+
+# ---- R2 Helpers (Task 5) ----
+
+def get_r2_client():
+    import boto3
+    from botocore.config import Config as BotoConfig
+    return boto3.client(
+        "s3",
+        endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        config=BotoConfig(signature_version="s3v4"),
+        region_name="auto",
+    )
+
+async def upload_private_to_r2(file_bytes: bytes, original_filename: str, folder: str) -> str:
+    ext = original_filename.rsplit(".", 1)[-1] if "." in original_filename else "bin"
+    key = f"{folder}/{uuid.uuid4()}.{ext}"
+    client = get_r2_client()
+    client.put_object(
+        Bucket=os.environ["R2_BUCKET_NAME"],
+        Key=key,
+        Body=file_bytes,
+        ContentType="application/octet-stream",
+    )
+    return key
+
+async def upload_public_image_to_r2(file_bytes: bytes, original_filename: str, folder: str) -> str:
+    ext = (original_filename.rsplit(".", 1)[-1] or "png").lower()
+    if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, WebP, GIF images are allowed")
+    key = f"public/{folder}/{uuid.uuid4()}.{ext}"
+    content_type_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                        "webp": "image/webp", "gif": "image/gif"}
+    client = get_r2_client()
+    client.put_object(
+        Bucket=os.environ["R2_BUCKET_NAME"],
+        Key=key,
+        Body=file_bytes,
+        ContentType=content_type_map[ext],
+        CacheControl="public, max-age=31536000, immutable",
+    )
+    return f"{os.environ['R2_PUBLIC_URL'].rstrip('/')}/{key}"
+
+def get_r2_signed_url(key: str, expiry_seconds: int = 300) -> str:
+    client = get_r2_client()
+    return client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": os.environ["R2_BUCKET_NAME"], "Key": key},
+        ExpiresIn=expiry_seconds,
+    )
+
+# ---- Razorpay Helpers (Task 6) ----
+
+def get_razorpay_client():
+    import razorpay
+    return razorpay.Client(auth=(os.environ["RAZORPAY_KEY_ID"], os.environ["RAZORPAY_KEY_SECRET"]))
+
+def verify_razorpay_signature(order_id: str, payment_id: str, signature: str) -> bool:
+    secret = os.environ["RAZORPAY_KEY_SECRET"].encode()
+    msg = f"{order_id}|{payment_id}".encode()
+    expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+def verify_razorpay_webhook_signature(body: bytes, signature: str) -> bool:
+    secret = os.environ["RAZORPAY_WEBHOOK_SECRET"].encode()
+    expected = hmac.new(secret, body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+# ---- Seller Onboarding (Task 7) ----
+
+@api_router.post("/marketplace/seller/onboard")
+async def seller_onboard(data: SellerOnboardRequest, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.marketplace_sellers.update_one(
+        {"seller_user_id": user.user_id},
+        {"$set": {
+            "seller_user_id": user.user_id,
+            "display_name": data.display_name,
+            "bio": data.bio,
+            "payout_method": data.payout_method,
+            "payout_details": data.payout_details,
+            "available_for_hire": data.available_for_hire,
+            "hire_contact": data.hire_contact,
+        },
+         "$setOnInsert": {"verified": False, "onboarded_at": now}},
+        upsert=True,
+    )
+    await db.seller_wallets.update_one(
+        {"seller_user_id": user.user_id},
+        {"$setOnInsert": {
+            "seller_user_id": user.user_id,
+            "balance_cents": 0,
+            "escrow_cents": 0,
+            "total_earned_cents": 0,
+            "lifetime_sales": 0,
+            "created_at": now,
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+# ---- Product CRUD (Task 8) ----
+
+@api_router.post("/marketplace/products")
+async def create_product(data: MarketplaceProductCreate, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    seller = await db.marketplace_sellers.find_one({"seller_user_id": user.user_id})
+    if not seller:
+        raise HTTPException(status_code=403, detail="Complete seller onboarding first")
+    if data.setup_available and (not data.setup_price_cents or not data.setup_description or not data.setup_delivery_days):
+        raise HTTPException(status_code=400, detail="setup_price_cents, setup_description, and setup_delivery_days are required when setup_available=true")
+    product_id = str(uuid.uuid4())
+    doc = {
+        "product_id": product_id,
+        "seller_user_id": user.user_id,
+        **data.dict(),
+        "screenshots": [],
+        "r2_file_key": None,
+        "published": False,
+        "purchase_count": 0,
+        "setup_count": 0,
+        "avg_rating": 0.0,
+        "review_count": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.marketplace_products.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.get("/marketplace/products")
+@cache(expire=300)  # 5 minutes
+async def list_products(q: Optional[str] = None, category: Optional[str] = None,
+                        sort: str = "newest", page: int = 1, limit: int = 20):
+    limit = min(max(limit, 1), 50)
+    page = max(page, 1)
+    query: dict = {"published": True, "r2_file_key": {"$ne": None}}
+    if q:
+        query["$or"] = [
+            {"title": {"$regex": q, "$options": "i"}},
+            {"tagline": {"$regex": q, "$options": "i"}},
+        ]
+    if category:
+        query["category"] = category
+    sort_map = {
+        "newest": ("created_at", -1),
+        "best_sellers": ("purchase_count", -1),
+        "top_rated": ("avg_rating", -1),
+        "price_asc": ("source_price_cents", 1),
+        "price_desc": ("source_price_cents", -1),
+    }
+    field, direction = sort_map.get(sort, ("created_at", -1))
+    cursor = (db.marketplace_products
+              .find(query, {"_id": 0, "description": 0, "r2_file_key": 0})
+              .sort(field, direction).skip((page - 1) * limit).limit(limit))
+    products = await cursor.to_list(limit)
+    for p in products:
+        seller = await db.marketplace_sellers.find_one(
+            {"seller_user_id": p["seller_user_id"]},
+            {"_id": 0, "display_name": 1, "verified": 1},
+        )
+        p["seller_name"] = (seller or {}).get("display_name")
+        p["seller_verified"] = (seller or {}).get("verified", False)
+    return {"products": products, "page": page}
+
+@api_router.get("/marketplace/my-products")
+async def list_my_products(request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    products = await (db.marketplace_products
+                      .find({"seller_user_id": user.user_id}, {"_id": 0, "r2_file_key": 0})
+                      .sort("created_at", -1).to_list(100))
+    return {"products": products}
+
+# ---- Cross-feature lookup (Task 22) — must come BEFORE /products/{product_id} ----
+
+@api_router.get("/marketplace/products/by-repo")
+async def products_by_repo(owner: str, repo: str):
+    needle = re.escape(f"github.com/{owner}/{repo}")
+    products = await (db.marketplace_products
+                      .find({"published": True, "r2_file_key": {"$ne": None},
+                             "github_repo_url": {"$regex": needle, "$options": "i"}},
+                            {"_id": 0, "description": 0, "r2_file_key": 0})
+                      .limit(5).to_list(5))
+    for p in products:
+        seller = await db.marketplace_sellers.find_one(
+            {"seller_user_id": p["seller_user_id"]},
+            {"_id": 0, "display_name": 1, "verified": 1},
+        )
+        p["seller_name"] = (seller or {}).get("display_name")
+        p["seller_verified"] = (seller or {}).get("verified", False)
+    return {"products": products}
+
+@api_router.get("/marketplace/products/by-tool/{tool_id}")
+async def products_by_tool(tool_id: str):
+    tool = await db.tools.find_one({"_id": tool_id}) or await db.tools.find_one({"slug": tool_id})
+    if not tool or not tool.get("github_url"):
+        return {"products": []}
+    m = re.search(r"github\.com/([^/]+)/([^/#?]+)", tool["github_url"])
+    if not m:
+        return {"products": []}
+    return await products_by_repo(m.group(1), m.group(2))
+
+@api_router.get("/marketplace/products/{product_id}")
+@cache(expire=300)  # 5 minutes
+async def get_product(product_id: str):
+    product = await db.marketplace_products.find_one({"product_id": product_id}, {"_id": 0, "r2_file_key": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    seller = await db.marketplace_sellers.find_one(
+        {"seller_user_id": product["seller_user_id"]},
+        {"_id": 0, "payout_details": 0},
+    )
+    user_doc = await db.users.find_one({"user_id": product["seller_user_id"]}, {"_id": 0, "email": 0})
+    product["seller"] = {**(seller or {}),
+                         "name": (user_doc or {}).get("name"),
+                         "picture": (user_doc or {}).get("picture")}
+    return product
+
+@api_router.patch("/marketplace/products/{product_id}")
+async def update_product(product_id: str, data: MarketplaceProductUpdate, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    product = await db.marketplace_products.find_one({"product_id": product_id})
+    if not product or product["seller_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    update = {k: v for k, v in data.dict(exclude_none=True).items()}
+    if not update:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    await db.marketplace_products.update_one({"product_id": product_id}, {"$set": update})
+    return {"ok": True}
+
+@api_router.delete("/marketplace/products/{product_id}")
+async def delete_product(product_id: str, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    product = await db.marketplace_products.find_one({"product_id": product_id})
+    if not product or product["seller_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    has_sales = await db.marketplace_purchases.count_documents(
+        {"product_id": product_id, "status": "completed"}, limit=1
+    )
+    if has_sales:
+        raise HTTPException(status_code=400, detail="Cannot delete a product with sales. Unpublish instead.")
+    await db.marketplace_products.delete_one({"product_id": product_id})
+    return {"ok": True}
+
+# ---- Screenshot Upload (Task 9) ----
+
+@api_router.post("/marketplace/products/{product_id}/screenshots")
+async def upload_screenshot(product_id: str, request: Request, file: UploadFile = File(...)):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    product = await db.marketplace_products.find_one({"product_id": product_id})
+    if not product or product["seller_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if len(product.get("screenshots", [])) >= 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 screenshots allowed")
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be under 5 MB")
+    url = await upload_public_image_to_r2(content, file.filename or "img.png", folder=f"products/{product_id}")
+    await db.marketplace_products.update_one(
+        {"product_id": product_id}, {"$push": {"screenshots": url}}
+    )
+    updated = await db.marketplace_products.find_one({"product_id": product_id}, {"_id": 0, "screenshots": 1})
+    return updated
+
+@api_router.delete("/marketplace/products/{product_id}/screenshots")
+async def delete_screenshot(product_id: str, url: str, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    product = await db.marketplace_products.find_one({"product_id": product_id})
+    if not product or product["seller_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    await db.marketplace_products.update_one(
+        {"product_id": product_id}, {"$pull": {"screenshots": url}}
+    )
+    return {"ok": True}
+
+# ---- ZIP Upload (Task 10) ----
+
+@api_router.post("/marketplace/products/{product_id}/upload")
+async def upload_product_zip(product_id: str, request: Request, file: UploadFile = File(...)):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    product = await db.marketplace_products.find_one({"product_id": product_id})
+    if not product or product["seller_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if not (file.filename or "").lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only ZIP files are accepted")
+    content = await file.read()
+    if len(content) > 500 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 500 MB)")
+    key = await upload_private_to_r2(content, file.filename, folder=f"products/{product_id}")
+    await db.marketplace_products.update_one(
+        {"product_id": product_id}, {"$set": {"r2_file_key": key}}
+    )
+    return {"ok": True}
+
+# ---- Publish Toggle (Task 11) ----
+
+@api_router.patch("/marketplace/products/{product_id}/publish")
+async def toggle_publish(product_id: str, data: PublishToggle, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    product = await db.marketplace_products.find_one({"product_id": product_id})
+    if not product or product["seller_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if data.published:
+        if not product.get("r2_file_key"):
+            raise HTTPException(status_code=400, detail="Upload a ZIP file before publishing")
+        if not product.get("screenshots"):
+            raise HTTPException(status_code=400, detail="Upload at least one screenshot before publishing")
+    await db.marketplace_products.update_one(
+        {"product_id": product_id}, {"$set": {"published": data.published}}
+    )
+    return {"ok": True, "published": data.published}
+
+# ---- Razorpay Checkout (Tasks 12, 13, 14) ----
+
+@api_router.post("/marketplace/checkout/create-order")
+async def create_order(data: CreateOrderRequest, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    product = await db.marketplace_products.find_one({"product_id": data.product_id})
+    if not product or not product.get("published") or not product.get("r2_file_key"):
+        raise HTTPException(status_code=404, detail="Product not available")
+    if user.user_id == product["seller_user_id"]:
+        raise HTTPException(status_code=400, detail="You cannot buy your own product")
+    if data.purchase_type == "source":
+        amount_cents = product["source_price_cents"]
+    else:
+        if not product.get("setup_available"):
+            raise HTTPException(status_code=400, detail="Setup is not offered for this product")
+        amount_cents = product["source_price_cents"] + product["setup_price_cents"]
+
+    rzp = get_razorpay_client()
+    order = rzp.order.create({
+        "amount": amount_cents,
+        "currency": "USD",
+        "receipt": str(uuid.uuid4())[:32],
+        "notes": {
+            "product_id": data.product_id,
+            "buyer_user_id": user.user_id,
+            "purchase_type": data.purchase_type,
+        },
+    })
+    purchase_id = str(uuid.uuid4())
+    await db.marketplace_purchases.insert_one({
+        "purchase_id": purchase_id,
+        "buyer_user_id": user.user_id,
+        "product_id": data.product_id,
+        "purchase_type": data.purchase_type,
+        "amount_cents": amount_cents,
+        "razorpay_order_id": order["id"],
+        "razorpay_payment_id": None,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {
+        "order_id": order["id"],
+        "amount_cents": amount_cents,
+        "currency": "USD",
+        "razorpay_key_id": os.environ["RAZORPAY_KEY_ID"],
+        "purchase_id": purchase_id,
+    }
+
+async def _complete_purchase(purchase: dict, payment_id: str):
+    """Idempotent: mark purchase complete, credit wallet, create setup_request if needed."""
+    if purchase.get("status") == "completed":
+        return
+    product = await db.marketplace_products.find_one({"product_id": purchase["product_id"]})
+    if not product:
+        return
+    fee_pct = int(os.environ.get("PLATFORM_FEE_PERCENT", "15"))
+    seller_id = product["seller_user_id"]
+    now = datetime.now(timezone.utc)
+    await db.marketplace_purchases.update_one(
+        {"purchase_id": purchase["purchase_id"]},
+        {"$set": {"status": "completed", "razorpay_payment_id": payment_id,
+                  "completed_at": now.isoformat()}},
+    )
+    source_seller_cut = int(product["source_price_cents"] * (100 - fee_pct) / 100)
+    await db.seller_wallets.update_one(
+        {"seller_user_id": seller_id},
+        {"$inc": {"balance_cents": source_seller_cut,
+                  "total_earned_cents": source_seller_cut,
+                  "lifetime_sales": 1}},
+    )
+    await db.wallet_transactions.insert_one({
+        "seller_user_id": seller_id, "type": "sale",
+        "amount_cents": source_seller_cut, "product_id": product["product_id"],
+        "purchase_id": purchase["purchase_id"], "created_at": now.isoformat(),
+        "note": f"Sale: {product['title']}",
+    })
+    await db.marketplace_products.update_one(
+        {"product_id": product["product_id"]}, {"$inc": {"purchase_count": 1}}
+    )
+    # Send purchase confirmation email to buyer
+    try:
+        buyer = await db.users.find_one({"user_id": purchase["buyer_user_id"]}, {"_id": 0, "email": 1})
+        if buyer and buyer.get("email"):
+            download_url = f"{os.environ.get('FRONTEND_URL', 'https://gitstack.pro')}/marketplace/{product['product_id']}?purchased=1&purchase_id={purchase['purchase_id']}"
+            await send_purchase_confirmation(buyer["email"], product["title"], purchase["purchase_type"], download_url)
+    except Exception:
+        pass  # Email failure should not block purchase completion
+    if purchase["purchase_type"] == "source_and_setup" and product.get("setup_price_cents"):
+        setup_seller_cut = int(product["setup_price_cents"] * (100 - fee_pct) / 100)
+        delivery_days = product.get("setup_delivery_days") or 3
+        auto_release = (now + timedelta(days=7 + delivery_days)).isoformat()
+        request_id = str(uuid.uuid4())
+        await db.setup_requests.insert_one({
+            "request_id": request_id,
+            "buyer_user_id": purchase["buyer_user_id"],
+            "seller_user_id": seller_id,
+            "product_id": product["product_id"],
+            "purchase_id": purchase["purchase_id"],
+            "status": "pending",
+            "escrow_amount_cents": setup_seller_cut,
+            "buyer_confirmed": False,
+            "auto_release_at": auto_release,
+            "created_at": now.isoformat(),
+        })
+        await db.seller_wallets.update_one(
+            {"seller_user_id": seller_id}, {"$inc": {"escrow_cents": setup_seller_cut}}
+        )
+        await db.wallet_transactions.insert_one({
+            "seller_user_id": seller_id, "type": "setup_escrow",
+            "amount_cents": setup_seller_cut, "product_id": product["product_id"],
+            "purchase_id": purchase["purchase_id"], "created_at": now.isoformat(),
+            "note": "Setup payment held in escrow",
+        })
+        await db.marketplace_products.update_one(
+            {"product_id": product["product_id"]}, {"$inc": {"setup_count": 1}}
+        )
+        # Notify seller about new setup request
+        # BUG-04 FIX: was querying db.sellers (non-existent); seller_id IS the user_id,
+        # so look up directly in db.users without an intermediate lookup.
+        try:
+            seller_user = await db.users.find_one({"user_id": seller_id}, {"_id": 0, "email": 1})
+            if seller_user and seller_user.get("email"):
+                await send_setup_request_notification(seller_user["email"], product["title"], request_id)
+        except Exception:
+            pass
+
+@api_router.post("/marketplace/checkout/verify-payment")
+async def verify_payment(data: VerifyPaymentRequest, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not verify_razorpay_signature(data.razorpay_order_id, data.razorpay_payment_id, data.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    purchase = await db.marketplace_purchases.find_one({"razorpay_order_id": data.razorpay_order_id})
+    if not purchase or purchase["buyer_user_id"] != user.user_id:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    await _complete_purchase(purchase, data.razorpay_payment_id)
+    return {"ok": True, "purchase_id": purchase["purchase_id"]}
+
+@api_router.post("/marketplace/webhook/razorpay")
+async def razorpay_webhook(request: Request):
+    body = await request.body()
+    sig = request.headers.get("x-razorpay-signature", "")
+    if not verify_razorpay_webhook_signature(body, sig):
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    try:
+        event = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    if event.get("event") == "payment.captured":
+        payment = event.get("payload", {}).get("payment", {}).get("entity", {})
+        order_id = payment.get("order_id")
+        payment_id = payment.get("id")
+        if order_id:
+            purchase = await db.marketplace_purchases.find_one({"razorpay_order_id": order_id})
+            if purchase:
+                await _complete_purchase(purchase, payment_id)
+    return {"ok": True}
+
+# ---- Buyer Purchases & Download (Task 15) ----
+
+@api_router.get("/marketplace/my-purchases")
+async def my_purchases(request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    purchases = await (db.marketplace_purchases
+                       .find({"buyer_user_id": user.user_id, "status": "completed"},
+                             {"_id": 0, "razorpay_order_id": 0, "razorpay_payment_id": 0})
+                       .sort("created_at", -1).to_list(200))
+    for p in purchases:
+        product = await db.marketplace_products.find_one(
+            {"product_id": p["product_id"]},
+            {"_id": 0, "title": 1, "tagline": 1, "screenshots": 1, "category": 1, "seller_user_id": 1},
+        )
+        p["product"] = product
+        if p.get("purchase_type") == "source_and_setup":
+            sr = await db.setup_requests.find_one({"purchase_id": p["purchase_id"]}, {"_id": 0})
+            p["setup_request"] = sr
+    return {"purchases": purchases}
+
+@api_router.get("/marketplace/download/{purchase_id}")
+async def download_product(purchase_id: str, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    purchase = await db.marketplace_purchases.find_one(
+        {"purchase_id": purchase_id, "buyer_user_id": user.user_id, "status": "completed"}
+    )
+    if not purchase:
+        raise HTTPException(status_code=403, detail="No completed purchase found")
+    product = await db.marketplace_products.find_one({"product_id": purchase["product_id"]})
+    if not product or not product.get("r2_file_key"):
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"download_url": get_r2_signed_url(product["r2_file_key"], expiry_seconds=300)}
+
+# ---- Setup Requests (Task 16) ----
+
+async def _release_setup_escrow(sr: dict, reason: str):
+    now = datetime.now(timezone.utc).isoformat()
+    new_status = "completed" if reason == "buyer_confirmed" else "auto_released"
+    await db.setup_requests.update_one(
+        {"request_id": sr["request_id"]},
+        {"$set": {"buyer_confirmed": True, "status": new_status,
+                  "released_at": now, "release_reason": reason}},
+    )
+    await db.seller_wallets.update_one(
+        {"seller_user_id": sr["seller_user_id"]},
+        {"$inc": {"balance_cents": sr["escrow_amount_cents"],
+                  "total_earned_cents": sr["escrow_amount_cents"],
+                  "escrow_cents": -sr["escrow_amount_cents"]}},
+    )
+    await db.wallet_transactions.insert_one({
+        "seller_user_id": sr["seller_user_id"], "type": "setup_released",
+        "amount_cents": sr["escrow_amount_cents"], "product_id": sr["product_id"],
+        "purchase_id": sr["purchase_id"], "created_at": now,
+        "note": f"Setup escrow released ({reason})",
+    })
+
+@api_router.get("/marketplace/setup-requests")
+async def list_setup_requests(request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    items = await (db.setup_requests
+                   .find({"seller_user_id": user.user_id}, {"_id": 0})
+                   .sort("created_at", -1).to_list(100))
+    for it in items:
+        buyer = await db.users.find_one(
+            {"user_id": it["buyer_user_id"]},
+            {"_id": 0, "name": 1, "email": 1, "picture": 1},
+        )
+        product = await db.marketplace_products.find_one(
+            {"product_id": it["product_id"]}, {"_id": 0, "title": 1}
+        )
+        it["buyer"] = buyer
+        it["product_title"] = (product or {}).get("title")
+    return {"requests": items}
+
+@api_router.patch("/marketplace/setup-requests/{request_id}/status")
+async def update_setup_status(request_id: str, data: SetupStatusUpdate, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    sr = await db.setup_requests.find_one({"request_id": request_id})
+    if not sr or sr["seller_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if sr["status"] in {"completed", "auto_released"}:
+        raise HTTPException(status_code=400, detail="Already finalized")
+    update = {"status": data.status}
+    if data.note:
+        update["seller_note"] = data.note
+    if data.status == "completed":
+        update["completed_at"] = datetime.now(timezone.utc).isoformat()
+    await db.setup_requests.update_one({"request_id": request_id}, {"$set": update})
+    return {"ok": True}
+
+@api_router.post("/marketplace/setup-requests/{request_id}/confirm")
+async def buyer_confirm_setup(request_id: str, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    sr = await db.setup_requests.find_one({"request_id": request_id})
+    if not sr or sr["buyer_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if sr.get("buyer_confirmed"):
+        return {"ok": True}
+    await _release_setup_escrow(sr, reason="buyer_confirmed")
+    return {"ok": True}
+
+# ---- Auto-release worker (Task 17) ----
+
+async def auto_release_escrow_loop():
+    while True:
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cursor = db.setup_requests.find({
+                "status": {"$in": ["pending", "in_progress", "completed"]},
+                "buyer_confirmed": False,
+                "auto_release_at": {"$lte": now_iso},
+            })
+            async for sr in cursor:
+                try:
+                    await _release_setup_escrow(sr, reason="auto_released_7d")
+                    logger.info(f"auto-released setup escrow {sr.get('request_id')}")
+                except Exception as e:
+                    logger.exception(f"auto-release failed for {sr.get('request_id')}: {e}")
+        except Exception as e:
+            logger.exception(f"auto-release loop error: {e}")
+        await asyncio.sleep(60 * 60)  # hourly
+
+# ---- Wallet (Task 18) ----
+
+@api_router.get("/marketplace/wallet")
+async def get_wallet(request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    wallet = await db.seller_wallets.find_one({"seller_user_id": user.user_id}, {"_id": 0})
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found — onboard as a seller first")
+    txns = await (db.wallet_transactions
+                  .find({"seller_user_id": user.user_id}, {"_id": 0})
+                  .sort("created_at", -1).limit(100).to_list(100))
+    return {"wallet": wallet, "transactions": txns}
+
+@api_router.post("/marketplace/wallet/withdraw")
+async def request_withdrawal(data: WithdrawalRequest, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    wallet = await db.seller_wallets.find_one({"seller_user_id": user.user_id})
+    if not wallet or wallet.get("balance_cents", 0) < data.amount_cents:
+        raise HTTPException(status_code=400, detail="Insufficient balance")
+    seller = await db.marketplace_sellers.find_one({"seller_user_id": user.user_id})
+    if not seller:
+        raise HTTPException(status_code=400, detail="Seller record missing")
+    now = datetime.now(timezone.utc).isoformat()
+    req_id = str(uuid.uuid4())
+    await db.withdrawal_requests.insert_one({
+        "request_id": req_id,
+        "seller_user_id": user.user_id,
+        "amount_cents": data.amount_cents,
+        "payout_method": seller["payout_method"],
+        "payout_details": seller.get("payout_details"),
+        "status": "pending",
+        "created_at": now,
+    })
+    await db.seller_wallets.update_one(
+        {"seller_user_id": user.user_id},
+        {"$inc": {"balance_cents": -data.amount_cents}},
+    )
+    await db.wallet_transactions.insert_one({
+        "seller_user_id": user.user_id, "type": "withdrawal_request",
+        "amount_cents": -data.amount_cents, "product_id": None, "purchase_id": None,
+        "created_at": now, "note": f"Withdrawal requested ({seller['payout_method']})",
+    })
+    # Send payout notification email
+    try:
+        if user.email:
+            await send_payout_notification(user.email, data.amount_cents, seller["payout_method"])
+    except Exception:
+        pass
+    return {"ok": True, "request_id": req_id}
+
+# ---- Reviews (Task 19) ----
+
+@api_router.post("/marketplace/products/{product_id}/reviews")
+async def create_review(product_id: str, data: ReviewCreate, request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    purchase = await db.marketplace_purchases.find_one({
+        "buyer_user_id": user.user_id, "product_id": product_id, "status": "completed"
+    })
+    if not purchase:
+        raise HTTPException(status_code=403, detail="You must purchase this product before reviewing")
+    existing = await db.product_reviews.find_one({"buyer_user_id": user.user_id, "product_id": product_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="You already reviewed this product")
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "name": 1, "picture": 1})
+    review = {
+        "review_id": str(uuid.uuid4()),
+        "product_id": product_id,
+        "buyer_user_id": user.user_id,
+        "buyer_name": (user_doc or {}).get("name"),
+        "buyer_picture": (user_doc or {}).get("picture"),
+        "rating": data.rating,
+        "text": data.text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.product_reviews.insert_one(review)
+    pipeline = [
+        {"$match": {"product_id": product_id}},
+        {"$group": {"_id": "$product_id", "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
+    ]
+    agg = await db.product_reviews.aggregate(pipeline).to_list(1)
+    if agg:
+        await db.marketplace_products.update_one(
+            {"product_id": product_id},
+            {"$set": {"avg_rating": round(agg[0]["avg"], 2), "review_count": agg[0]["count"]}},
+        )
+    review.pop("_id", None)
+    return review
+
+@api_router.get("/marketplace/products/{product_id}/reviews")
+@cache(expire=120)  # 2 minutes
+async def list_reviews(product_id: str, page: int = 1, limit: int = 20):
+    limit = min(max(limit, 1), 50)
+    page = max(page, 1)
+    cursor = (db.product_reviews
+              .find({"product_id": product_id}, {"_id": 0, "buyer_user_id": 0})
+              .sort("created_at", -1).skip((page - 1) * limit).limit(limit))
+    reviews = await cursor.to_list(limit)
+    return {"reviews": reviews, "page": page}
+
+# ---- Seller Dashboard Aggregate (Task 20) ----
+
+@api_router.get("/marketplace/seller/dashboard")
+async def seller_dashboard(request: Request):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    seller = await db.marketplace_sellers.find_one(
+        {"seller_user_id": user.user_id},
+        {"_id": 0, "payout_details": 0},
+    )
+    if not seller:
+        return {"onboarded": False}
+    wallet = await db.seller_wallets.find_one({"seller_user_id": user.user_id}, {"_id": 0}) or {}
+    pending_setups = await db.setup_requests.count_documents(
+        {"seller_user_id": user.user_id, "status": {"$in": ["pending", "in_progress"]}}
+    )
+    products_count = await db.marketplace_products.count_documents({"seller_user_id": user.user_id})
+    return {
+        "onboarded": True,
+        "seller": seller,
+        "wallet": wallet,
+        "pending_setup_requests": pending_setups,
+        "products_count": products_count,
+    }
+
+# ---- Public Seller Profile (Task 21) ----
+
+@api_router.get("/marketplace/seller/{seller_id}")
+async def get_public_seller(seller_id: str):
+    seller = await db.marketplace_sellers.find_one(
+        {"seller_user_id": seller_id},
+        {"_id": 0, "payout_details": 0},
+    )
+    if not seller:
+        raise HTTPException(status_code=404, detail="Seller not found")
+    user_doc = await db.users.find_one({"user_id": seller_id}, {"_id": 0, "email": 0})
+    products = await (db.marketplace_products
+                      .find({"seller_user_id": seller_id, "published": True},
+                            {"_id": 0, "description": 0, "r2_file_key": 0})
+                      .to_list(50))
+    return {"seller": {**seller,
+                       "name": (user_doc or {}).get("name"),
+                       "picture": (user_doc or {}).get("picture")},
+            "products": products}
+
+# ==================== ALTERNATIVES SEO PAGES ====================
+
+@api_router.get("/alternatives/{tool_slug}")
+@cache(expire=3600)  # 1 hour
+async def get_alternatives(tool_slug: str):
+    """
+    Programmatic SEO endpoint: returns open-source alternatives to a paid SaaS tool.
+    e.g. /api/alternatives/notion, /api/alternatives/typeform
+    """
+    # Normalize slug: "google-analytics" -> ["Google Analytics", "google analytics"]
+    pretty = tool_slug.replace("-", " ").title()
+    variants = [pretty, tool_slug.replace("-", " "), tool_slug]
+
+    # Match on paid_alternative field (case-insensitive)
+    regex_pattern = "|".join(re.escape(v) for v in variants)
+    curated = await db.tools.find(
+        {"paid_alternative": {"$regex": regex_pattern, "$options": "i"}},
+        {"_id": 0}
+    ).limit(20).to_list(20)
+
+    # Fallback: search by tag like "notion-alternative"
+    if len(curated) < 3:
+        tag_match = await db.tools.find(
+            {"tags": {"$regex": f"{tool_slug}-alternative", "$options": "i"}},
+            {"_id": 0}
+        ).limit(20).to_list(20)
+        seen = {t["tool_id"] for t in curated}
+        for t in tag_match:
+            if t["tool_id"] not in seen:
+                curated.append(t)
+
+    # Also search github_repos by topic
+    gh = await db.github_repos.find(
+        {"topics": {"$regex": f"{tool_slug}-alternative", "$options": "i"}},
+        {"_id": 0}
+    ).sort("stars", -1).limit(10).to_list(10)
+
+    return {
+        "paid_tool": pretty,
+        "slug": tool_slug,
+        "alternatives": curated,
+        "github_repos": gh,
+        "count": len(curated) + len(gh),
+    }
+
+
+@api_router.get("/alternatives")
+@cache(expire=3600)
+async def list_alternatives_index():
+    """Lists all paid tools that have alternatives (for index page + sitemap)."""
+    pipeline = [
+        {"$match": {"paid_alternative": {"$ne": None, "$ne": ""}}},
+        {"$group": {"_id": "$paid_alternative", "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gte": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 100},
+    ]
+    results = await db.tools.aggregate(pipeline).to_list(100)
+    return {
+        "paid_tools": [
+            {
+                "name": r["_id"],
+                "slug": re.sub(r"[^a-z0-9]+", "-", r["_id"].lower()).strip("-"),
+                "alternatives_count": r["count"],
+            }
+            for r in results
+        ]
+    }
+
+
+# ==================== DYNAMIC SITEMAP ====================
+
+@app.get("/sitemap-urls.json")
+@cache(expire=3600)
+async def sitemap_urls():
+    """Returns dynamic URLs for sitemap generation (translator pages, alternatives, tools)."""
+    # Top 200 trending repos
+    trending = await db.github_repos.find(
+        {}, {"_id": 0, "full_name": 1}
+    ).sort("stars", -1).limit(200).to_list(200)
+
+    # All tools
+    tools = await db.tools.find({}, {"_id": 0, "tool_id": 1}).to_list(500)
+
+    # All paid alternatives
+    alt_pipeline = [
+        {"$match": {"paid_alternative": {"$ne": None, "$ne": ""}}},
+        {"$group": {"_id": "$paid_alternative"}},
+    ]
+    alts = await db.tools.aggregate(alt_pipeline).to_list(100)
+
+    return {
+        "translator_repos": [r["full_name"] for r in trending if r.get("full_name")],
+        "tool_ids": [t["tool_id"] for t in tools if t.get("tool_id")],
+        "alternative_slugs": [
+            re.sub(r"[^a-z0-9]+", "-", a["_id"].lower()).strip("-")
+            for a in alts if a.get("_id")
+        ],
+    }
+
+
+# ==================== ACTIVATION METRICS ====================
+
+@api_router.get("/metrics/activation")
+async def activation_metrics():
+    """
+    Anonymous activation funnel metrics (public, for internal dashboard).
+    Tracks: visitors → translators used → stacks saved → marketplace clicks.
+    """
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=7)
+
+    # Distinct users active in last 7 days
+    active_users = len(await db.user_activity.distinct(
+        "user_id", {"created_at": {"$gte": since.isoformat()}}
+    ))
+    repo_views = await db.user_activity.count_documents(
+        {"event_type": "repo_viewed", "created_at": {"$gte": since.isoformat()}}
+    )
+    tool_views = await db.user_activity.count_documents(
+        {"event_type": "tool_viewed", "created_at": {"$gte": since.isoformat()}}
+    )
+    stacks_saved = await db.user_activity.count_documents(
+        {"event_type": "stack_saved", "created_at": {"$gte": since.isoformat()}}
+    )
+    try:
+        translations_cached = await db.repo_translations.count_documents(
+            {"cached_at": {"$gte": since.isoformat()}}
+        )
+        total_translations = await db.repo_translations.estimated_document_count()
+    except Exception:
+        translations_cached = 0
+        total_translations = 0
+
+    return {
+        "window_days": 7,
+        "active_users_7d": active_users,
+        "repo_views_7d": repo_views,
+        "tool_views_7d": tool_views,
+        "stacks_saved_7d": stacks_saved,
+        "translations_cached_7d": translations_cached,
+        "translations_total": total_translations,
+        "activation_rate": round(active_users / max(repo_views + tool_views, 1), 3),
+    }
+
+
 # Include router
 app.include_router(api_router)
+app.include_router(og_router)
 
 # CORS — reads CORS_ORIGINS from env; defaults to * for local dev
 _cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")

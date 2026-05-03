@@ -69,13 +69,13 @@ html {
 
 /* Chip selection state */
 .chip-selected {
-  background: #09090B !important;
-  color: white !important;
+  background: hsl(var(--foreground)) !important;
+  color: hsl(var(--background)) !important;
 }
 
 /* Loading skeleton */
 .skeleton {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--border)) 50%, hsl(var(--muted)) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
@@ -115,14 +115,14 @@ input[type="checkbox"] {
   appearance: none;
   width: 20px;
   height: 20px;
-  border: 2px solid #09090B;
-  background: white;
+  border: 2px solid hsl(var(--foreground));
+  background: hsl(var(--background));
   cursor: pointer;
 }
 
 input[type="checkbox"]:checked {
-  background: #09090B;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z'/%3E%3C/svg%3E");
+  background: hsl(var(--foreground));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='hsl(var(--background))'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z'/%3E%3C/svg%3E");
   background-size: 16px;
   background-position: center;
   background-repeat: no-repeat;

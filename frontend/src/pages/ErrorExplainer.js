@@ -40,13 +40,13 @@ export default function ErrorExplainer() {
       <main className="flex-1 py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-pastel-peach border-4 border-black neo-shadow-lg mb-6">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-pastel-pink border-4 border-black neo-shadow-lg mb-6 text-black">
               <AlertTriangle className="w-10 h-10" strokeWidth={2} />
             </div>
             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-4" data-testid="error-explainer-title">
               Explain This Error
             </h1>
-            <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Paste any error message or stack trace. Get a plain-English explanation instantly.
             </p>
           </div>
@@ -57,7 +57,7 @@ export default function ErrorExplainer() {
               onChange={(e) => setErrorText(e.target.value)}
               placeholder="Paste your error message or stack trace here..."
               rows={6}
-              className="neo-input w-full font-mono text-sm resize-none"
+              className="neo-input p-4 w-full font-mono text-sm resize-none"
               data-testid="error-input"
             />
             <button
@@ -74,12 +74,12 @@ export default function ErrorExplainer() {
             <div className="text-center py-16">
               <div className="spinner mx-auto mb-4"></div>
               <p className="font-bold text-lg">Analyzing the error...</p>
-              <p className="text-zinc-500">Breaking it down into simple terms</p>
+              <p className="text-muted-foreground">Breaking it down into simple terms</p>
             </div>
           )}
 
           {explanation && (
-            <div className="neo-card p-8 bg-pastel-mint" data-testid="error-explanation">
+            <div className="neo-card p-8 bg-pastel-mint text-black" data-testid="error-explanation">
               <div className="prose-gitstack" dangerouslySetInnerHTML={{ __html: formatContent(explanation) }} />
               <button
                 onClick={() => {

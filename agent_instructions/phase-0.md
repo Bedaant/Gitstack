@@ -8,11 +8,11 @@ The backend auth system is fully built and working. The frontend `AuthContext.js
 
 ## Status
 
-- [ ] Task 1 — Replace AuthContext stub with real session management
-- [ ] Task 2 — Wire AuthCallback to call `checkAuth` correctly
-- [ ] Task 3 — Add login button and user avatar to Header
-- [ ] Task 4 — Add auth guard utility for protected routes
-- [ ] Task 5 — Protect `/sell`, `/u/me`, and `/dashboard` routes
+- [x] Task 1 — Replace AuthContext stub with real session management (via Clerk)
+- [x] Task 2 — Wire AuthCallback — N/A, Clerk handles callbacks internally
+- [x] Task 3 — Add login button and user avatar to Header
+- [x] Task 4 — Add auth guard utility for protected routes
+- [x] Task 5 — Protect `/u/me` and `/dashboard` routes
 
 ---
 

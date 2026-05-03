@@ -22,6 +22,28 @@ services:
         value: gitstack-alerts
       - key: PYTHON_VERSION
         value: "3.11"
+      # ── Marketplace: Razorpay ─────────────────────────────────
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: PLATFORM_FEE_PERCENT
+        value: "15"
+      # ── Marketplace: Cloudflare R2 ────────────────────────────
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        value: gitstack-marketplace
+      - key: R2_PUBLIC_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false          # set to https://gitstack.pro
 
   # ── Frontend (React static site) ──────────────────────────────
   - type: web
@@ -30,6 +52,9 @@ services:
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: build
+    customDomains:
+      - gitstack.pro
+      - www.gitstack.pro
     routes:
       - type: rewrite
         source: /*

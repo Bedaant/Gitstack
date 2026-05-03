@@ -4,7 +4,9 @@ import axios from "axios";
 import { Star, ArrowLeft, Sparkles, Clock, Filter } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
 
 const DIFFICULTY_COLORS = {
   Beginner: "badge-beginner",
@@ -137,6 +139,7 @@ export default function TopicToolsPage() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("all");
   const [difficulty, setDifficulty] = useState("all");
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchTopicTools = async () => {
@@ -153,6 +156,12 @@ export default function TopicToolsPage() {
     setActiveFilter("all");
     setDifficulty("all");
   }, [topicId]);
+
+  // Track activity for recommendations (fire and forget)
+  useEffect(() => {
+    if (!user || !topicId) return;
+    axios.post(`${API}/activity`, { event_type: "topic_visited", entity_id: topicId }, { withCredentials: true }).catch(() => {});
+  }, [user, topicId]);
 
   if (loading) {
     return (
@@ -207,6 +216,11 @@ export default function TopicToolsPage() {
 
   return (
     <div className="min-h-screen">
+      <SEO
+        title={`${topic.name} — Open Source Tools`}
+        description={`${displayTools.length} open-source tools for ${topic.name}. Self-hosted alternatives, free for non-technical founders. Curated with setup guides and difficulty ratings.`}
+        path={`/topics/${topicId}`}
+      />
       <Header />
       <main className="py-12 px-4">
         <div className="max-w-6xl mx-auto">
@@ -214,17 +228,17 @@ export default function TopicToolsPage() {
           {/* Back button */}
           <button
             onClick={() => navigate("/tools")}
-            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 font-semibold mb-6 transition-colors"
+            className="flex items-center gap-2 text-muted-foreground hover:text-muted-foreground font-semibold mb-6 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> All Topics
           </button>
 
           {/* Hero */}
-          <div className={`neo-card p-8 mb-8 ${topic.bg_color || "bg-zinc-50"}`}>
+          <div className={`neo-card p-8 mb-8 ${topic.bg_color || "bg-muted"}`}>
             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-2" data-testid="topic-title">
               {topic.name}
             </h1>
-            <p className="text-zinc-600 text-lg">
+            <p className="text-foreground text-lg">
               {displayTools.length} tools — click any to get plain-English setup guide
             </p>
           </div>
@@ -236,10 +250,10 @@ export default function TopicToolsPage() {
                 <button
                   key={sc.id}
                   onClick={() => setActiveFilter(sc.id)}
-                  className={`px-4 py-1.5 text-sm font-bold border-2 border-black transition-all ${
+                  className={`px-4 py-1.5 text-sm font-bold border-2 border-foreground transition-all ${
                     activeFilter === sc.id
-                      ? "bg-black text-white"
-                      : "bg-white text-black hover:bg-zinc-100"
+                      ? "bg-foreground text-background"
+                      : "bg-background text-foreground hover:bg-muted"
                   }`}
                 >
                   {sc.label}
@@ -250,16 +264,16 @@ export default function TopicToolsPage() {
 
           {/* Difficulty filter */}
           <div className="flex items-center gap-3 mb-8">
-            <Filter className="w-4 h-4 text-zinc-500" />
-            <span className="text-sm text-zinc-500 font-semibold">Difficulty:</span>
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground font-semibold">Difficulty:</span>
             {["all", "beginner", "intermediate", "advanced"].map(d => (
               <button
                 key={d}
                 onClick={() => setDifficulty(d)}
                 className={`px-3 py-1 text-xs font-bold capitalize border transition-all ${
                   difficulty === d
-                    ? "bg-zinc-900 text-white border-zinc-900"
-                    : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-600"
+                    ? "bg-foreground text-background border-foreground"
+                    : "bg-background text-muted-foreground border-border hover:border-foreground"
                 }`}
               >
                 {d === "all" ? "All Levels" : d}
@@ -268,10 +282,10 @@ export default function TopicToolsPage() {
           </div>
 
           {/* Stack Generator CTA */}
-          <div className="neo-card p-5 mb-6 bg-pastel-yellow border-2 border-black flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="neo-card p-5 mb-6 bg-pastel-yellow border-2 border-black flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-black">
             <div>
               <p className="font-black text-sm uppercase tracking-wide">Need a full stack?</p>
-              <p className="text-xs text-zinc-600 mt-0.5">Tell us what you're building — we'll pick the best {topic.name} tools for your idea.</p>
+              <p className="text-xs text-foreground/70 mt-0.5">Tell us what you're building — we'll pick the best {topic.name} tools for your idea.</p>
             </div>
             <Link
               to={`/stack-generator?idea=I want to build something using ${topic.name} tools`}
@@ -284,7 +298,7 @@ export default function TopicToolsPage() {
           {/* Tools Grid */}
           {displayTools.length === 0 ? (
             <div className="text-center py-16">
-              <p className="text-zinc-500 text-lg">No tools match this filter yet.</p>
+              <p className="text-muted-foreground text-lg">No tools match this filter yet.</p>
               <button onClick={() => { setActiveFilter("all"); setDifficulty("all"); }}
                 className="neo-btn neo-btn-primary mt-4 px-6 py-2">
                 Clear Filters
@@ -304,7 +318,7 @@ export default function TopicToolsPage() {
                   <button
                     key={tool.tool_id || tool.full_name}
                     onClick={() => handleToolClick(tool)}
-                    className="neo-card p-5 text-left hover:shadow-lg transition-all group"
+                    className="neo-card p-5 text-left bg-background hover:shadow-lg transition-all group"
                     data-testid={`tool-${tool.tool_id || tool.repo_id}`}
                   >
                     {/* Header row */}
@@ -313,21 +327,21 @@ export default function TopicToolsPage() {
                         {tool.name}
                       </h3>
                       <span className={`text-xs font-bold px-2 py-0.5 whitespace-nowrap ${
-                        DIFFICULTY_COLORS[tool.difficulty] || "bg-zinc-100 text-zinc-600"
+                        DIFFICULTY_COLORS[tool.difficulty] || "bg-muted text-muted-foreground"
                       }`}>
                         {tool.difficulty || "Explore"}
                       </span>
                     </div>
 
                     {/* Description */}
-                    <p className="text-sm text-zinc-600 mb-3 line-clamp-2 min-h-[2.5rem]">
+                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2 min-h-[2.5rem]">
                       {tool.description || "No description available."}
                     </p>
 
                     {/* Footer row */}
-                    <div className="flex items-center gap-3 text-xs text-zinc-500 flex-wrap">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       {tool.language && tool.language !== "Unknown" && (
-                        <span className="font-mono bg-zinc-100 px-2 py-0.5 border border-zinc-200">
+                        <span className="font-mono bg-muted px-2 py-0.5 border border-border">
                           {tool.language}
                         </span>
                       )}
@@ -348,7 +362,7 @@ export default function TopicToolsPage() {
                     </div>
 
                     {/* CTA hint */}
-                    <div className="mt-3 pt-3 border-t border-zinc-100 flex items-center gap-2 text-xs font-bold text-primary group-hover:gap-3 transition-all">
+                    <div className="mt-3 pt-3 border-t border-border flex items-center gap-2 text-xs font-bold text-primary group-hover:gap-3 transition-all">
                       <Sparkles className="w-3 h-3" />
                       {isCurated ? "View install guide" : "AI plain-English guide →"}
                     </div>

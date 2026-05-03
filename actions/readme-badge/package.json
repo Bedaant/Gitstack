@@ -1,0 +1,16 @@
+{
+  "name": "gitstack-readme-badge",
+  "version": "1.0.0",
+  "description": "GitHub Action to inject GitStack tech-stack badges into README",
+  "main": "index.js",
+  "scripts": {
+    "build": "ncc build index.js -o dist --minify"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.4"
+  }
+}

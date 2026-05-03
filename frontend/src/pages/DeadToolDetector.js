@@ -4,10 +4,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { toast } from "sonner";
 import { Skull, Loader2, Share2, TrendingDown, DollarSign, ExternalLink, ArrowRight } from "lucide-react";
+import { MarketplaceTeaser } from "../components/marketplace/MarketplaceTeaser";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
+import { GitHubLink } from "../components/ui/GitHubLink";
 
 export default function DeadToolDetector() {
   const [paidTools, setPaidTools] = useState("");
@@ -70,7 +72,7 @@ export default function DeadToolDetector() {
             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-4" data-testid="dead-tool-title">
               Dead Tool Detector
             </h1>
-            <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Stop overpaying. Paste your SaaS subscriptions and we'll find free open-source equivalents.
             </p>
           </div>
@@ -80,7 +82,7 @@ export default function DeadToolDetector() {
               value={paidTools}
               onChange={(e) => setPaidTools(e.target.value)}
               placeholder="e.g., Typeform, Calendly, Zapier, Mailchimp..."
-              className="neo-input h-32 resize-none mb-4 focus:ring-4 ring-pastel-pink/30"
+              className="neo-input p-4 h-32 resize-none mb-4 focus:ring-4 ring-pastel-mint/30"
               data-testid="dead-tool-input"
             />
             <button 
@@ -101,10 +103,25 @@ export default function DeadToolDetector() {
           </form>
 
           {loading && (
-            <div className="text-center py-16">
-              <div className="spinner mx-auto mb-6 w-12 h-12 border-4 border-t-black" style={{ borderTopColor: '#000' }}></div>
-              <p className="font-black text-2xl uppercase italic">Analyzing $ Burn Rate...</p>
-              <p className="text-zinc-500 font-mono">Scanning GitHub for better alternatives</p>
+            <div className="space-y-4" data-testid="detector-skeleton">
+              <div className="text-center py-6">
+                <div className="inline-flex items-center gap-3 mb-2">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <p className="font-black text-xl md:text-2xl uppercase italic">Analyzing $ Burn Rate...</p>
+                </div>
+                <p className="text-muted-foreground font-mono text-sm">Scanning GitHub for better alternatives</p>
+              </div>
+              {/* Skeleton preview cards */}
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="neo-card p-5 animate-pulse">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-5 w-40 bg-muted"></div>
+                    <div className="h-6 w-24 bg-pastel-mint/50 border-2 border-black"></div>
+                  </div>
+                  <div className="h-3 bg-muted w-full mb-2"></div>
+                  <div className="h-3 bg-muted w-3/4"></div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -115,43 +132,49 @@ export default function DeadToolDetector() {
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-6"
               >
-                <div className="neo-card p-8 bg-pastel-mint text-center border-4 border-black border-dashed relative overflow-hidden">
-                  <DollarSign className="absolute -left-4 -top-4 w-24 h-24 text-black/5 -rotate-12" />
+                <div className="neo-card p-8 bg-pastel-mint text-center border-4 border-black border-dashed relative overflow-hidden text-black">
+                  <DollarSign className="absolute -left-4 -top-4 w-24 h-24 text-foreground/5 -rotate-12" />
                   <p className="text-sm font-mono uppercase tracking-widest mb-1 font-bold">Estimated Annual Savings</p>
-                  <p className="text-7xl font-black italic drop-shadow-md text-black">
+                  <p className="text-7xl font-black italic drop-shadow-md">
                     ${totalSavings.toLocaleString()}
                   </p>
-                  <p className="text-xs font-bold uppercase mt-2 text-zinc-600 tracking-wider">Per Year · Forever</p>
+                  <p className="text-xs font-bold uppercase mt-2 text-foreground/70 tracking-wider">Per Year · Forever</p>
                 </div>
 
-                <div className="neo-card overflow-hidden border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="grid grid-cols-4 gap-4 p-4 bg-black text-white text-[10px] font-mono uppercase tracking-widest font-black">
+                <div className="neo-card bg-background overflow-hidden border-4 border-foreground shadow-[8px_8px_0px_0px_hsl(var(--foreground))]">
+                  <div className="grid grid-cols-4 gap-4 p-4 bg-foreground text-background text-[10px] font-mono uppercase tracking-widest font-black">
                     <div>Paid Tool</div>
                     <div>Price</div>
                     <div>Free Alternative</div>
-                    <div className="text-green-400">Save / Migrate</div>
+                    <div className="text-background/70">Save / Migrate</div>
                   </div>
                   {results.map((item, idx) => (
                     <motion.div
                       key={`${item.paidTool}-${idx}`}
-                      initial={{ background: "white" }}
-                      whileHover={{ background: "#F0FDFA" }}
-                      className="grid grid-cols-4 gap-4 p-5 border-t-2 border-black items-start transition-colors"
+                      initial={{ background: "hsl(var(--background))" }}
+                      whileHover={{ background: "var(--pastel-mint)" }}
+                      className="grid grid-cols-4 gap-4 p-5 border-t-2 border-foreground items-start transition-colors"
                       data-testid={`result-row-${item.paidTool}`}
                     >
                       <div className="font-bold text-lg">{item.paidTool}</div>
-                      <div className="text-zinc-500 font-mono text-xs pt-1">{item.monthlyCost}</div>
+                      <div className="text-muted-foreground font-mono text-xs pt-1">{item.monthlyCost}</div>
                       <div>
                         {item.githubUrl ? (
-                          <a href={item.githubUrl} target="_blank" rel="noopener noreferrer" className="text-primary font-black underline decoration-4 underline-offset-4 inline-flex items-center gap-1 hover:opacity-75">
-                            {item.freeAlternative} <ExternalLink className="w-3 h-3" />
-                          </a>
+                          <GitHubLink url={item.githubUrl} label={item.freeAlternative} className="text-primary font-black" />
                         ) : (
                           <span className="text-primary font-black underline decoration-4 underline-offset-4">{item.freeAlternative}</span>
                         )}
                         {item.alternativeDescription && (
-                          <p className="text-xs text-zinc-500 mt-1 font-medium leading-snug">{item.alternativeDescription}</p>
+                          <p className="text-xs text-muted-foreground mt-1 font-medium leading-snug">{item.alternativeDescription}</p>
                         )}
+                        {item.githubUrl && (() => {
+                          const m = item.githubUrl.match(/github\.com\/([^/]+)\/([^/#?]+)/);
+                          return m ? (
+                            <div className="mt-2">
+                              <MarketplaceTeaser owner={m[1]} repo={m[2]} variant="inline" />
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                       <div>
                         <div className="text-green-600 font-black flex items-center gap-1">
@@ -172,7 +195,7 @@ export default function DeadToolDetector() {
 
                 <button 
                   onClick={handleShare}
-                  className="neo-btn neo-btn-secondary px-6 py-5 w-full font-black text-xl hover:bg-pastel-yellow transition-colors" 
+                  className="neo-btn neo-btn-secondary px-6 py-5 w-full font-black text-xl hover:bg-pastel-yellow hover:text-black transition-colors" 
                   data-testid="share-results"
                 >
                   <Share2 className="w-6 h-6 mr-2" /> Share My Savings Score

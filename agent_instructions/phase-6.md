@@ -12,12 +12,12 @@ Track what a logged-in user has viewed and used, then use Gemini to surface 6 to
 
 ## Status
 
-- [ ] Task 1 — Add `user_activity` collection and activity tracking endpoint (backend)
-- [ ] Task 2 — Add recommendations endpoint (backend)
-- [ ] Task 3 — Fire activity events from frontend pages
-- [ ] Task 4 — Create `RecommendationsSection` component
-- [ ] Task 5 — Add recommendations to Dashboard page
-- [ ] Task 6 — Add "For You" section to HomePage for logged-in users
+- [x] Task 1 — Add `user_activity` collection and activity tracking endpoint (backend)
+- [x] Task 2 — Add recommendations endpoint (backend)
+- [x] Task 3 — Fire activity events from frontend pages
+- [x] Task 4 — Create `RecommendationsSection` component
+- [x] Task 5 — Add recommendations to Dashboard page
+- [x] Task 6 — Add "For You" section to HomePage for logged-in users
 
 ---
 

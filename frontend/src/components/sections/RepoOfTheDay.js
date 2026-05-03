@@ -35,36 +35,36 @@ export const RepoOfTheDay = () => {
   if (!repo) return null;
 
   return (
-    <section className="py-12 px-4 bg-pastel-yellow border-y-4 border-black">
+    <section className="py-12 px-4 bg-pastel-yellow border-y-4 border-black text-black">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-black text-white flex items-center justify-center">
+          <div className="w-12 h-12 bg-foreground text-background flex items-center justify-center">
             <Sparkles className="w-6 h-6" />
           </div>
           <div>
             <h2 className="text-2xl font-extrabold tracking-tight">Repo of the Day</h2>
-            <p className="text-sm text-zinc-600">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+            <p className="text-sm opacity-70">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           </div>
         </div>
         
-        <div className="neo-card p-8 bg-white">
+        <div className="neo-card p-8 bg-background">
           <div className="flex items-start justify-between mb-4">
             <div>
               <h3 className="text-2xl font-black">{repo.name}</h3>
-              <p className="text-sm font-mono text-zinc-500">{repo.full_name}</p>
+              <p className="text-sm font-mono text-muted-foreground">{repo.full_name}</p>
             </div>
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1 text-sm font-semibold">
                 <Star className="w-4 h-4 text-yellow-500" fill="currentColor" /> {repo.stars?.toLocaleString()}
               </span>
-              <span className="text-xs font-mono bg-zinc-100 px-2 py-1 border border-black">{repo.language}</span>
+              <span className="text-xs font-mono bg-muted px-2 py-1 border border-border">{repo.language}</span>
             </div>
           </div>
           
-          <p className="text-zinc-600 mb-6">{repo.description}</p>
+          <p className="text-muted-foreground mb-6">{repo.description}</p>
           
           {repo.translation && (
-            <div className="border-t-2 border-black pt-6">
+            <div className="border-t-2 border-foreground pt-6">
               <div 
                 className="prose-gitstack text-sm"
                 dangerouslySetInnerHTML={{

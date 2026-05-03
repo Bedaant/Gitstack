@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Clock, Star, CheckCircle2, Github, ExternalLink } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
 
 export default function CollectionDetailPage() {
@@ -54,16 +55,21 @@ export default function CollectionDetailPage() {
 
   return (
     <div className="min-h-screen">
+      <SEO
+        title={`${collection.title} — Open Source Tool Collection`}
+        description={collection.description?.slice(0, 160) || `Curated open-source tools in the ${collection.title} collection. Free alternatives for non-technical founders.`}
+        path={`/collections/${collectionId}`}
+      />
       <Header />
       <main className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
-          <button onClick={() => navigate('/collections')} className="flex items-center gap-2 text-sm font-semibold text-zinc-500 hover:text-black mb-6" data-testid="back-to-collections">
+          <button onClick={() => navigate('/collections')} className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground mb-6" data-testid="back-to-collections">
             <ArrowLeft className="w-4 h-4" /> Back to Collections
           </button>
 
           <div className={`neo-card p-8 mb-8 ${collection.bg_color || 'bg-pastel-mint'}`} data-testid="collection-header">
             <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight mb-3">{collection.title}</h1>
-            <p className="text-lg text-zinc-600 mb-4">{collection.description}</p>
+            <p className="text-lg text-muted-foreground mb-4">{collection.description}</p>
             <div className="flex items-center gap-4">
               <span className={`text-xs font-bold px-3 py-1 ${
                 collection.difficulty === 'Beginner' ? 'badge-beginner' : 
@@ -71,23 +77,23 @@ export default function CollectionDetailPage() {
               }`}>
                 {collection.difficulty}
               </span>
-              <span className="text-sm text-zinc-500 flex items-center gap-1">
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
                 <Clock className="w-4 h-4" /> {collection.completion_time}
               </span>
-              <span className="text-sm text-zinc-500">{tools.length} tools</span>
+              <span className="text-sm text-muted-foreground">{tools.length} tools</span>
             </div>
           </div>
 
-          <p className="text-sm font-mono uppercase tracking-wider text-zinc-500 mb-6">
+          <p className="text-sm font-mono uppercase tracking-wider text-muted-foreground mb-6">
             Tools in this collection — follow in order
           </p>
 
           {tools.length > 0 ? (
             <div className="space-y-4">
               {tools.map((tool, i) => (
-                <div key={tool.tool_id} className="neo-card p-6" data-testid={`collection-tool-${i}`}>
+                <div key={tool.tool_id} className="neo-card p-6 bg-background" data-testid={`collection-tool-${i}`}>
                   <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 bg-primary text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
+                    <div className="w-10 h-10 bg-primary text-background flex items-center justify-center font-bold text-lg flex-shrink-0">
                       {i + 1}
                     </div>
                     <div className="flex-1">
@@ -101,7 +107,7 @@ export default function CollectionDetailPage() {
                             }`}>
                               {tool.difficulty}
                             </span>
-                            <span className="text-xs text-zinc-500 flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Clock className="w-3 h-3" /> {tool.setup_time}
                             </span>
                             <span className="text-xs flex items-center gap-1">
@@ -114,16 +120,16 @@ export default function CollectionDetailPage() {
                         </a>
                       </div>
 
-                      <p className="text-zinc-600 mb-4">{tool.description}</p>
+                      <p className="text-muted-foreground mb-4">{tool.description}</p>
 
                       {tool.setup_steps && tool.setup_steps.length > 0 && (
-                        <div className="border-t-2 border-zinc-200 pt-4">
+                        <div className="border-t-2 border-border pt-4">
                           <h4 className="text-sm font-bold mb-2 flex items-center gap-1">
                             <CheckCircle2 className="w-4 h-4 text-green-600" /> Quick Setup
                           </h4>
                           <ol className="space-y-1">
                             {tool.setup_steps.slice(0, 3).map((step, j) => (
-                              <li key={`step-${tool.tool_id}-${j}`} className="text-sm text-zinc-600 flex gap-2">
+                              <li key={`step-${tool.tool_id}-${j}`} className="text-sm text-muted-foreground flex gap-2">
                                 <span className="font-mono text-primary font-bold">{j + 1}.</span>
                                 {step}
                               </li>
@@ -140,8 +146,8 @@ export default function CollectionDetailPage() {
               ))}
             </div>
           ) : (
-            <div className="neo-card p-8 text-center bg-pastel-yellow">
-              <p className="text-zinc-600">No tools found for this collection. The tools may not be seeded yet.</p>
+            <div className="neo-card p-8 text-center bg-pastel-yellow text-black">
+              <p className="text-muted-foreground">No tools found for this collection. The tools may not be seeded yet.</p>
             </div>
           )}
         </div>
