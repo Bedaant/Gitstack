@@ -124,7 +124,10 @@ const GTM_BODY = `<!-- Google Tag Manager (noscript) -->
 height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <!-- End Google Tag Manager (noscript) -->`;
 
+const CANONICAL_LINK = '<link rel="canonical" href="https://gitstack.pro/repo-xray" />';
+
 html = html.replace('<head>', '<head>\n' + GTM_HEAD);
+html = html.replace('<head>', '<head>\n' + CANONICAL_LINK);
 html = html.replace('<body>', '<body>\n' + GTM_BODY);
 
 // ---------------------------------------------------------------------------
