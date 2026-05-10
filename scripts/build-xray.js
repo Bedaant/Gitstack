@@ -114,7 +114,7 @@ applyAll(textSwaps);
 // ---------------------------------------------------------------------------
 const FOOTER_HTML = `
 <div id="gitstack-xray-footer" style="position:fixed;bottom:8px;right:12px;z-index:200;font-family:'JetBrains Mono',monospace;font-size:10px;color:#94a3b8;background:rgba(10,10,12,0.7);backdrop-filter:blur(6px);padding:6px 10px;border-radius:6px;border:1px solid #2d2d35;display:flex;gap:8px;align-items:center;pointer-events:auto">
-  <a href="https://gitstack.dev" target="_parent" style="color:#2563EB;text-decoration:none;font-weight:700;">← GitStack</a>
+  <a href="https://gitstack.pro" target="_parent" style="color:#2563EB;text-decoration:none;font-weight:700;">← GitStack</a>
   <span style="opacity:0.5">·</span>
   <span>Analysis engine based on <a href="https://github.com/braedonsaunders/codeflow" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">CodeFlow (MIT)</a></span>
 </div>

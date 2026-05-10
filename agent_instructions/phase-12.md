@@ -6,7 +6,7 @@ Systematic SEO audit and improvements to hit 80+ Lighthouse SEO score and maximi
 ## Already Strong
 - **Sitemap**: `frontend/public/sitemap.xml` — static + dynamic AI tools pages
 - **JSON-LD**: Homepage has `@context` structured data (WebSite, SoftwareApplication)
-- **Canonical URLs**: SEO component generates `https://gitstack.dev` canonical
+- **Canonical URLs**: SEO component generates `https://gitstack.pro` canonical
 - **Open Graph**: Title, description, image (1200×630), type, site_name on all SEO-wrapped pages
 - **Twitter Cards**: `summary_large_image` on all pages
 - **Breadcrumbs**: JSON-LD breadcrumb schema on tool/repo detail pages

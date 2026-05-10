@@ -29,7 +29,7 @@ mcp/
 ├── src/
 │   ├── index.ts     ← MCP server entry, registers tools, starts stdio transport
 │   ├── tools.ts     ← Tool definitions with JSON Schema inputs
-│   └── api.ts       ← Typed HTTP client for gitstack.dev/api
+│   └── api.ts       ← Typed HTTP client for gitstack.pro/api
 └── README.md
 ```
 
@@ -99,7 +99,7 @@ mcp/
 ```typescript
 import axios from "axios";
 
-const BASE_URL = process.env.GITSTACK_API_URL ?? "https://gitstack.dev/api";
+const BASE_URL = process.env.GITSTACK_API_URL ?? "https://gitstack.pro/api";
 
 const client = axios.create({
   baseURL: BASE_URL,

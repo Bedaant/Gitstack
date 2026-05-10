@@ -22,7 +22,7 @@ export const Breadcrumbs = ({ items = [] }) => {
       "@type": "ListItem",
       "position": i + 1,
       "name": item.label,
-      ...(item.href ? { "item": `https://gitstack.dev${item.href}` } : {}),
+      ...(item.href ? { "item": `https://gitstack.pro${item.href}` } : {}),
     })),
   };
 

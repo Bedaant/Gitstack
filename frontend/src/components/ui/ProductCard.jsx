@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Download, ShoppingBag, Star, BadgeCheck, Wrench } from "lucide-react";
 
 export const ProductCard = ({ product }) => {
-  const price = (product.source_price_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const price = (product.source_price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: product.currency || "INR" });
   return (
     <Link to={`/marketplace/${product.product_id}`} className="neo-card block hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all bg-background overflow-hidden">
       <div className="aspect-video bg-muted border-b-4 border-black overflow-hidden">

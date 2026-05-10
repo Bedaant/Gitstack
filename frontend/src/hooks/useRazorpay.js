@@ -19,7 +19,7 @@ export const useRazorpay = () => {
     document.body.appendChild(s);
   }, [ready]);
 
-  const openCheckout = useCallback(({ orderId, amountCents, keyId, name, description, prefill, onSuccess, onDismiss }) => {
+  const openCheckout = useCallback(({ orderId, amountCents, currency = "INR", keyId, name, description, prefill, onSuccess, onDismiss }) => {
     if (!window.Razorpay) {
       onDismiss?.(new Error("Razorpay SDK not loaded"));
       return;
@@ -27,7 +27,7 @@ export const useRazorpay = () => {
     const rzp = new window.Razorpay({
       key: keyId,
       amount: amountCents,
-      currency: "USD",
+      currency,
       order_id: orderId,
       name: "GitStack",
       description,

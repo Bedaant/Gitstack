@@ -97,7 +97,7 @@ export default function ToolDetailPage() {
                 "name": tool.name,
                 "applicationCategory": tool.category ? `${tool.category}Application` : "DeveloperApplication",
                 "operatingSystem": "Web / Self-Hosted",
-                "url": `https://gitstack.dev/tools/${toolId}`,
+                "url": `https://gitstack.pro/tools/${toolId}`,
                 "description": tool.description,
                 "offers": {
                   "@type": "Offer",

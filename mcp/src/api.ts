@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = process.env.GITSTACK_API_URL ?? "https://gitstack.dev/api";
+const BASE_URL = process.env.GITSTACK_API_URL ?? "https://gitstack.pro/api";
 
 const client = axios.create({
   baseURL: BASE_URL,

@@ -21,7 +21,13 @@ function useWindowWidth() {
 }
 
 const CATEGORIES = [
-  "All", "SaaS", "MCP Servers", "Computer Vision", "Templates", "Skills", "Other"
+  { label: "All", value: "" },
+  { label: "SaaS", value: "saas" },
+  { label: "MCP Servers", value: "mcp-server" },
+  { label: "Computer Vision", value: "computer-vision" },
+  { label: "Templates", value: "template" },
+  { label: "Skills", value: "skill" },
+  { label: "Other", value: "other" },
 ];
 
 const SORT_OPTIONS = [
@@ -36,7 +42,7 @@ export default function MarketplacePage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState("All");
+  const [category, setCategory] = useState("");
   const [sort, setSort] = useState("newest");
   const [page, setPage] = useState(1);
   const windowWidth = useWindowWidth();
@@ -46,7 +52,7 @@ export default function MarketplacePage() {
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
-      if (category && category !== "All") params.set("category", category);
+      if (category) params.set("category", category);
       if (sort) params.set("sort", sort);
       params.set("page", String(page));
       const { data } = await axios.get(`${API}/marketplace/products?${params.toString()}`);
@@ -111,15 +117,15 @@ export default function MarketplacePage() {
           <div className="flex flex-wrap gap-2 mb-8">
             {CATEGORIES.map((c) => (
               <button
-                key={c}
-                onClick={() => { setCategory(c); setPage(1); }}
+                key={c.value}
+                onClick={() => { setCategory(c.value); setPage(1); }}
                 className={`px-3 py-1.5 text-xs font-black border-2 border-foreground uppercase tracking-wide transition-colors ${
-                  category === c
+                  category === c.value
                     ? "bg-foreground text-background"
                     : "bg-background text-foreground hover:bg-muted"
                 }`}
               >
-                {c}
+                {c.label}
               </button>
             ))}
           </div>

@@ -10,7 +10,7 @@ import { API } from "../utils/api";
  * Embeddable widget for bloggers, READMEs, etc.
  *
  * Usage:
- *   <iframe src="https://gitstack.dev/embed/r/owner/repo"
+ *   <iframe src="https://gitstack.pro/embed/r/owner/repo"
  *           width="100%" height="600" frameborder="0" />
  *
  * Minimal chrome: no header/footer, just branded translator output with backlink.
@@ -31,7 +31,7 @@ export default function EmbedRepoPage() {
   }, [owner, repo]);
 
   const repoUrl = `https://github.com/${owner}/${repo}`;
-  const gitstackUrl = `https://gitstack.dev/r/${owner}/${repo}`;
+  const gitstackUrl = `https://gitstack.pro/r/${owner}/${repo}`;
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -45,7 +45,7 @@ export default function EmbedRepoPage() {
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div>
               <p className="text-[10px] font-black uppercase text-muted-foreground tracking-wider">
-                AI Summary via <a href="https://gitstack.dev" target="_blank" rel="noopener noreferrer" className="text-primary underline">GitStack</a>
+                AI Summary via <a href="https://gitstack.pro" target="_blank" rel="noopener noreferrer" className="text-primary underline">GitStack</a>
               </p>
               <h1 className="text-xl font-black mt-1">{owner}/{repo}</h1>
             </div>

@@ -17,6 +17,7 @@ import httpx
 import asyncio
 import re
 from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
@@ -82,11 +83,11 @@ async def lifespan(_app: FastAPI):
     global _scraper_task
     _scraper_task = asyncio.create_task(_scraper_loop())
     logger.info("Background scraper scheduled (every 6 hours)")
-    
+
     # One-time seed for production boot
     asyncio.create_task(seed_database())
     logger.info("Database seeding started...")
-    
+
     # Create user_activity indexes (TTL for 90 days, compound index for queries)
     try:
         await db.user_activity.create_index("created_at", expireAfterSeconds=90 * 24 * 3600)
@@ -312,7 +313,7 @@ async def require_auth(request: Request) -> UserModel:
 async def call_gemini(prompt: str, json_response: bool = False) -> str:
     # Try multiple variants for better compatibility
     model_variants = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash", "gemini-pro"]
-    
+
     last_error = None
     for model_name in model_variants:
         try:
@@ -327,7 +328,7 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
             last_error = e
             logger.warning(f"Gemini model {model_name} failed: {e}")
             continue
-            
+
     logger.error(f"All Gemini models failed. Last error: {last_error}")
     raise HTTPException(status_code=500, detail=f"AI service temporarily unavailable: {str(last_error)}")
 
@@ -397,9 +398,9 @@ async def get_tools(category: Optional[str] = None, topic: Optional[str] = None,
             query = {"$and": [query, search_query]}
         else:
             query = search_query
-    
+
     tools = await db.tools.find(query, {"_id": 0}).limit(limit).to_list(limit)
-    
+
     # Also search github_repos if not enough results
     if len(tools) < limit:
         gh_query = {}
@@ -413,9 +414,9 @@ async def get_tools(category: Optional[str] = None, topic: Optional[str] = None,
                 {"name": {"$regex": search, "$options": "i"}},
                 {"description": {"$regex": search, "$options": "i"}}
             ]
-        
+
         gh_repos = await db.github_repos.find(gh_query, {"_id": 0}).sort("score", -1).limit(limit - len(tools)).to_list(limit - len(tools))
-        
+
         # Convert github_repos format to tools format
         for repo in gh_repos:
             tools.append({
@@ -436,7 +437,7 @@ async def get_tools(category: Optional[str] = None, topic: Optional[str] = None,
                 "source": "github",
                 "full_name": repo.get("full_name", "")
             })
-    
+
     return tools
 
 @api_router.get("/tools/{tool_id}")
@@ -470,16 +471,16 @@ async def get_tool(tool_id: str):
 @api_router.get("/tools/trending/list")
 async def get_trending_tools(tab: str = "top_week", language: str = ""):
     """Get real trending repos from GitHub or cache"""
-    
+
     # Check cache first (valid for 6 hours)
     cache_key = f"trending_{tab}_{language}"
     cached = await db.trending_cache.find_one({"cache_key": cache_key}, {"_id": 0})
-    
+
     if cached:
         cached_time = datetime.fromisoformat(cached.get("cached_at", "2000-01-01"))
         if datetime.now(timezone.utc) - cached_time < timedelta(hours=6):
             return cached.get("repos", [])
-    
+
     # Scrape GitHub trending
     since_map = {
         "top_week": "weekly",
@@ -489,7 +490,7 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
         "new_rising": "daily"
     }
     since = since_map.get(tab, "daily")
-    
+
     repos = []
     try:
         url = f"https://github.com/trending/{language}?since={since}"
@@ -498,7 +499,7 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 articles = soup.select('article.Box-row')
-                
+
                 for i, article in enumerate(articles[:15]):
                     try:
                         h2 = article.select_one('h2 a')
@@ -507,24 +508,24 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
                         full_name = h2.get('href', '').strip('/')
                         if not full_name or '/' not in full_name:
                             continue
-                        
+
                         desc_elem = article.select_one('p')
                         description = desc_elem.get_text(strip=True) if desc_elem else ""
-                        
+
                         stars_elem = article.select_one('a[href$="/stargazers"]')
                         stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
                         stars = stars_text.strip().replace(',', '')
                         if 'k' in stars.lower():
                             stars = str(int(float(stars.lower().replace('k', '')) * 1000))
-                        
+
                         lang_elem = article.select_one('[itemprop="programmingLanguage"]')
                         lang = lang_elem.get_text(strip=True) if lang_elem else "Unknown"
-                        
+
                         today_elem = article.select_one('span.d-inline-block.float-sm-right')
                         today_stars = ""
                         if today_elem:
                             today_stars = today_elem.get_text(strip=True)
-                        
+
                         repos.append({
                             "tool_id": full_name.replace("/", "_").lower(),
                             "name": full_name.split('/')[-1],
@@ -540,7 +541,7 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
                     except Exception as e:
                         logger.error(f"Error parsing trending repo: {e}")
                         continue
-        
+
         # Cache results
         if repos:
             await db.trending_cache.update_one(
@@ -557,7 +558,7 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
         # Fallback to curated tools
         tools = await db.tools.find({}, {"_id": 0}).sort("stars", -1).limit(10).to_list(10)
         return tools
-    
+
     return repos
 
 # ==================== TOPICS ROUTES ====================
@@ -573,7 +574,7 @@ TOPIC_KEYWORDS = {
         "crewai", "autogen", "swarm", "openai-agents", "multi-agent", "agentops"
     ],
     "ai-coding-tools": [
-        "mcp", "model-context-protocol", "claude-code", "cursor", "cursor-ai", 
+        "mcp", "model-context-protocol", "claude-code", "cursor", "cursor-ai",
         "windsurf", "aider", "codeium", "vscode-extension", "copilot-alternative",
         "ide", "coding-assistant", "programming", "autocode"
     ],
@@ -808,7 +809,7 @@ _topics_cache_time = 0
 @api_router.get("/topics")
 async def get_topics():
     global _topics_cache, _topics_cache_time
-    
+
     if _topics_cache and time.time() - _topics_cache_time < 3600 * 6:
         return _topics_cache
 
@@ -830,9 +831,9 @@ async def get_topics():
         for kw in keywords[:8]:
             gh_or.append({"topics": {"$regex": kw, "$options": "i"}})
             gh_or.append({"description": {"$regex": kw, "$options": "i"}})
-            
+
         async def dummy_count(): return 0
-        
+
         # Run counts in parallel for this topic
         results = await asyncio.gather(
             db.tools.count_documents({"$or": or_conditions}) if or_conditions else dummy_count(),
@@ -883,7 +884,7 @@ async def get_topic_tools(topic_id: str):
         {"$or": gh_or},
         {"_id": 0}
     ).sort("score", -1).limit(remaining).to_list(remaining)
-    
+
     # Convert github repos to tool format — dedupe by name
     seen_names = {t["name"].lower() for t in tools}
     for repo in gh_repos:
@@ -908,10 +909,10 @@ async def get_topic_tools(topic_id: str):
             "source": "github",
             "full_name": repo.get("full_name", "")
         })
-    
+
     # Update topic count to match actual results
     topic["tool_count"] = len(tools)
-    
+
     return {"topic": topic, "tools": tools}
 
 # ==================== COLLECTIONS ROUTES ====================
@@ -943,7 +944,7 @@ Return ONLY a valid JSON array with this exact structure (no markdown, no explan
   {{
     "paidTool": "tool name",
     "monthlyCost": "$X/mo",
-    "freeAlternative": "open source alternative name", 
+    "freeAlternative": "open source alternative name",
     "alternativeDescription": "1 sentence what it does",
     "githubUrl": "https://github.com/...",
     "annualSavings": "$X/yr"
@@ -1059,10 +1060,10 @@ async def error_explainer(request: Request):
     """Explain a technical error in plain English"""
     body = await request.json()
     error_text = body.get("error_text", "")
-    
+
     if not error_text:
         raise HTTPException(status_code=400, detail="error_text is required")
-    
+
     prompt = f"""A non-technical founder got this error message:
 
 {error_text[:3000]}
@@ -1110,14 +1111,14 @@ Be direct and slightly savage, but constructive. This is meant to be fun but gen
 async def translate_github_repo(owner: str, repo: str):
     """Translate any GitHub repo to plain English with AI"""
     full_name = f"{owner}/{repo}"
-    
+
     # Check cache first (7 day TTL)
     cached = await db.repo_translations.find_one({"full_name": full_name}, {"_id": 0})
     if cached:
         cached_time = datetime.fromisoformat(cached.get("translated_at", "2000-01-01"))
         if datetime.now(timezone.utc) - cached_time < timedelta(days=7):
             return cached
-    
+
     # Fetch repo info from GitHub
     try:
         async with httpx.AsyncClient() as client:
@@ -1129,9 +1130,9 @@ async def translate_github_repo(owner: str, repo: str):
             )
             if repo_response.status_code != 200:
                 raise HTTPException(status_code=404, detail="Repository not found on GitHub")
-            
+
             repo_data = repo_response.json()
-            
+
             # Get README
             readme_content = ""
             try:
@@ -1152,7 +1153,7 @@ async def translate_github_repo(owner: str, repo: str):
     except Exception as e:
         logger.error(f"GitHub API error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch from GitHub")
-    
+
     # AI Translation
     prompt = f"""Translate this GitHub repository for a non-technical founder:
 
@@ -1190,21 +1191,21 @@ Provide a complete analysis in this exact format:
 Keep it extremely simple. Focus on how this open-source tool allows the founder to build without paying high monthly SaaS fees. No technical jargon. Use plain English."""
 
     translation = await call_gemini(prompt)
-    
+
     # Parse difficulty from translation
     difficulty = "Intermediate"
     if "Beginner" in translation:
         difficulty = "Beginner"
     elif "Advanced" in translation:
         difficulty = "Advanced"
-    
+
     # Parse setup time
     setup_time = "30 mins"
     import re
     time_match = re.search(r'\*\*Setup time:\*\*\s*(.+?)(?:\n|$)', translation)
     if time_match:
         setup_time = time_match.group(1).strip()
-    
+
     result = {
         "full_name": full_name,
         "name": repo_data.get("name"),
@@ -1221,14 +1222,14 @@ Keep it extremely simple. Focus on how this open-source tool allows the founder 
         "setup_time": setup_time,
         "translated_at": datetime.now(timezone.utc).isoformat()
     }
-    
+
     # Cache the translation
     await db.repo_translations.update_one(
         {"full_name": full_name},
         {"$set": result},
         upsert=True
     )
-    
+
     return result
 
 @api_router.post("/ai/idea-exists")
@@ -1237,10 +1238,10 @@ async def idea_exists_post(request: Request):
     """Find similar GitHub projects for an idea"""
     body = await request.json()
     idea = body.get("idea", "")
-    
+
     if not idea:
         raise HTTPException(status_code=400, detail="idea is required")
-    
+
     prompt = f"""A founder wants to build: {idea}
 
 Find 5-8 existing open-source GitHub projects that are building something similar or could be used as a foundation.
@@ -1284,11 +1285,11 @@ async def compare_tools(req: ComparisonRequest):
     """Compare two tools using AI with a focus on Founder needs"""
     t1 = req.tool1.strip()
     t2 = req.tool2.strip()
-    
+
     prompt = f"""Compare these two open-source tools for a non-technical founder:
     Tool 1: {t1}
     Tool 2: {t2}
-    
+
     Provide a professional, objective comparison in Plain English.
     Focus on:
     1. **Core Purpose**: What is the main thing each tool does?
@@ -1296,7 +1297,7 @@ async def compare_tools(req: ComparisonRequest):
     3. **Monthly Cost (Managed vs Self-Hosted)**: Typical pricing for their cloud versions vs self-hosted.
     4. **Best For**: Specific founder use cases for each.
     5. **The Verdict**: A direct recommendation based on different priorities.
-    
+
     Structure the response with markdown tables where possible. Keep it concise and use founder-friendly terms."""
 
     try:
@@ -1311,14 +1312,14 @@ async def compare_tools(req: ComparisonRequest):
 @api_router.get("/repo-of-the-day")
 async def get_repo_of_the_day():
     """Get the featured repo of the day with AI translation"""
-    
+
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    
+
     # Check if we already have a repo of the day
     cached = await db.repo_of_the_day.find_one({"date": today}, {"_id": 0})
     if cached:
         return cached
-    
+
     # Get trending repos and pick one
     try:
         # Fetch from GitHub trending
@@ -1331,7 +1332,7 @@ async def get_repo_of_the_day():
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 articles = soup.select('article.Box-row')
-                
+
                 # Pick a good one (high stars, good description)
                 best_repo = None
                 for article in articles[:10]:
@@ -1341,24 +1342,24 @@ async def get_repo_of_the_day():
                     full_name = h2.get('href', '').strip('/')
                     if not full_name or '/' not in full_name:
                         continue
-                    
+
                     desc_elem = article.select_one('p')
                     description = desc_elem.get_text(strip=True) if desc_elem else ""
-                    
+
                     # Skip if no description
                     if len(description) < 20:
                         continue
-                    
+
                     stars_elem = article.select_one('a[href$="/stargazers"]')
                     stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
-                    
+
                     best_repo = {
                         "full_name": full_name,
                         "description": description,
                         "stars": stars_text
                     }
                     break
-                
+
                 if not best_repo:
                     # Fallback to first repo
                     first = articles[0] if articles else None
@@ -1372,10 +1373,10 @@ async def get_repo_of_the_day():
     except Exception as e:
         logger.error(f"Error fetching trending: {e}")
         best_repo = {"full_name": "vercel/next.js", "description": "The React Framework", "stars": "118k"}
-    
+
     if not best_repo:
         best_repo = {"full_name": "vercel/next.js", "description": "The React Framework", "stars": "118k"}
-    
+
     # Get AI translation for this repo
     owner, repo = best_repo["full_name"].split("/")
     try:
@@ -1387,7 +1388,7 @@ async def get_repo_of_the_day():
                 timeout=15
             )
             repo_data = repo_response.json() if repo_response.status_code == 200 else {}
-            
+
             # Get README
             readme_content = ""
             try:
@@ -1403,7 +1404,7 @@ async def get_repo_of_the_day():
                         readme_content = base64.b64decode(readme_data.get("content", "")).decode("utf-8", errors="ignore")[:2000]
             except:
                 pass
-        
+
         # AI Translation
         prompt = f"""Create a "Repo of the Day" feature for non-technical founders:
 
@@ -1430,7 +1431,7 @@ Write an engaging, plain-English summary:
 Make it exciting and accessible to non-technical people!"""
 
         translation = await call_gemini(prompt)
-        
+
         result = {
             "date": today,
             "full_name": best_repo["full_name"],
@@ -1444,16 +1445,16 @@ Make it exciting and accessible to non-technical people!"""
             "translation": translation,
             "selected_at": datetime.now(timezone.utc).isoformat()
         }
-        
+
         # Cache it
         await db.repo_of_the_day.update_one(
             {"date": today},
             {"$set": result},
             upsert=True
         )
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Error creating repo of the day: {e}")
         return {
@@ -1474,23 +1475,23 @@ class NewsletterSubscribeRequest(BaseModel):
 async def subscribe_newsletter(req: NewsletterSubscribeRequest):
     """Subscribe to the GitStack daily digest"""
     email = req.email.lower().strip()
-    
+
     # Basic validation
     if not email or "@" not in email or "." not in email:
         raise HTTPException(status_code=400, detail="Invalid email address")
-    
+
     # Check if already subscribed
     existing = await db.newsletter_subscribers.find_one({"email": email})
     if existing:
         return {"message": "Already subscribed", "status": "existing"}
-    
+
     # Save subscriber
     await db.newsletter_subscribers.insert_one({
         "email": email,
         "subscribed_at": datetime.now(timezone.utc).isoformat(),
         "status": "active"
     })
-    
+
     return {"message": "Successfully subscribed to GitStack daily digest!", "status": "new"}
 
 @api_router.get("/newsletter/count")
@@ -1506,9 +1507,9 @@ async def search_autocomplete(q: str):
     """Get search suggestions for autocomplete"""
     if len(q) < 2:
         return {"suggestions": []}
-    
+
     suggestions = []
-    
+
     # Search curated tools
     tools = await db.tools.find(
         {"$or": [
@@ -1517,7 +1518,7 @@ async def search_autocomplete(q: str):
         ]},
         {"_id": 0, "name": 1, "description": 1, "category": 1}
     ).limit(5).to_list(5)
-    
+
     for t in tools:
         suggestions.append({
             "type": "tool",
@@ -1525,7 +1526,7 @@ async def search_autocomplete(q: str):
             "description": t.get("description", "")[:60],
             "category": t.get("category", "")
         })
-    
+
     # Search github repos
     gh_repos = await db.github_repos.find(
         {"$or": [
@@ -1534,7 +1535,7 @@ async def search_autocomplete(q: str):
         ]},
         {"_id": 0, "name": 1, "description": 1, "full_name": 1, "stars": 1}
     ).sort("score", -1).limit(5).to_list(5)
-    
+
     for r in gh_repos:
         suggestions.append({
             "type": "github",
@@ -1543,7 +1544,7 @@ async def search_autocomplete(q: str):
             "description": r.get("description", "")[:60],
             "stars": r.get("stars", 0)
         })
-    
+
     # Add category suggestions
     categories = [
         {"name": "AI Agents", "type": "category"},
@@ -1555,20 +1556,20 @@ async def search_autocomplete(q: str):
         {"name": "Database", "type": "category"},
         {"name": "E-commerce", "type": "category"},
     ]
-    
+
     for cat in categories:
         if q.lower() in cat["name"].lower():
             suggestions.append(cat)
-    
+
     # Add idea suggestions
     ideas = [
-        "Build a SaaS", "Build a chatbot", "Build an AI app", 
+        "Build a SaaS", "Build a chatbot", "Build an AI app",
         "Build a marketplace", "Build a newsletter", "Build a booking system"
     ]
     for idea in ideas:
         if q.lower() in idea.lower():
             suggestions.append({"type": "idea", "name": idea})
-    
+
     return {"suggestions": suggestions[:10]}
 
 # ==================== MY STACK ROUTES ====================
@@ -1602,7 +1603,7 @@ async def get_public_stacks():
 @api_router.get("/stacks/featured")
 async def get_featured_stacks():
     """Get real founder stacks from famous open-source projects"""
-    
+
     # Famous open-source projects and their stacks - NO FAKE NUMBERS
     famous_stacks = [
         {
@@ -1666,7 +1667,7 @@ async def get_featured_stacks():
             "stars": "6k"
         }
     ]
-    
+
     return famous_stacks
 
 @api_router.get("/stacks/{stack_id}")
@@ -1772,7 +1773,7 @@ async def get_stats():
 async def smart_search(req: SmartSearchRequest):
     """AI-powered search across curated DB and live GitHub"""
     results = []
-    
+
     # 1. Parse query with AI
     parsed_query = {"keywords": req.query.lower().split(), "intent": "search"}
     try:
@@ -1791,9 +1792,9 @@ Return ONLY JSON (no markdown):
         parsed_query = json.loads(cleaned)
     except Exception as e:
         logger.error(f"Query parse error: {e}")
-    
+
     keywords = parsed_query.get("keywords", req.query.lower().split())
-    
+
     # 2. Search our database
     if keywords:
         text_regex = "|".join(re.escape(k) for k in keywords[:5])
@@ -1805,19 +1806,19 @@ Return ONLY JSON (no markdown):
                 {"topics": {"$in": keywords}}
             ]
         }
-        
+
         # Search curated tools
         tools = await db.tools.find(db_query, {"_id": 0}).limit(req.limit).to_list(req.limit)
         for t in tools:
             t["source"] = "curated"
             results.append(t)
-        
+
         # Search github_repos
         gh_repos = await db.github_repos.find(db_query, {"_id": 0}).sort("score", -1).limit(req.limit - len(results)).to_list(req.limit - len(results))
         for r in gh_repos:
             r["source"] = "github_cached"
             results.append(r)
-    
+
     # 3. Search GitHub live if not enough results
     if req.include_github_live and len(results) < req.limit:
         github_query = parsed_query.get("github_query", req.query)
@@ -1850,7 +1851,7 @@ Return ONLY JSON (no markdown):
                         })
         except Exception as e:
             logger.error(f"GitHub live search error: {e}")
-    
+
     return {
         "query": req.query,
         "parsed": parsed_query,
@@ -1866,11 +1867,11 @@ Return ONLY JSON (no markdown):
 async def trigger_scraper(background_tasks: BackgroundTasks):
     """Manually trigger GitHub scraper (admin only)"""
     from github_scraper import GitHubScraper
-    
+
     async def run_scrape():
         scraper = GitHubScraper(db)
         await scraper.run_full_scrape()
-    
+
     background_tasks.add_task(run_scrape)
     return {"message": "Scraper started in background"}
 
@@ -1882,7 +1883,7 @@ async def scraper_status():
     hot_count = await db.github_repos.count_documents({"tier": "hot"})
     warm_count = await db.github_repos.count_documents({"tier": "warm"})
     with_topics = await db.github_repos.count_documents({"topics": {"$ne": []}})
-    
+
     result = {
         "total_repos": gh_count,
         "hot_tier": hot_count,
@@ -1891,7 +1892,7 @@ async def scraper_status():
         "cron_active": _scraper_task is not None and not _scraper_task.done() if _scraper_task else False,
         "cron_interval": "Every 6 hours"
     }
-    
+
     if metadata:
         result["last_scrape"] = metadata.get("timestamp")
         result["stats"] = metadata.get("stats")
@@ -1936,7 +1937,7 @@ GLOBAL_SEED_TOPICS = [
 @api_router.post("/seed")
 async def seed_database():
     """Seed the database with initial tools, topics, and collections"""
-    
+
     # Check if already seeded - use a lock document
     lock = await db.seed_lock.find_one({"_id": "seed_lock"})
     if lock and lock.get("seeded"):
@@ -1945,18 +1946,18 @@ async def seed_database():
         await db.topics.insert_many(GLOBAL_SEED_TOPICS)
         existing = await db.tools.count_documents({})
         return {"message": "Database already seeded, topics refreshed", "tools_count": existing}
-    
+
     # Set lock immediately to prevent race conditions
     await db.seed_lock.update_one(
         {"_id": "seed_lock"},
         {"$set": {"seeded": True, "timestamp": datetime.now(timezone.utc).isoformat()}},
         upsert=True
     )
-    
+
     # Clear and seed Topics
     await db.topics.delete_many({})
     await db.topics.insert_many(GLOBAL_SEED_TOPICS)
-    
+
     # Clear and seed Tools
     await db.tools.delete_many({})
     tools = [
@@ -2784,10 +2785,10 @@ async def seed_database():
             "monthly_cost": "$9/user/mo"
         },
     ]
-    
+
     await db.tools.delete_many({})
     await db.tools.insert_many(tools)
-    
+
     # Seed Collections
     collections = [
         {
@@ -2845,10 +2846,10 @@ async def seed_database():
             "bg_color": "bg-orange-100"
         },
     ]
-    
+
     await db.collections.delete_many({})
     await db.collections.insert_many(collections)
-    
+
     # Seed some public stacks
     public_stacks = [
         {
@@ -2879,10 +2880,10 @@ async def seed_database():
             "created_at": datetime.now(timezone.utc).isoformat()
         },
     ]
-    
+
     await db.user_stacks.delete_many({"user_id": "system"})
     await db.user_stacks.insert_many(public_stacks)
-    
+
     return {"message": "Database seeded successfully", "tools_count": len(tools), "topics_count": len(topics), "collections_count": len(collections)}
 
 # ==================== ROOT ====================
@@ -2956,7 +2957,7 @@ async def get_recommendations(request: Request):
     catalog_tools = await db.tools.find(
         {}, {"_id": 0, "tool_id": 1, "name": 1, "category": 1, "description": 1}
     ).limit(200).to_list(200)
-    
+
     # Filter out already-seen tools
     available = [t for t in catalog_tools if t.get("tool_id") not in seen_ids]
     if not available:
@@ -3145,6 +3146,7 @@ class MarketplaceProductCreate(BaseModel):
     tagline: str = Field(..., min_length=10, max_length=200)
     description: str = Field(..., min_length=50, max_length=5000)
     source_price_cents: int = Field(..., ge=100, le=100000)
+    currency: Literal["INR", "USD", "EUR", "GBP"] = "INR"
     category: Literal["saas", "mcp-server", "computer-vision", "template", "skill", "other"]
     github_repo_url: Optional[str] = Field(None, max_length=200)
     demo_video_url: Optional[str] = Field(None, max_length=300)
@@ -3158,6 +3160,7 @@ class MarketplaceProductUpdate(BaseModel):
     tagline: Optional[str] = Field(None, min_length=10, max_length=200)
     description: Optional[str] = Field(None, min_length=50, max_length=5000)
     source_price_cents: Optional[int] = Field(None, ge=100, le=100000)
+    currency: Optional[Literal["INR", "USD", "EUR", "GBP"]] = None
     category: Optional[Literal["saas", "mcp-server", "computer-vision", "template", "skill", "other"]] = None
     github_repo_url: Optional[str] = Field(None, max_length=200)
     demo_video_url: Optional[str] = Field(None, max_length=300)
@@ -3410,6 +3413,9 @@ async def products_by_tool(tool_id: str):
 async def get_product(product_id: str):
     product = await db.marketplace_products.find_one({"product_id": product_id}, {"_id": 0, "r2_file_key": 0})
     if not product:
+        logger.warning(f"Product {product_id} not found")
+        all_products = await db.marketplace_products.find({}, {"_id": 0, "product_id": 1, "title": 1}).to_list(10)
+        logger.warning(f"Available products: {all_products}")
         raise HTTPException(status_code=404, detail="Product not found")
     seller = await db.marketplace_sellers.find_one(
         {"seller_user_id": product["seller_user_id"]},
@@ -3525,6 +3531,11 @@ async def toggle_publish(product_id: str, data: PublishToggle, request: Request)
     await db.marketplace_products.update_one(
         {"product_id": product_id}, {"$set": {"published": data.published}}
     )
+    # Invalidate marketplace list and product detail caches
+    try:
+        await FastAPICache.clear(namespace="gitstack")
+    except Exception:
+        pass
     return {"ok": True, "published": data.published}
 
 # ---- Razorpay Checkout (Tasks 12, 13, 14) ----
@@ -3549,7 +3560,7 @@ async def create_order(data: CreateOrderRequest, request: Request):
     rzp = get_razorpay_client()
     order = rzp.order.create({
         "amount": amount_cents,
-        "currency": "USD",
+        "currency": product.get("currency", "INR"),
         "receipt": str(uuid.uuid4())[:32],
         "notes": {
             "product_id": data.product_id,
@@ -3572,7 +3583,7 @@ async def create_order(data: CreateOrderRequest, request: Request):
     return {
         "order_id": order["id"],
         "amount_cents": amount_cents,
-        "currency": "USD",
+        "currency": product.get("currency", "INR"),
         "razorpay_key_id": os.environ["RAZORPAY_KEY_ID"],
         "purchase_id": purchase_id,
     }
@@ -3942,13 +3953,16 @@ async def seller_dashboard(request: Request):
     pending_setups = await db.setup_requests.count_documents(
         {"seller_user_id": user.user_id, "status": {"$in": ["pending", "in_progress"]}}
     )
-    products_count = await db.marketplace_products.count_documents({"seller_user_id": user.user_id})
+    products = await db.marketplace_products.find(
+        {"seller_user_id": user.user_id},
+        {"_id": 0}
+    ).to_list(None)
     return {
         "onboarded": True,
         "seller": seller,
         "wallet": wallet,
         "pending_setup_requests": pending_setups,
-        "products_count": products_count,
+        "products": products,
     }
 
 # ---- Public Seller Profile (Task 21) ----
@@ -4070,6 +4084,101 @@ async def sitemap_urls():
             for a in alts if a.get("_id")
         ],
     }
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+@api_router.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml():
+    """Dynamic XML sitemap with static and DB-driven URLs."""
+    site = "https://gitstack.pro"
+
+    static_paths = [
+        "/",
+        "/tools",
+        "/marketplace",
+        "/collections",
+        "/repo-of-the-day",
+        "/compare",
+        "/stack-generator",
+        "/roast-my-stack",
+        "/dead-tool-detector",
+        "/repo-translator",
+        "/repo-xray",
+        "/readme-badge",
+        "/idea-exists",
+        "/error-explainer",
+        "/founder-stacks",
+        "/about",
+        "/terms",
+        "/privacy",
+    ]
+
+    base_urls = [{"loc": f"{site}{p}", "changefreq": "weekly", "priority": "0.7"} for p in static_paths]
+    base_urls[0]["changefreq"] = "daily"
+    base_urls[0]["priority"] = "1.0"
+
+    trending = await db.github_repos.find(
+        {}, {"_id": 0, "full_name": 1}
+    ).sort("stars", -1).limit(200).to_list(200)
+
+    tools = await db.tools.find({}, {"_id": 0, "tool_id": 1}).limit(800).to_list(800)
+
+    alt_pipeline = [
+        {"$match": {"paid_alternative": {"$ne": None, "$ne": ""}}},
+        {"$group": {"_id": "$paid_alternative"}},
+    ]
+    alts = await db.tools.aggregate(alt_pipeline).to_list(300)
+
+    live_products = await db.marketplace_products.find(
+        {"published": True, "r2_file_key": {"$ne": None}},
+        {"_id": 0, "product_id": 1, "created_at": 1}
+    ).to_list(500)
+
+    dynamic_urls = []
+    for r in trending:
+        full_name = r.get("full_name")
+        if full_name and "/" in full_name:
+            dynamic_urls.append({"loc": f"{site}/r/{full_name}", "changefreq": "weekly", "priority": "0.6"})
+
+    for t in tools:
+        tid = t.get("tool_id")
+        if tid:
+            dynamic_urls.append({"loc": f"{site}/tools/{tid}", "changefreq": "weekly", "priority": "0.7"})
+
+    for a in alts:
+        raw = a.get("_id")
+        if raw:
+            slug = re.sub(r"[^a-z0-9]+", "-", str(raw).lower()).strip("-")
+            if slug:
+                dynamic_urls.append({"loc": f"{site}/alternatives/{slug}", "changefreq": "weekly", "priority": "0.8"})
+
+    for p in live_products:
+        pid = p.get("product_id")
+        if not pid:
+            continue
+        item = {"loc": f"{site}/marketplace/{pid}", "changefreq": "daily", "priority": "0.9"}
+        created_at = p.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                item["lastmod"] = datetime.fromisoformat(created_at).date().isoformat()
+            except Exception:
+                pass
+        dynamic_urls.append(item)
+
+    urls = base_urls + dynamic_urls
+
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for u in urls:
+        lines.append("  <url>")
+        lines.append(f"    <loc>{xml_escape(u['loc'])}</loc>")
+        if u.get("lastmod"):
+            lines.append(f"    <lastmod>{u['lastmod']}</lastmod>")
+        lines.append(f"    <changefreq>{u['changefreq']}</changefreq>")
+        lines.append(f"    <priority>{u['priority']}</priority>")
+        lines.append("  </url>")
+    lines.append("</urlset>")
+
+    return Response("\n".join(lines), media_type="application/xml")
 
 
 # ==================== ACTIVATION METRICS ====================

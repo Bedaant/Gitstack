@@ -6,7 +6,7 @@ Read this file before opening any phase file. It provides the full codebase cont
 
 ## What is Gitstack?
 
-Gitstack (`gitstack.dev`) is a two-tier web app that curates open-source GitHub tools and explains them in plain English for non-technical founders. It consists of a Python/FastAPI backend and a React SPA, deployed on Render.com.
+Gitstack (`gitstack.pro`) is a two-tier web app that curates open-source GitHub tools and explains them in plain English for non-technical founders. It consists of a Python/FastAPI backend and a React SPA, deployed on Render.com.
 
 ---
 

@@ -41,15 +41,14 @@ export const MyListingsTab = ({ products, onChange }) => {
         return (
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${
-                p.published ? "bg-pastel-mint text-black" : "bg-muted text-foreground"
-              }`}>
+              <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 border-2 border-black ${p.published ? "bg-pastel-mint text-black" : "bg-muted text-foreground"
+                }`}>
                 {p.published ? "LIVE" : "DRAFT"}
               </span>
               <span className="font-black text-sm">{p.title}</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {(p.source_price_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} · {p.purchase_count || 0} sales
+              {(p.source_price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: p.currency || "INR" })} · {p.purchase_count || 0} sales
             </p>
           </div>
         );

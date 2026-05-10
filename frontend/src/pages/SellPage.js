@@ -8,6 +8,7 @@ import { SetupRequestsTab } from "../components/marketplace/SetupRequestsTab";
 import { WalletTab } from "../components/marketplace/WalletTab";
 import { CreateProductWizard } from "../components/marketplace/CreateProductWizard";
 import { API } from "../utils/api";
+import { getApiErrorMessage } from "../utils/getApiErrorMessage";
 import { toast } from "sonner";
 import { Loader2, TrendingUp, Package, Wrench, Wallet as WalletIcon } from "lucide-react";
 
@@ -49,7 +50,7 @@ const OnboardingCard = ({ onDone }) => {
       toast.success("Seller onboarding complete!");
       onDone();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Onboarding failed");
+      toast.error(getApiErrorMessage(err, "Onboarding failed"));
     } finally {
       setSubmitting(false);
     }

@@ -63,6 +63,7 @@ export default function MarketplaceProductPage() {
       openCheckout({
         orderId: data.order_id,
         amountCents: data.amount_cents,
+        currency: data.currency || "INR",
         keyId: data.razorpay_key_id,
         description: product.title,
         prefill: { name: user.name, email: user.email },
@@ -74,7 +75,7 @@ export default function MarketplaceProductPage() {
         onDismiss: () => setBuying(false),
       });
     } catch (e) {
-      toast.error("Could not start checkout");
+      toast.error(e?.response?.data?.detail || "Could not start checkout");
       setBuying(false);
     }
   };
@@ -96,7 +97,7 @@ export default function MarketplaceProductPage() {
     toast.success("Link copied to clipboard");
   };
 
-  const price = (c) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const price = (c) => (c / 100).toLocaleString("en-IN", { style: "currency", currency: product?.currency || "INR" });
 
   if (loading) return (
     <div className="min-h-screen flex flex-col bg-background">

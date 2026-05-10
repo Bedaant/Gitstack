@@ -16,6 +16,8 @@ services:
         sync: false          # fill in Render dashboard
       - key: GITHUB_TOKEN
         sync: false          # optional but strongly recommended — raises rate limit to 5000/hr
+      - key: CLERK_JWKS_URL
+        sync: false          # Clerk JWKS endpoint, e.g. https://<instance>.clerk.accounts.dev/.well-known/jwks.json
       - key: CORS_ORIGINS
         sync: false          # set to your frontend URL, e.g. https://gitstack-app.onrender.com
       - key: NTFY_TOPIC

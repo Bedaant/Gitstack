@@ -2,7 +2,7 @@
 
 > **Version:** 1.5 (Phases 0–12 Complete)  
 > **Last Updated:** May 3, 2026  
-> **Project:** gitstack.dev — Open-source tool discovery platform for non-technical founders
+> **Project:** gitstack.pro — Open-source tool discovery platform for non-technical founders
 
 ---
 
@@ -315,7 +315,7 @@ POST   /marketplace/setup-requests/{id}/status
     "gitstack": {
       "command": "npx",
       "args": ["-y", "@gitstack/mcp"],
-      "env": { "GITSTACK_API_URL": "https://gitstack.dev/api" }
+      "env": { "GITSTACK_API_URL": "https://gitstack.pro/api" }
     }
   }
 }
@@ -490,7 +490,7 @@ GET   /api/users/{user_id}/repos
 **Already Strong:**
 - **Sitemap**: `frontend/public/sitemap.xml` — static + dynamic AI tools pages
 - **JSON-LD**: Homepage has `@context` structured data (WebSite, SoftwareApplication)
-- **Canonical URLs**: SEO component generates `https://gitstack.dev` canonical
+- **Canonical URLs**: SEO component generates `https://gitstack.pro` canonical
 - **Open Graph**: Title, description, image (1200×630), type, site_name on all SEO-wrapped pages
 - **Twitter Cards**: `summary_large_image` on all pages
 - **Breadcrumbs**: JSON-LD breadcrumb schema on tool/repo detail pages
@@ -1008,8 +1008,8 @@ R2_PUBLIC_URL=https://pub-xxx.r2.dev
 REDIS_URL=redis://localhost:6379  # Optional, falls back to in-memory
 
 # Misc
-CORS_ORIGINS=https://gitstack.dev,https://www.gitstack.dev
-FRONTEND_URL=https://gitstack.dev
+CORS_ORIGINS=https://gitstack.pro,https://www.gitstack.pro
+FRONTEND_URL=https://gitstack.pro
 NTFY_TOPIC=gitstack-alerts
 ```
 

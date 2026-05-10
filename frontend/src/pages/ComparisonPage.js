@@ -227,9 +227,9 @@ export default function ComparisonPage() {
                       "@type": "Article",
                       "headline": `${t1} vs ${t2} — Open Source Tool Comparison`,
                       "description": `AI-powered comparison of ${t1} and ${t2} on pricing, setup time, founder-friendliness, and self-hosting difficulty.`,
-                      "url": `https://gitstack.dev/compare?t1=${encodeURIComponent(t1)}&t2=${encodeURIComponent(t2)}`,
+                      "url": `https://gitstack.pro/compare?t1=${encodeURIComponent(t1)}&t2=${encodeURIComponent(t2)}`,
                       "author": { "@type": "Organization", "name": "GitStack" },
-                      "publisher": { "@type": "Organization", "name": "GitStack", "url": "https://gitstack.dev" },
+                      "publisher": { "@type": "Organization", "name": "GitStack", "url": "https://gitstack.pro" },
                       "about": [
                         { "@type": "SoftwareApplication", "name": t1 },
                         { "@type": "SoftwareApplication", "name": t2 }

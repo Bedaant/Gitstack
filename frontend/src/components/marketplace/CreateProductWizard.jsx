@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from "react";
 import axios from "axios";
 import { Pencil, FileText, Image, Upload, Eye, ChevronRight, X } from "lucide-react";
 import { API } from "../../utils/api";
+import { getApiErrorMessage } from "../../utils/getApiErrorMessage";
 import { toast } from "sonner";
 import { useWizardStore } from "../../stores/wizardStore";
 
@@ -13,16 +14,29 @@ const STEPS = [
   { label: "Preview", icon: Eye },
 ];
 
+const CATEGORY_OPTIONS = [
+  { value: "saas", label: "SaaS" },
+  { value: "mcp-server", label: "MCP Server" },
+  { value: "computer-vision", label: "Computer Vision" },
+  { value: "template", label: "Template" },
+  { value: "skill", label: "Skill" },
+  { value: "other", label: "Other" },
+];
+
 export const CreateProductWizard = ({ mode = "create", initialProduct = null, onClose, onSave }) => {
   const {
     step, setStep,
     productId, setField,
-    title, tagline, category, sourcePrice, setupAvailable, setupPrice, setupDays, setupDesc,
+    title, tagline, category, currency, sourcePrice, setupAvailable, setupPrice, setupDays, setupDesc,
     githubRepo, demoVideo, description, screenshots, uploadProgress, saving,
     initFromProduct, reset,
   } = useWizardStore();
 
   const zipRef = useRef(null);
+
+  const parsedSourcePrice = parseFloat(sourcePrice || "0");
+  const parsedSetupPrice = parseFloat(setupPrice || "0");
+  const parsedSetupDays = parseInt(setupDays || "0", 10);
 
   useEffect(() => {
     if (mode === "edit" && initialProduct) {
@@ -33,36 +47,46 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
     return () => reset();
   }, [mode, initialProduct, initFromProduct, reset]);
 
-  const isStep1Valid = title.trim() && tagline.trim() && sourcePrice && parseFloat(sourcePrice) > 0;
+  const isStep1Valid =
+    title.trim().length >= 3 &&
+    tagline.trim().length >= 10 &&
+    sourcePrice &&
+    parsedSourcePrice >= 1 &&
+    parsedSourcePrice <= 1000 &&
+    (!setupAvailable || (parsedSetupPrice >= 1 && parsedSetupPrice <= 1000 && parsedSetupDays >= 1 && setupDesc.trim().length > 0));
   const isStep2Valid = description.trim().length >= 50;
   const isStep3Valid = screenshots.length >= 1;
 
+  const buildProductPayload = () => ({
+    title: title.trim(),
+    tagline: tagline.trim(),
+    category,
+    currency,
+    source_price_cents: Math.round(parsedSourcePrice * 100),
+    setup_available: setupAvailable,
+    setup_price_cents: setupAvailable ? Math.round(parsedSetupPrice * 100) : null,
+    setup_delivery_days: setupAvailable ? parsedSetupDays : null,
+    setup_description: setupAvailable ? setupDesc.trim() : null,
+    github_repo_url: githubRepo.trim() || null,
+    demo_video_url: demoVideo.trim() || null,
+  });
+
   const saveStep1 = async () => {
+    if (mode !== "edit") {
+      setField("step", 1);
+      return;
+    }
+
     setField("saving", true);
     try {
-      const payload = {
-        title: title.trim(),
-        tagline: tagline.trim(),
-        category,
-        source_price_cents: Math.round(parseFloat(sourcePrice) * 100),
-        setup_available: setupAvailable,
-        setup_price_cents: setupAvailable ? Math.round(parseFloat(setupPrice || 0) * 100) : 0,
-        setup_delivery_days: setupAvailable ? parseInt(setupDays, 10) : 0,
-        setup_description: setupAvailable ? setupDesc.trim() : "",
-        github_repo_url: githubRepo.trim() || null,
-        demo_video_url: demoVideo.trim() || null,
-      };
-        if (mode === "edit" && productId) {
+      const payload = buildProductPayload();
+      if (productId) {
         await axios.patch(`${API}/marketplace/products/${productId}`, payload, { withCredentials: true });
-        toast.success("Product updated");
-      } else {
-        const { data } = await axios.post(`${API}/marketplace/products`, payload, { withCredentials: true });
-        setField("productId", data.product_id);
-        toast.success("Product created");
       }
+      toast.success("Product updated");
       setField("step", 1);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to save");
+      toast.error(getApiErrorMessage(err, "Failed to save"));
     } finally {
       setField("saving", false);
     }
@@ -71,28 +95,47 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
   const saveStep2 = async () => {
     setField("saving", true);
     try {
-      await axios.patch(`${API}/marketplace/products/${productId}`, { description: description.trim() }, { withCredentials: true });
-      toast.success("Description saved");
+      if (mode === "edit" && productId) {
+        await axios.patch(`${API}/marketplace/products/${productId}`, { description: description.trim() }, { withCredentials: true });
+        toast.success("Description saved");
+      } else {
+        const payload = {
+          ...buildProductPayload(),
+          description: description.trim(),
+        };
+        const { data } = await axios.post(`${API}/marketplace/products`, payload, { withCredentials: true });
+        setField("productId", data.product_id);
+        toast.success("Product created");
+      }
       setField("step", 2);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to save");
+      toast.error(getApiErrorMessage(err, "Failed to save"));
     } finally {
       setField("saving", false);
     }
   };
 
   const uploadScreenshots = async (files) => {
-    const form = new FormData();
-    Array.from(files).forEach((f) => form.append("files", f));
+    const selectedFiles = Array.from(files || []);
+    if (!selectedFiles.length) return;
+
     try {
-      const { data } = await axios.post(`${API}/marketplace/products/${productId}/screenshots`, form, {
-        withCredentials: true,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setField("screenshots", [...screenshots, ...(data.screenshot_urls || [])]);
-      toast.success("Screenshots uploaded");
+      let latestScreenshots = [...screenshots];
+      for (const file of selectedFiles) {
+        const form = new FormData();
+        form.append("file", file);
+        const { data } = await axios.post(`${API}/marketplace/products/${productId}/screenshots`, form, {
+          withCredentials: true,
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (Array.isArray(data?.screenshots)) {
+          latestScreenshots = data.screenshots;
+        }
+      }
+      setField("screenshots", latestScreenshots);
+      toast.success(selectedFiles.length > 1 ? "Screenshots uploaded" : "Screenshot uploaded");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Upload failed");
+      toast.error(getApiErrorMessage(err, "Upload failed"));
     }
   };
 
@@ -110,7 +153,7 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
       toast.success("Source ZIP uploaded");
       setField("step", 4);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Upload failed");
+      toast.error(getApiErrorMessage(err, "Upload failed"));
     } finally {
       setField("uploadProgress", 0);
     }
@@ -124,7 +167,7 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
       onSave?.();
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to publish");
+      toast.error(getApiErrorMessage(err, "Failed to publish"));
     } finally {
       setField("saving", false);
     }
@@ -137,9 +180,8 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
         <div className="p-5">
           <div className="flex items-center gap-2 mb-6 overflow-x-auto">
             {STEPS.map((s, idx) => (
-              <div key={idx} className={`flex items-center gap-1 text-xs font-black uppercase whitespace-nowrap px-2 py-1 border-2 border-black ${
-                idx === step ? "bg-primary text-primary-foreground" : idx < step ? "bg-pastel-mint" : "bg-muted text-muted-foreground"
-              }`}>
+              <div key={idx} className={`flex items-center gap-1 text-xs font-black uppercase whitespace-nowrap px-2 py-1 border-2 border-black ${idx === step ? "bg-primary text-primary-foreground" : idx < step ? "bg-pastel-mint" : "bg-muted text-muted-foreground"
+                }`}>
                 <s.icon className="w-3 h-3" /> {s.label}
               </div>
             ))}
@@ -155,20 +197,32 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
               <div>
                 <label className="text-xs font-bold block mb-1">Tagline *</label>
                 <input className="neo-input w-full" value={tagline} onChange={(e) => setField("tagline", e.target.value)} placeholder="One-liner value prop" />
+                <p className="text-[11px] text-muted-foreground mt-1">Minimum 10 characters</p>
               </div>
               <div>
                 <label className="text-xs font-bold block mb-1">Category</label>
                 <select className="neo-input w-full" value={category} onChange={(e) => setField("category", e.target.value)}>
-                  {["SaaS", "MCP Servers", "Computer Vision", "Templates", "Skills", "Other"].map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold block mb-1">Source Price ($) *</label>
-                  <input type="number" min="0" step="0.01" className="neo-input w-full" value={sourcePrice} onChange={(e) => setField("sourcePrice", e.target.value)} />
+                  <label className="text-xs font-bold block mb-1">Currency *</label>
+                  <select className="neo-input w-full" value={currency} onChange={(e) => setField("currency", e.target.value)}>
+                    {["INR", "USD", "EUR", "GBP"].map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                 </div>
+                <div>
+                  <label className="text-xs font-bold block mb-1">Source Price *</label>
+                  <input type="number" min="1" max="1000" step="0.01" className="neo-input w-full" value={sourcePrice} onChange={(e) => setField("sourcePrice", e.target.value)} />
+                  <p className="text-[11px] text-muted-foreground mt-1">Min ₹1 · Max ₹1,000</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-end">
                   <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
                     <input type="checkbox" checked={setupAvailable} onChange={(e) => setField("setupAvailable", e.target.checked)} className="w-4 h-4" />
@@ -180,8 +234,8 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
                 <div className="space-y-3 neo-card p-3 bg-pastel-yellow/20">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-bold block mb-1">Setup Price ($)</label>
-                      <input type="number" min="0" step="0.01" className="neo-input w-full" value={setupPrice} onChange={(e) => setField("setupPrice", e.target.value)} />
+                      <label className="text-xs font-bold block mb-1">Setup Price ({currency})</label>
+                      <input type="number" min="1" max="1000" step="0.01" className="neo-input w-full" value={setupPrice} onChange={(e) => setField("setupPrice", e.target.value)} />
                     </div>
                     <div>
                       <label className="text-xs font-bold block mb-1">Delivery (days)</label>

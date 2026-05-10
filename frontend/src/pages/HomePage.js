@@ -22,20 +22,20 @@ const JSON_LD = {
   "@graph": [
     {
       "@type": "WebSite",
-      "@id": "https://gitstack.dev/#website",
-      "url": "https://gitstack.dev",
+      "@id": "https://gitstack.pro/#website",
+      "url": "https://gitstack.pro",
       "name": "GitStack",
       "description": "Free open-source tool discovery and AI-powered stack generation for founders",
       "potentialAction": {
         "@type": "SearchAction",
-        "target": "https://gitstack.dev/stack-generator?idea={search_term_string}",
+        "target": "https://gitstack.pro/stack-generator?idea={search_term_string}",
         "query-input": "required name=search_term_string"
       }
     },
     {
       "@type": "SoftwareApplication",
       "name": "GitStack",
-      "url": "https://gitstack.dev",
+      "url": "https://gitstack.pro",
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "Web",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -49,10 +49,10 @@ const JSON_LD = {
     },
     {
       "@type": "Organization",
-      "@id": "https://gitstack.dev/#organization",
+      "@id": "https://gitstack.pro/#organization",
       "name": "GitStack",
-      "url": "https://gitstack.dev",
-      "logo": "https://gitstack.dev/logo.png",
+      "url": "https://gitstack.pro",
+      "logo": "https://gitstack.pro/logo.png",
       "sameAs": [
         "https://github.com/gitstack",
         "https://twitter.com/gitstackdev"
@@ -116,19 +116,19 @@ const JSON_LD = {
           "@type": "HowToStep",
           "name": "Search or paste a tool name",
           "text": "Enter the paid SaaS tool you want to replace in the search bar, or paste a GitHub repo URL to understand a project.",
-          "url": "https://gitstack.dev"
+          "url": "https://gitstack.pro"
         },
         {
           "@type": "HowToStep",
           "name": "Review AI-powered explanations",
           "text": "GitStack translates GitHub repos into plain English and compares tools on price, setup time, and founder-friendliness.",
-          "url": "https://gitstack.dev/repo-translator"
+          "url": "https://gitstack.pro/repo-translator"
         },
         {
           "@type": "HowToStep",
           "name": "Generate or buy a complete stack",
           "text": "Use the Stack Generator to build a custom tech stack, or browse the marketplace to buy source code + setup services from indie developers.",
-          "url": "https://gitstack.dev/stack-generator"
+          "url": "https://gitstack.pro/stack-generator"
         }
       ]
     }

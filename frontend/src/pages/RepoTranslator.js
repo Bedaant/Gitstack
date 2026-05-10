@@ -161,9 +161,9 @@ export default function RepoTranslator() {
                         "@type": "TechArticle",
                         "headline": `${parsedRepo.owner}/${parsedRepo.repo} Explained in Plain English`,
                         "description": `AI-powered explanation of the ${parsedRepo.repo} GitHub repository. What it does, how it works, and why you might use it.`,
-                        "url": `https://gitstack.dev/r/${parsedRepo.owner}/${parsedRepo.repo}`,
+                        "url": `https://gitstack.pro/r/${parsedRepo.owner}/${parsedRepo.repo}`,
                         "author": { "@type": "Organization", "name": "GitStack" },
-                        "publisher": { "@type": "Organization", "name": "GitStack", "url": "https://gitstack.dev" },
+                        "publisher": { "@type": "Organization", "name": "GitStack", "url": "https://gitstack.pro" },
                         "about": {
                           "@type": "SoftwareSourceCode",
                           "name": parsedRepo.repo,
