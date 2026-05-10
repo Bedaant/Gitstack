@@ -13,6 +13,7 @@ export const SEO = ({
   noindex = false,
   jsonLd = null,
   keywords = null,
+  hreflang = [{ lang: "en", url: `${SITE_URL}${path}` }],
 }) => {
   const fullTitle = title
     ? `${title} — GitStack`
@@ -45,6 +46,10 @@ export const SEO = ({
 
       {noindex ? <meta name="robots" content="noindex,nofollow" /> : <meta name="robots" content="index,follow" />}
       {keywords ? <meta name="keywords" content={keywords} /> : null}
+      {hreflang?.map((h) => (
+        <link key={h.lang} rel="alternate" hrefLang={h.lang} href={h.url} />
+      ))}
+      <link rel="alternate" hrefLang="x-default" href={`${SITE_URL}${path}`} />
       {jsonLd ? <script type="application/ld+json">{JSON.stringify(jsonLd)}</script> : null}
     </Helmet>
   );

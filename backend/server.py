@@ -501,6 +501,40 @@ async def get_tool(tool_id: str):
         raise HTTPException(status_code=404, detail="Tool not found")
     return tool
 
+@api_router.get("/tools/{tool_id}/related")
+@cache(expire=1800)  # 30 min cache
+async def get_related_tools(tool_id: str):
+    """Return related tools based on category/tags for internal linking SEO."""
+    tool = await db.tools.find_one({"tool_id": tool_id}, {"_id": 0, "category": 1, "tags": 1})
+    if not tool:
+        return {"related": []}
+
+    category = tool.get("category", "")
+    tags = tool.get("tags", []) or []
+
+    or_conditions = []
+    if category:
+        or_conditions.append({"category": {"$regex": re.escape(category), "$options": "i"}})
+    for tag in tags[:5]:
+        if tag:
+            or_conditions.append({"tags": {"$regex": re.escape(tag), "$options": "i"}})
+
+    if not or_conditions:
+        # Fallback: return trending tools
+        related = await db.tools.find(
+            {"tool_id": {"$ne": tool_id}},
+            {"_id": 0, "tool_id": 1, "name": 1, "description": 1, "stars": 1}
+        ).sort("stars", -1).limit(4).to_list(4)
+        return {"related": related}
+
+    related = await db.tools.find(
+        {"$or": or_conditions, "tool_id": {"$ne": tool_id}},
+        {"_id": 0, "tool_id": 1, "name": 1, "description": 1, "stars": 1}
+    ).sort("stars", -1).limit(4).to_list(4)
+
+    return {"related": related}
+
+
 @api_router.get("/tools/trending/list")
 async def get_trending_tools(tab: str = "top_week", language: str = ""):
     """Get real trending repos from GitHub or cache"""
@@ -3055,6 +3089,383 @@ async def seed_database():
             "tags": ["time-tracking", "productivity", "billing"],
             "paid_alternative": "Toggl",
             "monthly_cost": "$9/user/mo"
+        },
+        # CRM
+        {
+            "tool_id": "twenty",
+            "name": "Twenty",
+            "description": "Modern open-source CRM. Manage leads, deals, and customer relationships.",
+            "who_its_for": "Sales teams and founders who need a simple CRM",
+            "what_you_can_build": ["Sales pipeline", "Contact management", "Deal tracking"],
+            "difficulty": "Beginner",
+            "setup_time": "15 mins",
+            "setup_steps": ["Sign up at twenty.com or self-host", "Import your contacts", "Set up your pipeline"],
+            "related_tools": ["erpnext", "nocodb", "n8n"],
+            "github_url": "https://github.com/twentyhq/twenty",
+            "stars": "18.5k",
+            "language": "TypeScript",
+            "category": "CRM",
+            "tags": ["crm", "sales", "contacts", "hubspot-alternative"],
+            "paid_alternative": "HubSpot",
+            "monthly_cost": "$45/mo"
+        },
+        # Project Management
+        {
+            "tool_id": "plane",
+            "name": "Plane",
+            "description": "Plan, track, and manage issues like Jira but simpler. Great for agile teams.",
+            "who_its_for": "Development teams and product managers",
+            "what_you_can_build": ["Issue tracking", "Sprint planning", "Roadmaps"],
+            "difficulty": "Beginner",
+            "setup_time": "15 mins",
+            "setup_steps": ["Deploy Plane", "Create your first project", "Add issues and sprints"],
+            "related_tools": ["focalboard", "outline", "n8n"],
+            "github_url": "https://github.com/makeplane/plane",
+            "stars": "29.5k",
+            "language": "TypeScript",
+            "category": "Project Management",
+            "tags": ["project-management", "jira-alternative", "agile", "issues"],
+            "paid_alternative": "Jira",
+            "monthly_cost": "$7.75/user/mo"
+        },
+        {
+            "tool_id": "focalboard",
+            "name": "Focalboard",
+            "description": "Open-source project management like Trello or Asana. Kanban boards with custom views.",
+            "who_its_for": "Teams who need simple kanban boards and task management",
+            "what_you_can_build": ["Kanban boards", "Task lists", "Project timelines"],
+            "difficulty": "Beginner",
+            "setup_time": "10 mins",
+            "setup_steps": ["Deploy Focalboard", "Create a board", "Add tasks and columns"],
+            "related_tools": ["plane", "outline", "n8n"],
+            "github_url": "https://github.com/mattermost/focalboard",
+            "stars": "22.1k",
+            "language": "TypeScript",
+            "category": "Project Management",
+            "tags": ["kanban", "trello-alternative", "asana-alternative", "task-management"],
+            "paid_alternative": "Trello",
+            "monthly_cost": "$5/user/mo"
+        },
+        # Video Conferencing
+        {
+            "tool_id": "jitsi",
+            "name": "Jitsi Meet",
+            "description": "Secure video conferencing that works in your browser. No account needed.",
+            "who_its_for": "Teams who need private video calls without Zoom's pricing",
+            "what_you_can_build": ["Video meetings", "Webinars", "Conference rooms"],
+            "difficulty": "Beginner",
+            "setup_time": "5 mins",
+            "setup_steps": ["Use meet.jit.si or self-host", "Create a room", "Share the link"],
+            "related_tools": ["cal-com", "nextcloud", "element"],
+            "github_url": "https://github.com/jitsi/jitsi-meet",
+            "stars": "23.8k",
+            "language": "JavaScript",
+            "category": "Communication",
+            "tags": ["video", "conferencing", "zoom-alternative", "meetings"],
+            "paid_alternative": "Zoom",
+            "monthly_cost": "$14/mo"
+        },
+        # Cloud Storage
+        {
+            "tool_id": "nextcloud",
+            "name": "Nextcloud",
+            "description": "Self-hosted file sync and share. Your own Google Drive or Dropbox.",
+            "who_its_for": "Teams who want full control over their files and data",
+            "what_you_can_build": ["File storage", "Document collaboration", "Calendar and contacts"],
+            "difficulty": "Intermediate",
+            "setup_time": "30 mins",
+            "setup_steps": ["Deploy Nextcloud", "Install desktop/mobile apps", "Start syncing"],
+            "related_tools": ["owncloud", "seafile", "cryptpad"],
+            "github_url": "https://github.com/nextcloud/server",
+            "stars": "26.4k",
+            "language": "PHP",
+            "category": "Storage",
+            "tags": ["storage", "cloud", "dropbox-alternative", "gdrive-alternative"],
+            "paid_alternative": "Dropbox",
+            "monthly_cost": "$12/mo"
+        },
+        # Social Media
+        {
+            "tool_id": "buffer-oss",
+            "name": "Mixpost",
+            "description": "Self-hosted social media management. Schedule posts across all platforms.",
+            "who_its_for": "Marketing teams and creators managing multiple social accounts",
+            "what_you_can_build": ["Social scheduling", "Content calendar", "Analytics"],
+            "difficulty": "Intermediate",
+            "setup_time": "20 mins",
+            "setup_steps": ["Deploy Mixpost", "Connect social accounts", "Schedule your first post"],
+            "related_tools": ["ghostcms", "plausible", "n8n"],
+            "github_url": "https://github.com/inovector/mixpost",
+            "stars": "2.8k",
+            "language": "PHP",
+            "category": "Marketing",
+            "tags": ["social-media", "scheduling", "buffer-alternative", "hootsuite-alternative"],
+            "paid_alternative": "Buffer",
+            "monthly_cost": "$6/mo"
+        },
+        # SEO
+        {
+            "tool_id": "serp-review",
+            "name": "SERPRobot",
+            "description": "Track your Google rankings. Simple SEO position tracking without the bloat.",
+            "who_its_for": "Founders and marketers tracking keyword rankings",
+            "what_you_can_build": ["Rank tracking", "SERP monitoring", "Competitor analysis"],
+            "difficulty": "Beginner",
+            "setup_time": "10 mins",
+            "setup_steps": ["Add your keywords", "Add competitor URLs", "Check daily rankings"],
+            "related_tools": ["plausible", "umami", "posthog"],
+            "github_url": "https://github.com/serprobot/serp-robot",
+            "stars": "1.2k",
+            "language": "Python",
+            "category": "Marketing",
+            "tags": ["seo", "rank-tracking", "ahrefs-alternative", "semrush-alternative"],
+            "paid_alternative": "Ahrefs",
+            "monthly_cost": "$99/mo"
+        },
+        # Customer Support
+        {
+            "tool_id": "chatwoot",
+            "name": "Chatwoot",
+            "description": "Customer support platform with live chat, email, and social in one inbox.",
+            "who_its_for": "Support teams who want an Intercom or Zendesk alternative",
+            "what_you_can_build": ["Live chat", "Email support", "Help desk"],
+            "difficulty": "Intermediate",
+            "setup_time": "20 mins",
+            "setup_steps": ["Deploy Chatwoot", "Connect channels", "Add your team"],
+            "related_tools": ["formbricks", "n8n", "plane"],
+            "github_url": "https://github.com/chatwoot/chatwoot",
+            "stars": "21.3k",
+            "language": "Ruby",
+            "category": "Support",
+            "tags": ["support", "live-chat", "intercom-alternative", "zendesk-alternative"],
+            "paid_alternative": "Intercom",
+            "monthly_cost": "$74/mo"
+        },
+        # Video Hosting
+        {
+            "tool_id": "peertube",
+            "name": "PeerTube",
+            "description": "Decentralized video hosting. Your own YouTube or Vimeo without the ads.",
+            "who_its_for": "Creators and businesses hosting video content",
+            "what_you_can_build": ["Video platform", "Course hosting", "Internal video library"],
+            "difficulty": "Intermediate",
+            "setup_time": "30 mins",
+            "setup_steps": ["Deploy PeerTube", "Configure storage", "Upload videos"],
+            "related_tools": ["nextcloud", "jitsi", "ghostcms"],
+            "github_url": "https://github.com/Chocobozzz/PeerTube",
+            "stars": "13.2k",
+            "language": "TypeScript",
+            "category": "Media",
+            "tags": ["video", "hosting", "youtube-alternative", "vimeo-alternative"],
+            "paid_alternative": "Vimeo",
+            "monthly_cost": "$12/mo"
+        },
+        # E-learning
+        {
+            "tool_id": "moodle",
+            "name": "Moodle",
+            "description": "The world's most popular learning management system. Build courses and quizzes.",
+            "who_its_for": "Educators and businesses creating online courses",
+            "what_you_can_build": ["Online courses", "Quizzes", "Student portals"],
+            "difficulty": "Intermediate",
+            "setup_time": "30 mins",
+            "setup_steps": ["Deploy Moodle", "Create a course", "Add students"],
+            "related_tools": ["outline", "formbricks", "ghostcms"],
+            "github_url": "https://github.com/moodle/moodle",
+            "stars": "38.1k",
+            "language": "PHP",
+            "category": "Education",
+            "tags": ["lms", "courses", "teachable-alternative", "thinkific-alternative"],
+            "paid_alternative": "Teachable",
+            "monthly_cost": "$39/mo"
+        },
+        # Design
+        {
+            "tool_id": "penpot",
+            "name": "Penpot",
+            "description": "Design and prototyping tool for teams. Open-source Figma alternative.",
+            "who_its_for": "Designers and product teams who need collaborative design",
+            "what_you_can_build": ["UI designs", "Prototypes", "Design systems"],
+            "difficulty": "Beginner",
+            "setup_time": "10 mins",
+            "setup_steps": ["Use penpot.app or self-host", "Create a project", "Start designing"],
+            "related_tools": ["webstudio", "nextjs", "shadcn"],
+            "github_url": "https://github.com/penpot/penpot",
+            "stars": "34.2k",
+            "language": "Clojure",
+            "category": "Design",
+            "tags": ["design", "prototyping", "figma-alternative", "ui"],
+            "paid_alternative": "Figma",
+            "monthly_cost": "$12/mo"
+        },
+        {
+            "tool_id": "inkscape",
+            "name": "Inkscape",
+            "description": "Professional vector graphics editor. Free alternative to Adobe Illustrator.",
+            "who_its_for": "Designers creating logos, icons, and illustrations",
+            "what_you_can_build": ["Vector graphics", "Logos", "Icons", "Illustrations"],
+            "difficulty": "Intermediate",
+            "setup_time": "5 mins",
+            "setup_steps": ["Download Inkscape", "Install on your machine", "Start creating"],
+            "related_tools": ["penpot", "gimp", "blender"],
+            "github_url": "https://github.com/inkscape/inkscape",
+            "stars": "8.9k",
+            "language": "C++",
+            "category": "Design",
+            "tags": ["vector", "illustration", "illustrator-alternative", "graphics"],
+            "paid_alternative": "Adobe Illustrator",
+            "monthly_cost": "$22/mo"
+        },
+        # Code Collaboration
+        {
+            "tool_id": "gitea",
+            "name": "Gitea",
+            "description": "Lightweight Git hosting. Your own GitHub for private repos.",
+            "who_its_for": "Teams who want private Git hosting without GitHub's pricing",
+            "what_you_can_build": ["Git hosting", "Code review", "CI/CD pipelines"],
+            "difficulty": "Intermediate",
+            "setup_time": "20 mins",
+            "setup_steps": ["Deploy Gitea", "Configure authentication", "Push your first repo"],
+            "related_tools": ["forgejo", "drone", "plane"],
+            "github_url": "https://github.com/go-gitea/gitea",
+            "stars": "46.1k",
+            "language": "Go",
+            "category": "Development",
+            "tags": ["git", "hosting", "github-alternative", "devops"],
+            "paid_alternative": "GitHub Team",
+            "monthly_cost": "$4/user/mo"
+        },
+        # Database
+        {
+            "tool_id": "nocodb",
+            "name": "NocoDB",
+            "description": "Turn any database into a smart spreadsheet. Airtable alternative that connects to PostgreSQL, MySQL, and more.",
+            "who_its_for": "Non-technical teams who need to manage structured data",
+            "what_you_can_build": ["Smart spreadsheets", "Database GUIs", "Internal tools"],
+            "difficulty": "Beginner",
+            "setup_time": "15 mins",
+            "setup_steps": ["Deploy NocoDB", "Connect your database", "Create views"],
+            "related_tools": ["supabase", "baserow", "n8n"],
+            "github_url": "https://github.com/nocodb/nocodb",
+            "stars": "48.2k",
+            "language": "TypeScript",
+            "category": "Database",
+            "tags": ["database", "spreadsheet", "airtable-alternative", "low-code"],
+            "paid_alternative": "Airtable",
+            "monthly_cost": "$20/mo"
+        },
+        {
+            "tool_id": "baserow",
+            "name": "Baserow",
+            "description": "Open-source no-code database. Build apps and manage data without coding.",
+            "who_its_for": "Founders who need a flexible database without Airtable's limits",
+            "what_you_can_build": ["No-code apps", "Database backends", "Internal tools"],
+            "difficulty": "Beginner",
+            "setup_time": "15 mins",
+            "setup_steps": ["Deploy Baserow", "Create a database", "Build your first view"],
+            "related_tools": ["nocodb", "supabase", "n8n"],
+            "github_url": "https://github.com/bram2w/baserow",
+            "stars": "2.1k",
+            "language": "Python",
+            "category": "Database",
+            "tags": ["database", "no-code", "airtable-alternative", "apps"],
+            "paid_alternative": "Airtable",
+            "monthly_cost": "$20/mo"
+        },
+        # Documentation
+        {
+            "tool_id": "docusaurus",
+            "name": "Docusaurus",
+            "description": "Build beautiful documentation sites quickly. Made by Meta (Facebook).",
+            "who_its_for": "Developers and product teams who need docs and blogs",
+            "what_you_can_build": ["Documentation sites", "Blogs", "Landing pages"],
+            "difficulty": "Intermediate",
+            "setup_time": "20 mins",
+            "setup_steps": ["Install Docusaurus", "Write your docs in Markdown", "Deploy to Vercel"],
+            "related_tools": ["astro", "nextjs", "outline"],
+            "github_url": "https://github.com/facebook/docusaurus",
+            "stars": "56.3k",
+            "language": "TypeScript",
+            "category": "Documentation",
+            "tags": ["docs", "documentation", "gitbook-alternative", "readme-alternative"],
+            "paid_alternative": "GitBook",
+            "monthly_cost": "$6.70/user/mo"
+        },
+        # CI/CD
+        {
+            "tool_id": "drone",
+            "name": "Drone CI",
+            "description": "Container-native continuous integration. Self-hosted CI/CD pipelines.",
+            "who_its_for": "DevOps teams who want CI/CD without GitHub Actions limits",
+            "what_you_can_build": ["CI/CD pipelines", "Automated testing", "Deployment workflows"],
+            "difficulty": "Advanced",
+            "setup_time": "30 mins",
+            "setup_steps": ["Deploy Drone", "Connect to your Git provider", "Write .drone.yml"],
+            "related_tools": ["gitea", "argo", "jenkins"],
+            "github_url": "https://github.com/harness/drone",
+            "stars": "28.4k",
+            "language": "Go",
+            "category": "DevOps",
+            "tags": ["cicd", "devops", "github-actions-alternative", "automation"],
+            "paid_alternative": "GitHub Actions",
+            "monthly_cost": "$0.008/minute"
+        },
+        # File Transfer
+        {
+            "tool_id": "snapdrop",
+            "name": "Snapdrop",
+            "description": "Local file sharing in your browser. Like AirDrop but works everywhere.",
+            "who_its_for": "Anyone who needs to transfer files between devices quickly",
+            "what_you_can_build": ["File transfers", "Cross-device sharing", "Local network tools"],
+            "difficulty": "Beginner",
+            "setup_time": "5 mins",
+            "setup_steps": ["Open snapdrop.net or self-host", "Open on both devices", "Drop files"],
+            "related_tools": ["nextcloud", "filebrowser", "syncthing"],
+            "github_url": "https://github.com/RobinLinus/Snapdrop",
+            "stars": "17.6k",
+            "language": "JavaScript",
+            "category": "Utilities",
+            "tags": ["file-sharing", "airdrop-alternative", "transfer", "p2p"],
+            "paid_alternative": "WeTransfer",
+            "monthly_cost": "$12/mo"
+        },
+        # URL Shortener
+        {
+            "tool_id": "shlink",
+            "name": "Shlink",
+            "description": "Self-hosted URL shortener with analytics. Track clicks on your links.",
+            "who_its_for": "Marketers and founders who need branded short links",
+            "what_you_can_build": ["Short links", "Click analytics", "QR codes"],
+            "difficulty": "Intermediate",
+            "setup_time": "15 mins",
+            "setup_steps": ["Deploy Shlink", "Configure your domain", "Start shortening"],
+            "related_tools": ["plausible", "umami", "posthog"],
+            "github_url": "https://github.com/shlinkio/shlink",
+            "stars": "8.3k",
+            "language": "PHP",
+            "category": "Marketing",
+            "tags": ["url-shortener", "bitly-alternative", "analytics", "links"],
+            "paid_alternative": "Bitly",
+            "monthly_cost": "$8/mo"
+        },
+        # Form Backend
+        {
+            "tool_id": "formkit",
+            "name": "FormKit",
+            "description": "Form backend for static sites. Receive form submissions without a server.",
+            "who_its_for": "Developers with static sites who need form handling",
+            "what_you_can_build": ["Contact forms", "Survey backends", "Lead capture"],
+            "difficulty": "Beginner",
+            "setup_time": "10 mins",
+            "setup_steps": ["Sign up for FormKit or self-host", "Point your form to the endpoint", "Check submissions"],
+            "related_tools": ["formbricks", "n8n", "nocodb"],
+            "github_url": "https://github.com/formkit/formkit",
+            "stars": "4.2k",
+            "language": "TypeScript",
+            "category": "Utilities",
+            "tags": ["forms", "backend", "typeform-alternative", "static-sites"],
+            "paid_alternative": "Typeform",
+            "monthly_cost": "$25/mo"
         },
     ]
 

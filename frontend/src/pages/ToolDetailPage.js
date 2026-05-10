@@ -11,6 +11,7 @@ import { API } from "../utils/api";
 import { saveStackLocally, isStackSaved } from "../utils/localStacks";
 import { useAuth } from "../context/AuthContext";
 import { GitHubLink } from "../components/ui/GitHubLink";
+import { RelatedTools } from "../components/RelatedTools";
 import { Helmet } from "react-helmet-async";
 
 export default function ToolDetailPage() {
@@ -282,6 +283,8 @@ export default function ToolDetailPage() {
               </div>
             </div>
           )}
+
+          <RelatedTools toolId={toolId} />
         </div>
       </main>
       <Footer />
