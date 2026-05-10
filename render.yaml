@@ -46,6 +46,8 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false          # set to https://gitstack.pro
+      - key: EMAIL_TOKEN_SECRET
+        sync: false          # generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
 
   # ── Cron: Daily Drop ────────────────────────────────────────────
   - type: cron
@@ -72,6 +74,8 @@ services:
         value: "true"
       - key: FRONTEND_URL
         value: https://gitstack.pro
+      - key: EMAIL_TOKEN_SECRET
+        sync: false
 
   # ── Cron: Onboarding Drip ───────────────────────────────────────
   - type: cron
@@ -98,6 +102,8 @@ services:
         value: "true"
       - key: FRONTEND_URL
         value: https://gitstack.pro
+      - key: EMAIL_TOKEN_SECRET
+        sync: false
 
   # ── Frontend (React static site) ──────────────────────────────
   - type: web
