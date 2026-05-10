@@ -1,0 +1,21 @@
+{
+  "posts": [
+    {
+      "slug": "what-is-gitstack",
+      "title": "What is GitStack? A Founder's Guide to Open-Source Tool Discovery",
+      "description": "Discover how GitStack helps non-technical founders find, understand, and deploy free open-source tools without writing code.",
+      "date": "2026-05-10",
+      "author": "GitStack Team",
+      "tags": [
+        "open-source",
+        "founders",
+        "no-code",
+        "tools"
+      ],
+      "image": "/og-image.svg",
+      "body": "# What is GitStack? A Founder's Guide to Open-Source Tool Discovery\n\nBuilding a startup used to mean spending thousands of dollars on SaaS subscriptions. GitStack changes the game by helping non-technical founders discover and deploy free, open-source alternatives to expensive software.\n\n## The Problem: SaaS Costs Are Crushing Founders\n\nThe average startup spends over $20,000/year on software before making a single dollar. Email tools, CRMs, analytics, scheduling — it all adds up fast.\n\n## The Solution: Open Source, Simplified\n\nGitStack is the layer between GitHub tools existing and you actually using them. We:\n\n- **Curate** 600+ open-source tools reviewed for founder-friendliness\n- **Explain** complex repos in plain English using AI\n- **Generate** complete tech stacks tailored to your idea\n- **Translate** any GitHub repo into a non-technical brief\n\n## Key Features\n\n### Stack Generator\nTell us what you're building, and we'll recommend the perfect open-source stack.\n\n### Repo Translator\nPaste any GitHub URL and get a plain-English explanation of what it does.\n\n### Dead Tool Detector\nAvoid abandoned projects. We flag repos that haven't been updated recently.\n\n## Who Is GitStack For?\n\n- Non-technical founders who want to build without developers\n- Indie hackers looking to reduce monthly burn\n- Small teams who need enterprise-grade tools on a $0 budget\n\n## Get Started\n\nVisit [gitstack.pro](https://gitstack.pro) and try the Stack Generator — no signup required."
+    }
+  ],
+  "total": 1,
+  "generatedAt": "2026-05-10T19:22:23.090Z"
+}

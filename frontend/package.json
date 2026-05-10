@@ -68,7 +68,9 @@
   },
   "scripts": {
     "start": "craco start",
-    "build": "npm run build:xray && craco build",
+    "build": "npm run build:sitemap && npm run build:blog && npm run build:xray && craco build",
+    "build:sitemap": "node ../scripts/generate-sitemap.js",
+    "build:blog": "node ../scripts/build-blog.js",
     "build:xray": "node ../scripts/build-xray.js",
     "test": "craco test"
   },

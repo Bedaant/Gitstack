@@ -43,6 +43,9 @@ import EmbedRepoPage from "./pages/EmbedRepoPage";
 import RepoXrayPage from "./pages/RepoXrayPage";
 import ReadmeBadgePage from "./pages/ReadmeBadgePage";
 import { TermsPage, PrivacyPage, AboutPage } from "./pages/LegalPage";
+import BlogListPage from "./pages/BlogListPage";
+import BlogPostPage from "./pages/BlogPostPage";
+import FaqPage from "./pages/FaqPage";
 
 const MeRedirect = () => {
   const { user, loading } = useAuth();
@@ -111,6 +114,9 @@ const AppRouter = () => {
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/about" element={<AboutPage />} />
+      <Route path="/blog" element={<BlogListPage />} />
+      <Route path="/blog/:slug" element={<BlogPostPage />} />
+      <Route path="/faq" element={<FaqPage />} />
       <Route path="/u/:userId" element={<UserProfilePage />} />
       <Route path="/s/:slug" element={<PublicStackPage />} />
       {/* gitstack.pro/:owner/:repo shortlink — must be last before the 404 catch-all */}
