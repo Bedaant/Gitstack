@@ -2241,32 +2241,44 @@ GLOBAL_SEED_TOPICS = [
 ]
 
 @api_router.post("/seed")
-async def seed_database():
-    """Seed the database with initial tools, topics, and collections"""
+@api_router.get("/seed")
+async def seed_database(force: bool = False):
+    """Seed the database with initial tools, topics, and collections.
+    Pass ?force=true to add new tools without deleting existing data."""
 
-    # Check if already seeded - use a lock document
     lock = await db.seed_lock.find_one({"_id": "seed_lock"})
-    if lock and lock.get("seeded"):
-        # Always re-seed topics (lightweight, ensures new categories appear)
+    already_seeded = lock and lock.get("seeded")
+
+    if already_seeded and not force:
         await db.topics.delete_many({})
         await db.topics.insert_many(GLOBAL_SEED_TOPICS)
         existing = await db.tools.count_documents({})
-        return {"message": "Database already seeded, topics refreshed", "tools_count": existing}
+        return {"message": "Already seeded. Use ?force=true to add new tools.", "tools_count": existing}
 
-    # Set lock immediately to prevent race conditions
     await db.seed_lock.update_one(
         {"_id": "seed_lock"},
         {"$set": {"seeded": True, "timestamp": datetime.now(timezone.utc).isoformat()}},
         upsert=True
     )
 
-    # Clear and seed Topics
     await db.topics.delete_many({})
     await db.topics.insert_many(GLOBAL_SEED_TOPICS)
 
-    # Clear and seed Tools
+    if force and already_seeded:
+        existing_ids = {t["tool_id"] async for t in db.tools.find({}, {"tool_id": 1})}
+        new_tools = [t for t in tools if t["tool_id"] not in existing_ids]
+        if new_tools:
+            await db.tools.insert_many(new_tools)
+        return {
+            "message": f"Added {len(new_tools)} new tools.",
+            "new_tools": [t["tool_id"] for t in new_tools],
+            "total_tools": await db.tools.count_documents({})
+        }
+
     await db.tools.delete_many({})
-    tools = [
+    await db.tools.insert_many(tools)
+
+tools = [
         # Forms & Surveys
         {
             "tool_id": "formbricks",
@@ -3469,11 +3481,8 @@ async def seed_database():
         },
     ]
 
-    await db.tools.delete_many({})
-    await db.tools.insert_many(tools)
-
-    # Seed Collections
-    collections = [
+# Seed Collections
+collections = [
         {
             "collection_id": "saas-waitlist",
             "title": "Build a SaaS Waitlist in 2 Days",
@@ -3530,44 +3539,36 @@ async def seed_database():
         },
     ]
 
-    await db.collections.delete_many({})
-    await db.collections.insert_many(collections)
-
-    # Seed some public stacks
-    public_stacks = [
-        {
-            "stack_id": "stack_cal_founder",
-            "user_id": "system",
-            "name": "What Cal.com Used",
-            "tools": ["nextjs", "supabase", "shadcn", "plausible"],
-            "is_public": True,
-            "copy_count": 1243,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        },
-        {
-            "stack_id": "stack_indie_saas",
-            "user_id": "system",
-            "name": "Indie SaaS Starter",
-            "tools": ["nextjs", "supabase", "authjs", "shadcn", "plausible"],
-            "is_public": True,
-            "copy_count": 856,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        },
-        {
-            "stack_id": "stack_ai_startup",
-            "user_id": "system",
-            "name": "AI Startup Stack",
-            "tools": ["langchain", "flowise", "supabase", "nextjs"],
-            "is_public": True,
-            "copy_count": 432,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        },
-    ]
-
-    await db.user_stacks.delete_many({"user_id": "system"})
-    await db.user_stacks.insert_many(public_stacks)
-
-    return {"message": "Database seeded successfully", "tools_count": len(tools), "topics_count": len(topics), "collections_count": len(collections)}
+# Seed some public stacks
+public_stacks = [
+    {
+        "stack_id": "stack_cal_founder",
+        "user_id": "system",
+        "name": "What Cal.com Used",
+        "tools": ["nextjs", "supabase", "shadcn", "plausible"],
+        "is_public": True,
+        "copy_count": 1243,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    },
+    {
+        "stack_id": "stack_indie_saas",
+        "user_id": "system",
+        "name": "Indie SaaS Starter",
+        "tools": ["nextjs", "supabase", "authjs", "shadcn", "plausible"],
+        "is_public": True,
+        "copy_count": 856,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    },
+    {
+        "stack_id": "stack_ai_startup",
+        "user_id": "system",
+        "name": "AI Startup Stack",
+        "tools": ["langchain", "flowise", "supabase", "nextjs"],
+        "is_public": True,
+        "copy_count": 432,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    },
+]
 
 # ==================== ROOT ====================
 
