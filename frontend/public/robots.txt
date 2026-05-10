@@ -5,6 +5,19 @@ Allow: /
 Disallow: /dashboard
 Disallow: /sell
 Disallow: /u/me
+Disallow: /preferences
+Disallow: /unsubscribe
+Disallow: /api/
+
+# Bing-specific (respects Crawl-delay)
+User-agent: Bingbot
+Crawl-delay: 1
+Allow: /
+Disallow: /dashboard
+Disallow: /sell
+Disallow: /u/me
+Disallow: /preferences
+Disallow: /unsubscribe
 
 Host: https://gitstack.pro
 

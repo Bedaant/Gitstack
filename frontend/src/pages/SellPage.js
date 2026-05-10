@@ -144,7 +144,7 @@ export default function SellPage() {
   if (!data?.onboarded) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
-        <SEO title="Sell on GitStack" description="List your indie dev tools on GitStack marketplace." />
+        <SEO title="Sell on GitStack" description="List your indie dev tools on GitStack marketplace." noindex />
         <Header />
         <main className="flex-1 py-10 px-4"><OnboardingCard onDone={fetchDashboard} /></main>
         <Footer />
@@ -154,7 +154,7 @@ export default function SellPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <SEO title="Seller Dashboard — GitStack" description="Manage your listings, setup jobs, and earnings." />
+      <SEO title="Seller Dashboard — GitStack" description="Manage your listings, setup jobs, and earnings." noindex />
       <Header />
       <main className="flex-1 max-w-7xl mx-auto px-4 md:px-8 py-10 w-full">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">

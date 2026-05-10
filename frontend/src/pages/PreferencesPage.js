@@ -5,6 +5,7 @@ import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { API } from "../utils/api";
 import { Loader2, CheckCircle2, AlertTriangle, Save, Mail, Bell, Package } from "lucide-react";
+import { SEO } from "../components/SEO";
 
 export default function PreferencesPage() {
   const [searchParams] = useSearchParams();
@@ -136,6 +137,7 @@ export default function PreferencesPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO title="Email Preferences" noindex />
       <Header />
       <main className="flex-1 px-4 py-12">
         <div className="max-w-lg mx-auto">

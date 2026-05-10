@@ -1,0 +1,16 @@
+{
+  "slug": "how-to-self-host-n8n",
+  "title": "How to Self-Host n8n in 10 Minutes",
+  "description": "Step-by-step guide to deploying n8n on Railway, Render, or Docker. Start automating for free today.",
+  "date": "2026-05-08",
+  "author": "GitStack Team",
+  "tags": [
+    "n8n",
+    "self-hosting",
+    "automation",
+    "tutorial",
+    "railway"
+  ],
+  "image": "/og-image.svg",
+  "body": "# How to Self-Host n8n in 10 Minutes\n\nn8n is the most popular open-source alternative to Zapier. This guide walks you through deploying it on Railway — the fastest, easiest method.\n\n## Prerequisites\n\n- A Railway account (free tier works)\n- A GitHub account\n\n## Step 1: Fork the n8n Template\n\nRailway has a one-click n8n template. Search \"n8n\" in Railway's template library and click Deploy.\n\n## Step 2: Configure Environment Variables\n\nSet these required variables:\n\n- `N8N_BASIC_AUTH_ACTIVE`: true\n- `N8N_BASIC_AUTH_USER`: your-username\n- `N8N_BASIC_AUTH_PASSWORD`: your-secure-password\n- `WEBHOOK_URL`: Your Railway domain (e.g., https://n8n-production.up.railway.app)\n\n## Step 3: Deploy\n\nClick Deploy. Railway will build and start n8n automatically. In 2–3 minutes, visit your domain and log in.\n\n## Step 4: Create Your First Workflow\n\n1. Click \"Add Workflow\"\n2. Choose a trigger (e.g., Schedule, Webhook, or HTTP Request)\n3. Add nodes for the services you want to connect\n4. Activate the workflow\n\n## Alternative: Docker Deploy\n\nIf you prefer full control, run:\n\n```bash\ndocker run -it --rm \\\n  --name n8n \\\n  -p 5678:5678 \\\n  -v ~/.n8n:/home/node/.n8n \\\n  n8nio/n8n\n```\n\n## Next Steps\n\n- Set up HTTPS with a custom domain\n- Configure SMTP for email notifications\n- Explore the 400+ built-in integrations\n\nNeed help choosing the right automation stack? Use GitStack's Stack Generator to get a personalized recommendation."
+}

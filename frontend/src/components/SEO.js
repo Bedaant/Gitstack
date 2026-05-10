@@ -12,6 +12,7 @@ export const SEO = ({
   ogType = "website",
   noindex = false,
   jsonLd = null,
+  keywords = null,
 }) => {
   const fullTitle = title
     ? `${title} — GitStack`
@@ -43,6 +44,7 @@ export const SEO = ({
       <meta name="twitter:site" content="@gitstack" />
 
       {noindex ? <meta name="robots" content="noindex,nofollow" /> : <meta name="robots" content="index,follow" />}
+      {keywords ? <meta name="keywords" content={keywords} /> : null}
       {jsonLd ? <script type="application/ld+json">{JSON.stringify(jsonLd)}</script> : null}
     </Helmet>
   );

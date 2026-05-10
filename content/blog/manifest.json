@@ -14,8 +14,56 @@
       ],
       "image": "/og-image.svg",
       "body": "# What is GitStack? A Founder's Guide to Open-Source Tool Discovery\n\nBuilding a startup used to mean spending thousands of dollars on SaaS subscriptions. GitStack changes the game by helping non-technical founders discover and deploy free, open-source alternatives to expensive software.\n\n## The Problem: SaaS Costs Are Crushing Founders\n\nThe average startup spends over $20,000/year on software before making a single dollar. Email tools, CRMs, analytics, scheduling — it all adds up fast.\n\n## The Solution: Open Source, Simplified\n\nGitStack is the layer between GitHub tools existing and you actually using them. We:\n\n- **Curate** 600+ open-source tools reviewed for founder-friendliness\n- **Explain** complex repos in plain English using AI\n- **Generate** complete tech stacks tailored to your idea\n- **Translate** any GitHub repo into a non-technical brief\n\n## Key Features\n\n### Stack Generator\nTell us what you're building, and we'll recommend the perfect open-source stack.\n\n### Repo Translator\nPaste any GitHub URL and get a plain-English explanation of what it does.\n\n### Dead Tool Detector\nAvoid abandoned projects. We flag repos that haven't been updated recently.\n\n## Who Is GitStack For?\n\n- Non-technical founders who want to build without developers\n- Indie hackers looking to reduce monthly burn\n- Small teams who need enterprise-grade tools on a $0 budget\n\n## Get Started\n\nVisit [gitstack.pro](https://gitstack.pro) and try the Stack Generator — no signup required."
+    },
+    {
+      "slug": "top-5-zapier-alternatives",
+      "title": "Top 5 Free Open-Source Alternatives to Zapier",
+      "description": "Replace Zapier with these powerful free automation tools. Self-host your workflows and save thousands per year.",
+      "date": "2026-05-09",
+      "author": "GitStack Team",
+      "tags": [
+        "automation",
+        "zapier",
+        "n8n",
+        "open-source",
+        "alternatives"
+      ],
+      "image": "/og-image.svg",
+      "body": "# Top 5 Free Open-Source Alternatives to Zapier\n\nZapier is great — until you hit their pricing. At $20–$100/month for serious automation, costs add up fast. Here are 5 free, open-source alternatives that give you the same power without the monthly bill.\n\n## 1. n8n — The Visual Workflow Builder\n\nn8n is the closest thing to Zapier in the open-source world. It features a drag-and-drop interface, 400+ integrations, and runs on your own server.\n\n**Best for:** Non-technical founders who want Zapier-like ease with full control.\n\n**Setup time:** 15 minutes on Railway or Render.\n\n## 2. Huginn — The \"Personal Agent\" Automator\n\nHuginn lets you build agents that monitor events and act on them. Think of it as a programmable IFTTT that runs locally.\n\n**Best for:** Technical users who want custom logic and data scraping.\n\n## 3. Activepieces — The Modern Alternative\n\nActivepieces is a newer entrant with a clean UI and strong community. It supports loops, branching, and custom code pieces.\n\n**Best for:** Teams that need collaboration features and modern UX.\n\n## 4. Node-RED — IoT + Automation Powerhouse\n\nBuilt by IBM, Node-RED is incredibly powerful for connecting APIs, hardware, and services. The flow-based programming is intuitive once you get the hang of it.\n\n**Best for:** Founders building hardware-software products or complex API chains.\n\n## 5. AutoHotkey / AutoIt (Windows) or Hammerspoon (Mac)\n\nFor desktop automation, these scripting tools can replicate many Zapier use cases locally — file handling, app launching, text expansion.\n\n**Best for:** Solo founders who need quick desktop automation without cloud complexity.\n\n## Cost Comparison\n\n| Tool | Monthly Cost (SaaS) | Self-Hosted Cost |\n|------|---------------------|------------------|\n| Zapier | $20–$100 | N/A |\n| n8n | $0 | $5/server |\n| Huginn | $0 | $5/server |\n| Activepieces | $0 | $5/server |\n\n## Bottom Line\n\nIf you're spending $50+/month on Zapier, switching to n8n or Activepieces could save you $600/year while giving you more control. Use GitStack's Stack Generator to get a complete self-hosted automation stack."
+    },
+    {
+      "slug": "how-to-self-host-n8n",
+      "title": "How to Self-Host n8n in 10 Minutes",
+      "description": "Step-by-step guide to deploying n8n on Railway, Render, or Docker. Start automating for free today.",
+      "date": "2026-05-08",
+      "author": "GitStack Team",
+      "tags": [
+        "n8n",
+        "self-hosting",
+        "automation",
+        "tutorial",
+        "railway"
+      ],
+      "image": "/og-image.svg",
+      "body": "# How to Self-Host n8n in 10 Minutes\n\nn8n is the most popular open-source alternative to Zapier. This guide walks you through deploying it on Railway — the fastest, easiest method.\n\n## Prerequisites\n\n- A Railway account (free tier works)\n- A GitHub account\n\n## Step 1: Fork the n8n Template\n\nRailway has a one-click n8n template. Search \"n8n\" in Railway's template library and click Deploy.\n\n## Step 2: Configure Environment Variables\n\nSet these required variables:\n\n- `N8N_BASIC_AUTH_ACTIVE`: true\n- `N8N_BASIC_AUTH_USER`: your-username\n- `N8N_BASIC_AUTH_PASSWORD`: your-secure-password\n- `WEBHOOK_URL`: Your Railway domain (e.g., https://n8n-production.up.railway.app)\n\n## Step 3: Deploy\n\nClick Deploy. Railway will build and start n8n automatically. In 2–3 minutes, visit your domain and log in.\n\n## Step 4: Create Your First Workflow\n\n1. Click \"Add Workflow\"\n2. Choose a trigger (e.g., Schedule, Webhook, or HTTP Request)\n3. Add nodes for the services you want to connect\n4. Activate the workflow\n\n## Alternative: Docker Deploy\n\nIf you prefer full control, run:\n\n```bash\ndocker run -it --rm \\\n  --name n8n \\\n  -p 5678:5678 \\\n  -v ~/.n8n:/home/node/.n8n \\\n  n8nio/n8n\n```\n\n## Next Steps\n\n- Set up HTTPS with a custom domain\n- Configure SMTP for email notifications\n- Explore the 400+ built-in integrations\n\nNeed help choosing the right automation stack? Use GitStack's Stack Generator to get a personalized recommendation."
+    },
+    {
+      "slug": "build-saas-for-free",
+      "title": "Build Your First SaaS for $0 Using Open Source",
+      "description": "The complete blueprint for launching a software business using only free, open-source tools. No coding budget required.",
+      "date": "2026-05-07",
+      "author": "GitStack Team",
+      "tags": [
+        "saas",
+        "founders",
+        "no-code",
+        "open-source",
+        "startup"
+      ],
+      "image": "/og-image.svg",
+      "body": "# Build Your First SaaS for $0 Using Open Source\n\nEvery SaaS founder's nightmare: spending $500/month on tools before making a single dollar. Here's how to build a complete tech stack for exactly $0.\n\n## The $0 Stack Blueprint\n\n### Authentication: Keycloak or Supabase Auth\nInstead of Auth0 ($25/month), use Keycloak or Supabase's built-in auth. Both support social logins, MFA, and user management.\n\n### Database: PostgreSQL + Supabase\nSelf-hosted PostgreSQL is free forever. Supabase adds a generous free tier with real-time subscriptions.\n\n### Backend: Directus or Strapi\nNeed a CMS + API? Directus and Strapi give you a full admin panel and REST/GraphQL APIs without writing backend code.\n\n### Frontend: Next.js or Nuxt\nReact and Vue frameworks are free and deploy easily to Vercel or Netlify's free tiers.\n\n### Payments: Stripe (pay-as-you-earn)\nStripe takes a percentage only when you make money. No monthly fees.\n\n### Email: Listmonk or Mailtrain\nReplace Mailchimp ($20/month) with Listmonk. Self-hosted, beautiful, and handles newsletters + transactional emails.\n\n### Analytics: Plausible or Umami\nGoogle Analytics is free but privacy-invasive. Plausible and Umami are lightweight, GDPR-compliant, and self-hostable.\n\n### CRM: Twenty or ERPNext\nTwenty is a modern open-source CRM. ERPNext handles CRM, inventory, accounting, and more.\n\n## Deployment Strategy\n\nUse Railway, Render, or Fly.io free tiers for hosting. As you grow, scale gradually.\n\n## Real Cost Comparison\n\n| Component | SaaS Cost | Open Source Cost |\n|-----------|-----------|------------------|\n| Auth | $25/mo | $0 |\n| Database | $15/mo | $0 |\n| CMS/API | $25/mo | $0 |\n| Email | $20/mo | $0 |\n| CRM | $30/mo | $0 |\n| **Total** | **$115/mo** | **$0** |\n\n## The Catch\n\nOpen source requires setup time. But with GitStack's Stack Generator and setup guides, you can deploy a complete stack in under 2 hours.\n\n## Start Building\n\nUse GitStack to generate your personalized $0 tech stack. Tell us what you're building — we'll handle the rest."
     }
   ],
-  "total": 1,
-  "generatedAt": "2026-05-10T19:22:23.090Z"
+  "total": 4,
+  "generatedAt": "2026-05-10T19:30:02.111Z"
 }

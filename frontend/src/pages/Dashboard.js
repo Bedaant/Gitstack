@@ -8,6 +8,7 @@ import { Footer } from "../components/Footer";
 import { getLocalStacks, deleteLocalStack } from "../utils/localStacks";
 import { RecommendationsSection } from "../components/sections/RecommendationsSection";
 import { API } from "../utils/api";
+import { SEO } from "../components/SEO";
 
 export default function Dashboard() {
   const [stacks, setStacks] = useState([]);
@@ -46,6 +47,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO title="Dashboard" noindex />
       <Header />
       <RecommendationsSection />
       <main className="py-12 px-4 flex-1">

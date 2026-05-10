@@ -1,0 +1,16 @@
+{
+  "slug": "build-saas-for-free",
+  "title": "Build Your First SaaS for $0 Using Open Source",
+  "description": "The complete blueprint for launching a software business using only free, open-source tools. No coding budget required.",
+  "date": "2026-05-07",
+  "author": "GitStack Team",
+  "tags": [
+    "saas",
+    "founders",
+    "no-code",
+    "open-source",
+    "startup"
+  ],
+  "image": "/og-image.svg",
+  "body": "# Build Your First SaaS for $0 Using Open Source\n\nEvery SaaS founder's nightmare: spending $500/month on tools before making a single dollar. Here's how to build a complete tech stack for exactly $0.\n\n## The $0 Stack Blueprint\n\n### Authentication: Keycloak or Supabase Auth\nInstead of Auth0 ($25/month), use Keycloak or Supabase's built-in auth. Both support social logins, MFA, and user management.\n\n### Database: PostgreSQL + Supabase\nSelf-hosted PostgreSQL is free forever. Supabase adds a generous free tier with real-time subscriptions.\n\n### Backend: Directus or Strapi\nNeed a CMS + API? Directus and Strapi give you a full admin panel and REST/GraphQL APIs without writing backend code.\n\n### Frontend: Next.js or Nuxt\nReact and Vue frameworks are free and deploy easily to Vercel or Netlify's free tiers.\n\n### Payments: Stripe (pay-as-you-earn)\nStripe takes a percentage only when you make money. No monthly fees.\n\n### Email: Listmonk or Mailtrain\nReplace Mailchimp ($20/month) with Listmonk. Self-hosted, beautiful, and handles newsletters + transactional emails.\n\n### Analytics: Plausible or Umami\nGoogle Analytics is free but privacy-invasive. Plausible and Umami are lightweight, GDPR-compliant, and self-hostable.\n\n### CRM: Twenty or ERPNext\nTwenty is a modern open-source CRM. ERPNext handles CRM, inventory, accounting, and more.\n\n## Deployment Strategy\n\nUse Railway, Render, or Fly.io free tiers for hosting. As you grow, scale gradually.\n\n## Real Cost Comparison\n\n| Component | SaaS Cost | Open Source Cost |\n|-----------|-----------|------------------|\n| Auth | $25/mo | $0 |\n| Database | $15/mo | $0 |\n| CMS/API | $25/mo | $0 |\n| Email | $20/mo | $0 |\n| CRM | $30/mo | $0 |\n| **Total** | **$115/mo** | **$0** |\n\n## The Catch\n\nOpen source requires setup time. But with GitStack's Stack Generator and setup guides, you can deploy a complete stack in under 2 hours.\n\n## Start Building\n\nUse GitStack to generate your personalized $0 tech stack. Tell us what you're building — we'll handle the rest."
+}
