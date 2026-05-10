@@ -3,6 +3,7 @@ uvicorn[standard]
 motor
 python-dotenv
 pydantic
+python-multipart
 httpx
 beautifulsoup4
 google-generativeai
