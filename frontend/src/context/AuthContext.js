@@ -49,11 +49,40 @@ export const AuthProvider = ({ children }) => {
       const sync = async () => {
         try {
           const token = await getToken();
-          await axios.post(`${API}/auth/sync`, {
+          const resp = await axios.post(`${API}/auth/sync`, {
             email: clerkUser.primaryEmailAddress?.emailAddress || "",
             name: clerkUser.fullName || clerkUser.username || "",
             picture: clerkUser.imageUrl || null,
           }, { headers: { Authorization: `Bearer ${token}` } });
+          
+          // Track onboarding intent from first page visit (fallback to email links)
+          const userData = resp.data;
+          if (!userData?.onboarding_intent && !localStorage.getItem("gitstack_intent_tracked")) {
+            const path = window.location.pathname;
+            const intentMap = [
+              { pattern: /^\/marketplace\/sell/, type: "seller" },
+              { pattern: /^\/sell/, type: "seller" },
+              { pattern: /^\/marketplace/, type: "buyer" },
+              { pattern: /^\/stack-generator/, type: "stack-builder" },
+              { pattern: /^\/repo-translator/, type: "tool-hunter" },
+              { pattern: /^\/repo-of-the-day/, type: "tool-hunter" },
+              { pattern: /^\/trending/, type: "tool-hunter" },
+              { pattern: /^\/tools\//, type: "tool-hunter" },
+              { pattern: /^\/collections/, type: "tool-hunter" },
+              { pattern: /^\/roast-my-stack/, type: "stack-builder" },
+            ];
+            const matched = intentMap.find(m => m.pattern.test(path));
+            if (matched) {
+              try {
+                await axios.post(`${API}/onboarding/track-intent`, {
+                  type: matched.type,
+                }, { headers: { Authorization: `Bearer ${token}` } });
+                localStorage.setItem("gitstack_intent_tracked", matched.type);
+              } catch (e) {
+                // Silently fail — not critical
+              }
+            }
+          }
         } catch (e) {
           console.warn("User sync failed:", e);
         }

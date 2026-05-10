@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks, UploadFile, File
+from fastapi.responses import RedirectResponse
 from fastapi.responses import JSONResponse
 import json
 import hmac
@@ -26,7 +27,39 @@ from bs4 import BeautifulSoup
 import jwt
 from jwt import PyJWKClient
 from og_image import router as og_router
-from utils.email import send_purchase_confirmation, send_setup_request_notification, send_payout_notification
+from utils.email import (
+    send_purchase_confirmation,
+    send_setup_request_notification,
+    send_payout_notification,
+    send_welcome_email,
+    send_stack_email,
+    send_preferences_link,
+)
+from email_jobs import send_daily_drop
+from onboarding_drip import run_onboarding_drip, send_onboarding_email
+
+# ── Email Token Helpers (for unsubscribe/preferences magic links) ──
+EMAIL_TOKEN_SECRET = os.environ.get("EMAIL_TOKEN_SECRET", os.environ.get("SMTP_PASSWORD", "dev-secret-change-me"))
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://gitstack.pro")
+
+def _generate_email_token(email: str) -> str:
+    """Generate a JWT token for email-based actions (unsubscribe, preferences)."""
+    payload = {
+        "email": email,
+        "exp": datetime.now(timezone.utc) + timedelta(days=30),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, EMAIL_TOKEN_SECRET, algorithm="HS256")
+
+def _verify_email_token(token: str) -> str:
+    """Verify an email token and return the email address. Raises on failure."""
+    try:
+        payload = jwt.decode(token, EMAIL_TOKEN_SECRET, algorithms=["HS256"])
+        return payload["email"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Link expired. Request a new one.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid link.")
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from fastapi_cache.decorator import cache
@@ -1492,13 +1525,216 @@ async def subscribe_newsletter(req: NewsletterSubscribeRequest):
         "status": "active"
     })
 
+    # Send welcome email (fire-and-forget so API stays fast)
+    import asyncio
+    asyncio.create_task(_safe_send_welcome(email))
+
     return {"message": "Successfully subscribed to GitStack daily digest!", "status": "new"}
+
+
+async def _safe_send_welcome(email: str):
+    try:
+        await send_welcome_email(email)
+    except Exception as e:
+        logger.warning(f"Failed to send welcome email to {email}: {e}")
+
+
+# ==================== EMAIL PREFERENCES & UNSUBSCRIBE ====================
+
+class PreferencesLinkRequest(BaseModel):
+    email: str
+
+class PreferencesUpdateRequest(BaseModel):
+    token: str
+    preferences: Dict[str, Any]
+
+@api_router.post("/newsletter/preferences-link")
+async def api_send_preferences_link(req: PreferencesLinkRequest):
+    """Send a magic link to manage email preferences."""
+    email = req.email.lower().strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email required")
+
+    token = _generate_email_token(email)
+
+    try:
+        await send_preferences_link(email, token)
+        return {"message": "Preferences link sent. Check your inbox."}
+    except Exception as e:
+        logger.error(f"Failed to send preferences link to {email}: {e}")
+        raise HTTPException(status_code=500, detail="Could not send email. Try again.")
+
+
+@api_router.get("/newsletter/preferences")
+async def get_preferences(token: str):
+    """Get current email preferences using a token."""
+    email = _verify_email_token(token)
+    subscriber = await db.newsletter_subscribers.find_one({"email": email})
+    if not subscriber:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+
+    return {
+        "email": email,
+        "status": subscriber.get("status", "active"),
+        "preferences": subscriber.get("preferences", {
+            "daily_drop": True,
+            "stack_reminders": True,
+            "product_updates": False,
+        }),
+    }
+
+
+@api_router.put("/newsletter/preferences")
+async def update_preferences(req: PreferencesUpdateRequest):
+    """Update email preferences using a token."""
+    email = _verify_email_token(req.token)
+    prefs = req.preferences
+
+    # Validate preferences shape
+    allowed_keys = {"daily_drop", "stack_reminders", "product_updates"}
+    cleaned = {k: bool(v) for k, v in prefs.items() if k in allowed_keys}
+
+    result = await db.newsletter_subscribers.update_one(
+        {"email": email},
+        {"$set": {"preferences": cleaned, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+
+    return {"message": "Preferences updated", "preferences": cleaned}
+
+
+@api_router.get("/newsletter/unsubscribe")
+async def unsubscribe(token: str):
+    """One-click unsubscribe using a token."""
+    email = _verify_email_token(token)
+    result = await db.newsletter_subscribers.update_one(
+        {"email": email},
+        {"$set": {
+            "status": "unsubscribed",
+            "unsubscribed_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+
+    return {"message": "Unsubscribed successfully", "email": email}
 
 @api_router.get("/newsletter/count")
 async def get_newsletter_count():
     """Get subscriber count for social proof"""
     count = await db.newsletter_subscribers.count_documents({"status": "active"})
     return {"count": count}
+
+
+# ==================== ONBOARDING INTENT TRACKING ====================
+
+@api_router.get("/onboarding/intent")
+async def track_onboarding_intent(token: str, type: str):
+    """Track what the user is here for: stack-builder, buyer, seller, or tool-hunter.
+    
+    Called from tracked links in the welcome email. Records intent and redirects
+    to the appropriate page.
+    """
+    valid_types = ["stack-builder", "buyer", "seller", "tool-hunter"]
+    if type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(valid_types)}")
+    
+    try:
+        email = _verify_email_token(token)
+    except HTTPException:
+        # Invalid/expired token — still redirect, just don't track
+        redirect_map = {
+            "stack-builder": f"{FRONTEND_URL}/stack-generator",
+            "buyer": f"{FRONTEND_URL}/marketplace",
+            "seller": f"{FRONTEND_URL}/marketplace/sell",
+            "tool-hunter": f"{FRONTEND_URL}/repo-of-the-day",
+        }
+        return RedirectResponse(url=redirect_map[type])
+    
+    # Record intent in user profile
+    await db.users.update_one(
+        {"email": email.lower().strip()},
+        {
+            "$set": {
+                "onboarding_intent": type,
+                "onboarding_intent_set_at": datetime.now(timezone.utc),
+            }
+        },
+    )
+    
+    # Also record in newsletter subscribers if present
+    await db.newsletter_subscribers.update_one(
+        {"email": email.lower().strip()},
+        {
+            "$set": {
+                "onboarding_intent": type,
+                "onboarding_intent_set_at": datetime.now(timezone.utc),
+            }
+        },
+    )
+    
+    redirect_map = {
+        "stack-builder": f"{FRONTEND_URL}/stack-generator",
+        "buyer": f"{FRONTEND_URL}/marketplace",
+        "seller": f"{FRONTEND_URL}/marketplace/sell",
+        "tool-hunter": f"{FRONTEND_URL}/repo-of-the-day",
+    }
+    return RedirectResponse(url=redirect_map[type])
+
+
+@api_router.post("/onboarding/track-intent")
+async def track_onboarding_intent_from_frontend(request: Request):
+    """Track onboarding intent from the frontend (Clerk-authenticated).
+    
+    This is a fallback for users who don't click the tracked links in the
+    welcome email. The frontend detects the first meaningful page visit and
+    reports it here.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth_header.split(" ")[1]
+    if not _jwks_client:
+        raise HTTPException(status_code=503, detail="Auth not configured")
+    
+    try:
+        body = await request.json()
+        intent_type = body.get("type")
+        valid_types = ["stack-builder", "buyer", "seller", "tool-hunter"]
+        if intent_type not in valid_types:
+            raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(valid_types)}")
+        
+        signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(token, signing_key.key, algorithms=["RS256"], options={"verify_aud": False})
+        clerk_user_id = payload.get("sub")
+        if not clerk_user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Only set if not already set (email link takes precedence)
+        result = await db.users.update_one(
+            {"user_id": clerk_user_id, "onboarding_intent": {"$exists": False}},
+            {
+                "$set": {
+                    "onboarding_intent": intent_type,
+                    "onboarding_intent_set_at": datetime.now(timezone.utc),
+                    "onboarding_intent_source": "frontend",
+                }
+            },
+        )
+        
+        return {
+            "success": True,
+            "intent": intent_type,
+            "updated": result.modified_count > 0,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
 
 # ==================== SEARCH AUTOCOMPLETE ====================
 
@@ -1747,7 +1983,18 @@ async def email_stack(req: EmailStackRequest):
             "source": "email_stack",
         })
 
+    # Actually email the stack immediately (fire-and-forget)
+    import asyncio
+    asyncio.create_task(_safe_send_stack(email, req.idea, req.tools))
+
     return {"message": "Saved! Check your inbox — we'll remind you when it's time to build."}
+
+
+async def _safe_send_stack(email: str, idea: str, tools: list):
+    try:
+        await send_stack_email(email, idea, tools)
+    except Exception as e:
+        logger.warning(f"Failed to send stack email to {email}: {e}")
 
 # ==================== STATS ====================
 
@@ -1899,6 +2146,31 @@ async def scraper_status():
     else:
         result["last_scrape"] = None
         result["stats"] = None
+    return result
+
+
+# ==================== DAILY DROP (Admin Trigger) ====================
+
+@api_router.post("/admin/email/daily-drop")
+async def trigger_daily_drop(test_email: str = None):
+    """Manually trigger the Daily Drop. Pass ?test_email=... to send to one address only."""
+    try:
+        await send_daily_drop(db, test_email=test_email)
+        return {"message": "Daily Drop sent", "test_email": test_email}
+    except Exception as e:
+        logger.error(f"Daily Drop trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/admin/email/onboarding-drip")
+async def trigger_onboarding_drip(user_id: str = None):
+    """Manually trigger the onboarding drip. Pass ?user_id=... to test one user."""
+    try:
+        await run_onboarding_drip(db, test_user_id=user_id)
+        return {"message": "Onboarding drip processed", "user_id": user_id}
+    except Exception as e:
+        logger.error(f"Onboarding drip trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
     # BUG-01 FIX: function was missing its return statement, causing FastAPI to return null.
     return result

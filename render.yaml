@@ -47,6 +47,58 @@ services:
       - key: FRONTEND_URL
         sync: false          # set to https://gitstack.pro
 
+  # ── Cron: Daily Drop ────────────────────────────────────────────
+  - type: cron
+    name: gitstack-daily-drop
+    runtime: python
+    rootDir: backend
+    schedule: "0 4 * * *"    # 9:30 AM IST = 4:00 AM UTC
+    buildCommand: pip install -r requirements.txt
+    startCommand: python email_jobs.py
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: gitstack
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: resend
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_TLS
+        value: "true"
+      - key: FRONTEND_URL
+        value: https://gitstack.pro
+
+  # ── Cron: Onboarding Drip ───────────────────────────────────────
+  - type: cron
+    name: gitstack-onboarding-drip
+    runtime: python
+    rootDir: backend
+    schedule: "0 */6 * * *"    # Every 6 hours
+    buildCommand: pip install -r requirements.txt
+    startCommand: python onboarding_drip.py
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: gitstack
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: resend
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_TLS
+        value: "true"
+      - key: FRONTEND_URL
+        value: https://gitstack.pro
+
   # ── Frontend (React static site) ──────────────────────────────
   - type: web
     name: gitstack-app

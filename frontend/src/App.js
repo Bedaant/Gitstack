@@ -33,6 +33,8 @@ import ComparisonPage from "./pages/ComparisonPage";
 import PublicStackPage from "./pages/PublicStackPage";
 import NotFound from "./pages/NotFound";
 import UserProfilePage from "./pages/UserProfilePage";
+import UnsubscribePage from "./pages/UnsubscribePage";
+import PreferencesPage from "./pages/PreferencesPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import MarketplaceProductPage from "./pages/MarketplaceProductPage";
 import SellPage from "./pages/SellPage";
@@ -113,6 +115,8 @@ const AppRouter = () => {
       <Route path="/s/:slug" element={<PublicStackPage />} />
       {/* gitstack.pro/:owner/:repo shortlink — must be last before the 404 catch-all */}
       <Route path="/:owner/:repo" element={<RepoShortlink />} />
+      <Route path="/unsubscribe" element={<UnsubscribePage />} />
+      <Route path="/preferences" element={<PreferencesPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
