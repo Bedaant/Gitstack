@@ -109,7 +109,26 @@ applyAll(colorSwaps);
 applyAll(textSwaps);
 
 // ---------------------------------------------------------------------------
-// 4. INJECT GITSTACK FOOTER (MIT attribution + back-link)
+// 4. INJECT GOOGLE TAG MANAGER
+// ---------------------------------------------------------------------------
+const GTM_HEAD = `<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-WL8RTZWW');</script>
+<!-- End Google Tag Manager -->`;
+
+const GTM_BODY = `<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL8RTZWW"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->`;
+
+html = html.replace('<head>', '<head>\n' + GTM_HEAD);
+html = html.replace('<body>', '<body>\n' + GTM_BODY);
+
+// ---------------------------------------------------------------------------
+// 5. INJECT GITSTACK FOOTER (MIT attribution + back-link)
 //    Inserted right before </body>
 // ---------------------------------------------------------------------------
 const FOOTER_HTML = `
@@ -122,7 +141,7 @@ const FOOTER_HTML = `
 html = html.replace("</body>", FOOTER_HTML + "</body>");
 
 // ---------------------------------------------------------------------------
-// 5. WRITE OUTPUT
+// 6. WRITE OUTPUT
 // ---------------------------------------------------------------------------
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(OUT, html, "utf8");
