@@ -1,0 +1,44 @@
+{
+  "name": "@gitstack/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Gitstack — fetch trending repos, find OSS alternatives, translate repos and more from your AI coding agent",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "gitstack-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.8.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "github",
+    "open-source",
+    "developer-tools",
+    "ai-agent",
+    "claude",
+    "cursor"
+  ],
+  "author": "GitStack",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gitstack/gitstack.git",
+    "directory": "mcp"
+  }
+}

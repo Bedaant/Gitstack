@@ -1,0 +1,35 @@
+name: 'GitStack README Badge'
+description: 'Auto-injects a GitStack tech-stack badge into your README.md'
+author: 'GitStack'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  github-token:
+    description: 'GitHub token with repo scope to commit badge changes'
+    required: true
+  readme-path:
+    description: 'Path to README file'
+    required: false
+    default: 'README.md'
+  gitstack-url:
+    description: 'Base URL of GitStack instance'
+    required: false
+    default: 'https://gitstack.pro'
+  badge-style:
+    description: 'Shields.io badge style (flat, flat-square, plastic, for-the-badge, social)'
+    required: false
+    default: 'for-the-badge'
+  commit-message:
+    description: 'Git commit message for badge update'
+    required: false
+    default: 'docs: add GitStack analysis badge'
+  section-title:
+    description: 'Title for the badge section in README'
+    required: false
+    default: '## Tech Stack'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

@@ -1,5 +1,12 @@
 const STACKS_KEY = 'gitstack_local_stacks';
 
+// Notify other components (e.g. Header badge) when stacks change
+const notifyChange = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('stacksUpdated'));
+  }
+};
+
 export const saveStackLocally = (idea, stack) => {
   const stacks = getLocalStacks();
   const newStack = {
@@ -14,6 +21,7 @@ export const saveStackLocally = (idea, stack) => {
   };
   stacks.unshift(newStack);
   localStorage.setItem(STACKS_KEY, JSON.stringify(stacks.slice(0, 20))); // keep last 20
+  notifyChange();
   return newStack;
 };
 
@@ -28,6 +36,7 @@ export const getLocalStacks = () => {
 export const deleteLocalStack = (stackId) => {
   const stacks = getLocalStacks().filter(s => s.stack_id !== stackId);
   localStorage.setItem(STACKS_KEY, JSON.stringify(stacks));
+  notifyChange();
 };
 
 export const isStackSaved = (idea) => {

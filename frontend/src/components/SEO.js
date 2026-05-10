@@ -1,8 +1,8 @@
 import React from "react";
 import { Helmet } from "react-helmet-async";
 
-const SITE_URL = "https://gitstack.dev";
-const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
+const SITE_URL = "https://gitstack.pro";
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.svg`;
 
 export const SEO = ({
   title,
@@ -10,6 +10,8 @@ export const SEO = ({
   path = "",
   ogImage = DEFAULT_OG_IMAGE,
   ogType = "website",
+  noindex = false,
+  jsonLd = null,
 }) => {
   const fullTitle = title
     ? `${title} — GitStack`
@@ -31,12 +33,17 @@ export const SEO = ({
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
       <meta property="og:site_name" content="GitStack" />
+      <meta property="og:locale" content="en_US" />
 
       {/* Twitter */}
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={fullTitle} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={ogImage} />
+      <meta name="twitter:site" content="@gitstack" />
+
+      {noindex ? <meta name="robots" content="noindex,nofollow" /> : <meta name="robots" content="index,follow" />}
+      {jsonLd ? <script type="application/ld+json">{JSON.stringify(jsonLd)}</script> : null}
     </Helmet>
   );
 };

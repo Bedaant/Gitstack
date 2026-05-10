@@ -1,4 +1,11 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://gitstack.dev/sitemap.xml
+# Keep private/app-only routes out of the crawl budget
+Disallow: /dashboard
+Disallow: /sell
+Disallow: /u/me
+
+Host: https://gitstack.pro
+
+Sitemap: https://gitstack.pro/sitemap.xml

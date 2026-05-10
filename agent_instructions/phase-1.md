@@ -12,11 +12,11 @@ None. This phase is fully independent.
 
 ## Status
 
-- [ ] Task 1 — Add dark-mode CSS variables to `index.css`
-- [ ] Task 2 — Wrap `<App>` in `ThemeProvider`
-- [ ] Task 3 — Create `ThemeToggle` component
-- [ ] Task 4 — Add `ThemeToggle` to Header
-- [ ] Task 5 — Audit and fix hardcoded light-only classes
+- [x] Task 1 — Add dark-mode CSS variables to `index.css`
+- [x] Task 2 — Wrap `<App>` in `ThemeProvider`
+- [x] Task 3 — Create `ThemeToggle` component
+- [x] Task 4 — Add `ThemeToggle` to Header
+- [x] Task 5 — Audit and fix hardcoded light-only classes (30 bg-white → bg-background across 16 files)
 
 ---
 

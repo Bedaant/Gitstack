@@ -3,125 +3,195 @@
 
   <!-- Core pages -->
   <url>
-    <loc>https://gitstack.dev/</loc>
+    <loc>https://gitstack.pro/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
 
   <!-- AI Tools — highest value pages for SEO -->
   <url>
-    <loc>https://gitstack.dev/stack-generator</loc>
+    <loc>https://gitstack.pro/stack-generator</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/roast-my-stack</loc>
+    <loc>https://gitstack.pro/roast-my-stack</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/dead-tool-detector</loc>
+    <loc>https://gitstack.pro/dead-tool-detector</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/repo-translator</loc>
+    <loc>https://gitstack.pro/repo-translator</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/idea-exists</loc>
+    <loc>https://gitstack.pro/repo-xray</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/error-explainer</loc>
+    <loc>https://gitstack.pro/readme-badge</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://gitstack.pro/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://gitstack.pro/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://gitstack.pro/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://gitstack.pro/idea-exists</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://gitstack.pro/founder-stacks</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://gitstack.pro/error-explainer</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <!-- Discovery pages -->
   <url>
-    <loc>https://gitstack.dev/tools</loc>
+    <loc>https://gitstack.pro/tools</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/collections</loc>
+    <loc>https://gitstack.pro/marketplace</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://gitstack.pro/collections</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/repo-of-the-day</loc>
+    <loc>https://gitstack.pro/repo-of-the-day</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/compare</loc>
+    <loc>https://gitstack.pro/compare</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <!-- Topic pages -->
   <url>
-    <loc>https://gitstack.dev/topics/ai-agents</loc>
+    <loc>https://gitstack.pro/topics/ai-agents</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/automation</loc>
+    <loc>https://gitstack.pro/topics/automation</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/selfhosted</loc>
+    <loc>https://gitstack.pro/topics/selfhosted</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/ui-ux</loc>
+    <loc>https://gitstack.pro/topics/ui-ux</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/data-analytics</loc>
+    <loc>https://gitstack.pro/topics/data-analytics</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/ai-coding-tools</loc>
+    <loc>https://gitstack.pro/topics/ai-coding-tools</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/rag-vector-search</loc>
+    <loc>https://gitstack.pro/topics/rag-vector-search</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/mcp-tools</loc>
+    <loc>https://gitstack.pro/topics/mcp-tools</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/local-ai</loc>
+    <loc>https://gitstack.pro/topics/local-ai</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/email-messaging</loc>
+    <loc>https://gitstack.pro/topics/email-messaging</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/auth</loc>
+    <loc>https://gitstack.pro/topics/auth</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://gitstack.dev/topics/payments</loc>
+    <loc>https://gitstack.pro/topics/payments</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
+
+  <!-- Alternatives pages (programmatic SEO) -->
+  <url><loc>https://gitstack.pro/alternatives/notion</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/typeform</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/calendly</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/zapier</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/airtable</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/firebase</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/auth0</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/mailchimp</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/shopify</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/salesforce</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/google-analytics-360</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/mixpanel</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/substack-pro</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/aws-amplify</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/okta</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitstack.pro/alternatives/convertkit</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+
+  <!-- Popular repo translator pages (shareable SEO landing pages) -->
+  <url><loc>https://gitstack.pro/r/n8n-io/n8n</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitstack.pro/r/calcom/cal.com</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitstack.pro/r/appwrite/appwrite</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitstack.pro/r/supabase/supabase</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitstack.pro/r/plausible/analytics</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://gitstack.pro/r/formbricks/formbricks</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/directus/directus</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/nocodb/nocodb</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/pocketbase/pocketbase</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/listmonk/listmonk</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/medusajs/medusa</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/flowiseai/flowise</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/langchain-ai/langchain</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/mintlify/docs</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://gitstack.pro/r/webstudio-is/webstudio</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
 
 </urlset>

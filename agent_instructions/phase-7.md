@@ -12,11 +12,11 @@ A shareable, resume-like profile page at `/u/:userId`. Each user can list their 
 
 ## Status
 
-- [ ] Task 1 — Extend UserModel and add profile update endpoint (backend)
-- [ ] Task 2 — Add public user profile endpoint (backend)
-- [ ] Task 3 — Add GitHub repos endpoint (backend)
-- [ ] Task 4 — Create `UserProfilePage.js` — public view
-- [ ] Task 5 — Add route and `/u/me` redirect in App.js
+- [x] Task 1 — Extend UserModel and add profile update endpoint (backend)
+- [x] Task 2 — Add public user profile endpoint (backend)
+- [x] Task 3 — Add GitHub repos endpoint (backend)
+- [x] Task 4 — Create `UserProfilePage.js` — public view
+- [x] Task 5 — Add route and `/u/me` redirect in App.js
 
 ---
 

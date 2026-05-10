@@ -9,3 +9,14 @@ google-generativeai
 slowapi
 pymongo[srv]
 dnspython
+PyJWT[crypto]
+cryptography
+Pillow
+razorpay
+boto3
+fastapi-mail
+fastapi-cache2[redis]
+fastapi-health
+loguru
+faker
+mongomock

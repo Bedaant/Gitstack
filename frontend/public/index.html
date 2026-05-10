@@ -23,23 +23,52 @@
         <title>GitStack — GitHub, Simplified for Founders</title>
         <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/favicon.svg" />
         <meta name="description" content="Discover, understand, and use open-source GitHub tools without writing code. AI-powered translations, stack generator, and 600+ tools explained in plain English." />
-        
+
         <!-- Open Graph -->
         <meta property="og:title" content="GitStack — GitHub, Simplified for Founders" />
         <meta property="og:description" content="The layer between GitHub tools existing and you actually using them. Discover, understand, and build — without writing code." />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://gitstack.dev" />
-        <meta property="og:image" content="https://gitstack.dev/og-image.svg" />
+        <meta property="og:url" content="https://gitstack.pro" />
+                <meta property="og:image" content="https://gitstack.pro/og-image.svg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:image:type" content="image/svg+xml" />
+                <meta property="og:image:type" content="image/svg+xml" />
+                <meta property="og:site_name" content="GitStack" />
+                <meta property="og:locale" content="en_US" />
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="GitStack — GitHub, Simplified" />
         <meta name="twitter:description" content="AI-powered tool discovery for non-tech founders. 600+ tools explained in plain English." />
-        <meta name="twitter:image" content="https://gitstack.dev/og-image.svg" />
+                <meta name="twitter:image" content="https://gitstack.pro/og-image.svg" />
+                <meta name="twitter:site" content="@gitstack" />
+                <meta name="robots" content="index,follow" />
+
+                <script type="application/ld+json">
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "WebSite",
+                        "name": "GitStack",
+                        "url": "https://gitstack.pro",
+                        "description": "Discover, understand, and use open-source GitHub tools without writing code.",
+                        "publisher": {
+                            "@type": "Organization",
+                            "name": "GitStack",
+                            "url": "https://gitstack.pro"
+                        },
+                        "potentialAction": {
+                            "@type": "SearchAction",
+                            "target": "https://gitstack.pro/tools?q={search_term_string}",
+                            "query-input": "required name=search_term_string"
+                        }
+                    }
+                </script>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
+
+        <!-- Umami Analytics (self-hosted, privacy-focused) -->
+        <!-- To set up: docker run -d --name umami -p 3000:3000 -e DATABASE_URL=your_db_url ghcr.io/umami-software/umami:postgresql-latest -->
+        <!-- Then get your website ID from umami.gitstack.pro dashboard and replace below -->
+        <script defer src="https://umami.gitstack.pro/script.js" data-website-id="UMAMI_WEBSITE_ID_PLACEHOLDER" data-domains="gitstack.pro,www.gitstack.pro"></script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>

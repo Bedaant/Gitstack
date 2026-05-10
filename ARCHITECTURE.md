@@ -2,7 +2,7 @@
 
 ## Overview
 
-GitStack (`gitstack.dev`) is a two-tier web application that curates open-source GitHub tools and explains them in plain English for non-technical founders. The system consists of a Python/FastAPI backend and a React single-page application, deployed as two separate services on Render.com.
+GitStack (`gitstack.pro`) is a two-tier web application that curates open-source GitHub tools and explains them in plain English for non-technical founders. The system consists of a Python/FastAPI backend and a React single-page application, deployed as two separate services on Render.com.
 
 ---
 

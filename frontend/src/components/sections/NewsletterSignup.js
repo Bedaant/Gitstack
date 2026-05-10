@@ -30,7 +30,7 @@ export const NewsletterSignup = () => {
     try {
       await axios.post(`${API}/newsletter/subscribe`, { email });
       setSubscribed(true);
-      toast.success("Welcome to GitStack! Check your inbox soon.");
+      toast.success("You're in! First 3 tools arrive next Monday.");
     } catch (e) {
       toast.error("Failed to subscribe. Try again.");
     }
@@ -39,22 +39,22 @@ export const NewsletterSignup = () => {
 
   if (subscribed) {
     return (
-      <section className="py-12 px-4 bg-black text-white border-y-4 border-primary">
+      <section className="py-12 px-4 bg-foreground text-background border-y-4 border-primary">
         <div className="max-w-3xl mx-auto text-center">
           <CheckCircle2 className="w-16 h-16 mx-auto mb-4 text-green-400" />
           <h2 className="text-3xl font-black mb-2">You're In!</h2>
-          <p className="text-zinc-400">Get ready for your daily dose of open-source goodness.</p>
+          <p className="text-background/70">Get ready for your daily dose of open-source goodness.</p>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="py-12 px-4 bg-black text-white border-y-4 border-primary">
+    <section className="py-12 px-4 bg-foreground text-background border-y-4 border-primary">
       <div className="max-w-3xl mx-auto text-center">
-        <h2 className="text-3xl font-black mb-2">Get the Repo of the Day</h2>
-        <p className="text-zinc-400 mb-6">
-          One curated open-source tool, explained in plain English. Daily.
+        <h2 className="text-3xl font-black mb-2">Get 3 open-source tools every Monday</h2>
+        <p className="text-background/70 mb-6">
+          3 curated open-source tools that replace expensive SaaS. Sent every Monday.
           {subscriberCount > 0 && <span className="text-primary ml-2">Join {subscriberCount}+ founders</span>}
         </p>
         
@@ -64,13 +64,13 @@ export const NewsletterSignup = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="your@email.com"
-            className="flex-1 px-4 py-3 border-4 border-white bg-transparent text-white placeholder-zinc-500 font-semibold focus:border-primary outline-none"
+            className="flex-1 px-4 py-3 border-4 border-background bg-transparent text-background placeholder-background/50 font-semibold focus:border-primary outline-none"
             data-testid="newsletter-email"
           />
           <button 
             type="submit"
             disabled={loading}
-            className="neo-btn neo-btn-primary px-6 py-3 border-4 border-white"
+            className="neo-btn neo-btn-primary px-6 py-3 border-4 border-background"
             data-testid="newsletter-submit"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Subscribe'}

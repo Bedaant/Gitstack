@@ -6,7 +6,7 @@ Read this file before opening any phase file. It provides the full codebase cont
 
 ## What is Gitstack?
 
-Gitstack (`gitstack.dev`) is a two-tier web app that curates open-source GitHub tools and explains them in plain English for non-technical founders. It consists of a Python/FastAPI backend and a React SPA, deployed on Render.com.
+Gitstack (`gitstack.pro`) is a two-tier web app that curates open-source GitHub tools and explains them in plain English for non-technical founders. It consists of a Python/FastAPI backend and a React SPA, deployed on Render.com.
 
 ---
 
@@ -290,6 +290,11 @@ Phase 0 (auth re-enable)
 Phase 1 (dark/light mode)    ← fully independent
 Phase 2 (gitstack.pro URLs)  ← fully independent
 Phase 5 (MCP server)         ← fully independent
+Phase 8 (Repo X-Ray)         ← fully independent
+Phase 9 (README Badge)       ← fully independent
+Phase 10 (User Flow Audit)   ← depends on Phases 0,4,7 (auth + marketplace + profiles)
+Phase 11 (Legal & Trust)     ← fully independent
+Phase 12 (SEO/AEO/GEO)       ← depends on all content phases (1-11)
 ```
 
 **Phases that can start immediately (no blockers):** 1, 2, 5

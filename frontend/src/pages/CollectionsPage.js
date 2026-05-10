@@ -6,7 +6,7 @@ import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { API } from "../utils/api";
 
-const bgColors = ['bg-pastel-mint', 'bg-pastel-yellow', 'bg-pastel-lavender', 'bg-pastel-pink', 'bg-blue-100', 'bg-orange-100'];
+const bgColors = ['bg-pastel-mint', 'bg-pastel-yellow', 'bg-pastel-lavender', 'bg-pastel-pink', 'bg-pastel-lavender', 'bg-pastel-yellow'];
 
 export default function CollectionsPage() {
   const [collections, setCollections] = useState([]);
@@ -34,7 +34,7 @@ export default function CollectionsPage() {
           <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-2" data-testid="collections-title">
             Collections
           </h1>
-          <p className="text-zinc-500 mb-8">Curated tool stacks for specific goals.</p>
+          <p className="text-muted-foreground mb-8">Curated tool stacks for specific goals.</p>
 
           {loading ? (
             <div className="text-center py-16">
@@ -46,22 +46,22 @@ export default function CollectionsPage() {
                 <button
                   key={col.collection_id}
                   onClick={() => navigate(`/collections/${col.collection_id}`)}
-                  className={`neo-card p-8 text-left ${bgColors[i % bgColors.length]}`}
+                  className={`neo-card p-8 text-left text-foreground ${bgColors[i % bgColors.length]}`}
                   data-testid={`collection-${col.collection_id}`}
                 >
                   <h2 className="text-2xl font-bold mb-2">{col.title}</h2>
-                  <p className="text-zinc-600 mb-4">{col.description}</p>
+                  <p className="text-foreground/70 mb-4">{col.description}</p>
                   <div className="flex items-center gap-4">
                     <span className={`text-xs font-bold px-2 py-1 ${
-                      col.difficulty === 'Beginner' ? 'badge-beginner' : 
+                      col.difficulty === 'Beginner' ? 'badge-beginner' :
                       col.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
                     }`}>
                       {col.difficulty}
                     </span>
-                    <span className="text-sm text-zinc-500 flex items-center gap-1">
+                    <span className="text-sm text-foreground/60 flex items-center gap-1">
                       <Clock className="w-4 h-4" /> {col.completion_time}
                     </span>
-                    <span className="text-sm text-zinc-500">{col.tools?.length} tools</span>
+                    <span className="text-sm text-foreground/60">{col.tools?.length} tools</span>
                   </div>
                 </button>
               ))}

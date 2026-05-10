@@ -14,13 +14,13 @@ None. This phase is fully independent.
 
 ## Status
 
-- [ ] Task 1 — Create `GitHubLink` utility component
-- [ ] Task 2 — Add `/:owner/:repo` catch-all route in App.js
-- [ ] Task 3 — Replace GitHub links in DeadToolDetector.js
-- [ ] Task 4 — Replace GitHub links in ToolDetailPage.js
-- [ ] Task 5 — Replace GitHub links in GitHubRepoPage.js
-- [ ] Task 6 — Replace GitHub links in PublicStackPage.js
-- [ ] Task 7 — Add gitstack.pro as custom domain in render.yaml
+- [x] Task 1 — Create `GitHubLink` utility component
+- [x] Task 2 — Add `/:owner/:repo` catch-all route in App.js
+- [x] Task 3 — Replace GitHub links in DeadToolDetector.js
+- [x] Task 4 — Replace GitHub links in ToolDetailPage.js
+- [x] Task 5 — Replace GitHub links in GitHubRepoPage.js
+- [x] Task 6 — Replace GitHub links in PublicStackPage.js
+- [x] Task 7 — Add gitstack.pro as custom domain in render.yaml
 
 ---
 
