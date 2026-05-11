@@ -21,9 +21,9 @@ export const Hero = () => {
   const navigate = useNavigate();
   const mode = detectMode(query);
   const examples = [
-    { label: 'n8n-io/n8n', url: 'github.com/n8n-io/n8n' },
-    { label: 'calcom/cal.com', url: 'github.com/calcom/cal.com' },
-    { label: 'appwrite/appwrite', url: 'github.com/appwrite/appwrite' }
+    { label: 'CRM', query: 'CRM' },
+    { label: 'Email automation', query: 'email automation' },
+    { label: 'Marketplace', query: 'marketplace' }
   ];
   const searchRef = React.useRef(null);
 
@@ -97,12 +97,12 @@ export const Hero = () => {
           </div>
 
           <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight uppercase leading-[0.95] mb-6" data-testid="hero-title">
-            Understand any GitHub repo in{" "}
-            <span className="text-primary">10 seconds.</span>
+            Build anything.{" "}
+            <span className="text-primary">Pay nothing.</span>
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Paste any GitHub link. We'll explain it in plain English, tell you what paid tool it replaces, and how much you'd save.
+            Describe what you need — "I need a CRM," "a marketplace," or "an email tool." We'll find free, open-source alternatives and explain how to use them in plain English. No coding required.
           </p>
         </div>
 
@@ -115,7 +115,7 @@ export const Hero = () => {
               value={query}
               onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
               onFocus={() => setShowSuggestions(true)}
-              placeholder="Paste any GitHub URL (or search an idea...)"
+              placeholder="I need a CRM, a chatbot, a marketplace..."
               className="neo-input pl-4 sm:pl-14 pr-4 sm:pr-40 text-base sm:text-lg py-4"
               data-testid="hero-search-input"
             />
@@ -166,18 +166,17 @@ export const Hero = () => {
         </form>
 
         <div className="flex flex-col items-center mb-12">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Try these popular repos:</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Try these popular needs:</p>
           <div className="flex flex-wrap justify-center gap-2">
             {examples.map(ex => (
               <button key={ex.label}
                 onClick={() => { 
-                  setQuery(ex.url); 
-                  const match = ex.url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-                  if (match) navigate(`/r/${match[1]}/${match[2]}`);
+                  setQuery(ex.query); 
+                  navigate(`/stack-generator?idea=${encodeURIComponent(ex.query)}`);
                 }}
                 className="px-4 py-2 border-2 border-black font-mono text-sm font-semibold neo-shadow bg-background text-foreground hover:bg-pastel-yellow hover:text-black transition-colors flex items-center gap-2"
                 data-testid={`chip-${ex.label}`}>
-                <Github className="w-4 h-4" /> {ex.label}
+                <Sparkles className="w-4 h-4" /> {ex.label}
               </button>
             ))}
           </div>

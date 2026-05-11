@@ -25,7 +25,7 @@ const JSON_LD = {
       "@id": "https://gitstack.pro/#website",
       "url": "https://gitstack.pro",
       "name": "GitStack",
-      "description": "Free open-source tool discovery and AI-powered stack generation for founders",
+      "description": "Find free, open-source alternatives to any paid tool. Describe what you need and get your entire tech stack with plain-English explanations. No coding required.",
       "potentialAction": {
         "@type": "SearchAction",
         "target": "https://gitstack.pro/stack-generator?idea={search_term_string}",
@@ -156,7 +156,7 @@ export default function HomePage() {
     <div className="min-h-screen">
       <SEO
         title="Free Tools for Founders — No Code Needed"
-        description="Discover free open-source tools, roast your SaaS stack, generate tech stacks, and understand any GitHub repo in plain English. Built for non-technical founders."
+        description="Find free, open-source alternatives to any paid tool. Describe what you need — CRM, email automation, marketplace — and get your entire tech stack with plain-English explanations. No coding required."
         path="/"
       />
       <Helmet>
