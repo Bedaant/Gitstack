@@ -284,6 +284,10 @@ class StackGeneratorRequest(BaseModel):
     needs_payments: Optional[bool] = None
     building_alone: Optional[bool] = None
 
+class StackMasterPromptRequest(BaseModel):
+    idea: str = Field(..., min_length=3, max_length=300)
+    tools: List[Dict[str, Any]]
+
 class RepoTranslatorRequest(BaseModel):
     github_url: str = Field(..., min_length=10, max_length=200)
 
@@ -1074,6 +1078,41 @@ Put tools in the order they should be set up. Use real GitHub repositories."""
         return {"stack": data}
     except:
         return {"stack": [], "raw": result}
+
+@api_router.post("/ai/stack-master-prompt")
+@limiter.limit("10/minute")
+async def stack_master_prompt(request: Request, req: StackMasterPromptRequest):
+    """Generate a master prompt for AI coding assistants based on a stack."""
+    import json
+    tools_json = json.dumps(req.tools, indent=2)
+
+    prompt = f"""The user wants to build: {req.idea}
+
+They have selected this stack of open-source tools:
+{tools_json}
+
+Generate a comprehensive "master prompt" that the user can copy-paste into an AI coding assistant (Cursor, v0, Claude, ChatGPT, Replit, Bolt, Lovable, etc.) to generate a complete, production-ready setup.
+
+The master prompt should instruct the AI to create:
+1. A docker-compose.yml that runs ALL services together with proper networking
+2. A .env.example with all required environment variables for each service
+3. A setup.sh script that clones repos, builds images, and starts everything
+4. Health checks for each service
+5. Basic nginx or Caddy reverse proxy config for routing between services
+6. Inter-service connection instructions (e.g., how app A connects to database B)
+7. A README.md with step-by-step setup instructions
+8. Common pitfalls and troubleshooting tips specific to these tools
+
+Make the prompt detailed enough that a non-technical founder can hand it to any AI assistant and get a working system. Include specific port numbers, default credentials where appropriate, and service dependency order.
+
+Return ONLY the master prompt text. No markdown code blocks, no explanations outside the prompt. The prompt must be ready to copy-paste directly into an AI coding assistant."""
+
+    try:
+        result = await call_gemini(prompt, json_response=False)
+        return {"prompt": result.strip()}
+    except Exception as e:
+        logger.error(f"Master prompt generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate master prompt. Try again.")
 
 @api_router.post("/ai/repo-translator")
 @limiter.limit("10/minute")
