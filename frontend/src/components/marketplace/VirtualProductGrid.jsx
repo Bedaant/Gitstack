@@ -2,17 +2,23 @@ import React, { useMemo } from "react";
 import { Grid } from "react-window";
 import { ProductCard } from "../ui/ProductCard";
 
-const CARD_WIDTH = 380;
+const BASE_CARD_WIDTH = 380;
 const CARD_HEIGHT = 420;
 const GAP = 20;
 
-function InnerGrid({ columnCount, products, style }) {
+function getCardWidth(containerWidth) {
+  // On mobile, cap card width to container minus padding
+  const maxWidth = Math.max(280, containerWidth - 32);
+  return Math.min(BASE_CARD_WIDTH, maxWidth);
+}
+
+function InnerGrid({ columnCount, products, style, cardWidth }) {
   const items = [];
   for (let row = 0; row < Math.ceil(products.length / columnCount); row++) {
     for (let col = 0; col < columnCount; col++) {
       const idx = row * columnCount + col;
       if (idx >= products.length) break;
-      const left = col * (CARD_WIDTH + GAP);
+      const left = col * (cardWidth + GAP);
       const top = row * (CARD_HEIGHT + GAP);
       items.push(
         <div
@@ -21,7 +27,7 @@ function InnerGrid({ columnCount, products, style }) {
             position: "absolute",
             left,
             top,
-            width: CARD_WIDTH,
+            width: cardWidth,
             height: CARD_HEIGHT,
           }}
         >
@@ -40,8 +46,9 @@ export function VirtualProductGrid({ products, width }) {
     return 1;
   }, [width]);
 
+  const cardWidth = getCardWidth(width);
   const rowCount = Math.ceil(products.length / columnCount);
-  const gridWidth = columnCount * CARD_WIDTH + (columnCount - 1) * GAP;
+  const gridWidth = columnCount * cardWidth + (columnCount - 1) * GAP;
   const gridHeight = rowCount * CARD_HEIGHT + (rowCount - 1) * GAP;
 
   // If list is small, just render normal grid to avoid virtualization overhead
@@ -69,7 +76,7 @@ export function VirtualProductGrid({ products, width }) {
     <div style={{ width: gridWidth, maxWidth: "100%" }}>
       <Grid
         columnCount={columnCount}
-        columnWidth={CARD_WIDTH + GAP}
+        columnWidth={cardWidth + GAP}
         height={Math.min(gridHeight, 800)}
         rowCount={rowCount}
         rowHeight={CARD_HEIGHT + GAP}

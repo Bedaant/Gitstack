@@ -41,20 +41,15 @@ code, pre, .font-mono {
   box-shadow: 6px 6px 0px 0px hsl(var(--foreground));
 }
 
-.neo-shadow-hover:hover {
-  box-shadow: 2px 2px 0px 0px hsl(var(--foreground));
-  transform: translate(2px, 2px);
+.neo-shadow-hover {
+  box-shadow: 4px 4px 0px 0px hsl(var(--foreground));
+  transition: all 0.1s ease;
 }
 
 .neo-card {
   border: 2px solid hsl(var(--foreground));
   box-shadow: 4px 4px 0px 0px hsl(var(--foreground));
   transition: all 0.15s ease;
-}
-
-.neo-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 6px 6px 0px 0px hsl(var(--foreground));
 }
 
 .neo-btn {
@@ -66,11 +61,6 @@ code, pre, .font-mono {
   box-shadow: 4px 4px 0px 0px hsl(var(--foreground));
   transition: all 0.1s ease;
   cursor: pointer;
-}
-
-.neo-btn:hover {
-  box-shadow: 2px 2px 0px 0px hsl(var(--foreground));
-  transform: translate(2px, 2px);
 }
 
 .neo-btn:active {
@@ -88,8 +78,10 @@ code, pre, .font-mono {
   color: hsl(var(--foreground));
 }
 
-.neo-btn-secondary:hover {
-  background: var(--pastel-yellow);
+@media (hover: hover) {
+  .neo-btn-secondary:hover {
+    background: var(--pastel-yellow);
+  }
 }
 
 .neo-btn-danger {
@@ -99,8 +91,10 @@ code, pre, .font-mono {
   box-shadow: 4px 4px 0px 0px hsl(var(--destructive));
 }
 
-.neo-btn-danger:hover {
-  box-shadow: 2px 2px 0px 0px hsl(var(--destructive));
+@media (hover: hover) {
+  .neo-btn-danger:hover {
+    box-shadow: 2px 2px 0px 0px hsl(var(--destructive));
+  }
 }
 
 .neo-input {
@@ -344,8 +338,55 @@ code, pre, .font-mono {
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html, body, #root {
+    overflow-x: hidden;
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Mobile viewport support — 100dvh accounts for dynamic browser toolbars */
+.min-h-dscreen {
+  min-height: 100dvh;
+  min-height: 100vh; /* fallback */
+}
+
+/* Override Tailwind's min-h-screen to use dvh on supporting browsers */
+.min-h-screen {
+  min-height: 100dvh;
+  min-height: 100vh;
+}
+
+/* Touch-friendly hover: only apply hover effects on devices that support hover */
+@media (hover: hover) {
+  .neo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 6px 6px 0px 0px hsl(var(--foreground));
+  }
+  .neo-btn:hover {
+    box-shadow: 2px 2px 0px 0px hsl(var(--foreground));
+    transform: translate(2px, 2px);
+  }
+  .neo-shadow-hover:hover {
+    box-shadow: 2px 2px 0px 0px hsl(var(--foreground));
+    transform: translate(2px, 2px);
+  }
+}
+
+/* Prevent background scroll when modal/drawer is open */
+[data-state="open"][role="dialog"] {
+  overscroll-behavior: contain;
+}
+
+/* Ensure text inputs don't trigger iOS zoom */
+input, textarea, select {
+  font-size: 16px;
+}
+@media (min-width: 640px) {
+  input, textarea, select {
+    font-size: inherit;
   }
 }

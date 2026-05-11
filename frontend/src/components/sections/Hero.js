@@ -96,8 +96,8 @@ export const Hero = () => {
             <span className="font-mono text-sm font-bold">LIVE — FREE TOOLS, PLAIN ENGLISH</span>
           </div>
 
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight uppercase leading-[0.95] mb-6" data-testid="hero-title">
-            Understand any GitHub repo in <br/>
+          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight uppercase leading-[0.95] mb-6" data-testid="hero-title">
+            Understand any GitHub repo in{" "}
             <span className="text-primary">10 seconds.</span>
           </h1>
 

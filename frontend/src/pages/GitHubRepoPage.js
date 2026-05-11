@@ -10,7 +10,6 @@ import { Footer } from "../components/Footer";
 import { formatContent } from "../utils/sanitize";
 import { API } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
-import { GitHubLink } from "../components/ui/GitHubLink";
 import { Link } from "react-router-dom";
 
 // Repo X-Ray: analysis engine based on CodeFlow (MIT), rebranded via scripts/build-xray.js.
@@ -108,9 +107,9 @@ export default function GitHubRepoPage() {
       <main className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="neo-card p-8 mb-8 bg-background" data-testid="github-repo-detail">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <h1 className="text-4xl font-black mb-2">{data.name}</h1>
+            <div className="flex flex-col sm:flex-row items-start justify-between mb-6 gap-4">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black mb-2 break-words">{data.name}</h1>
                 <p className="text-muted-foreground font-mono text-sm mb-4">{data.full_name}</p>
                 <div className="flex flex-wrap items-center gap-3">
                   {data.difficulty && (
@@ -136,12 +135,15 @@ export default function GitHubRepoPage() {
                   )}
                 </div>
               </div>
-              <GitHubLink
-                url={data.html_url}
-                label="View on GitHub"
-                className="neo-btn neo-btn-secondary px-4 py-2"
+              <a
+                href={data.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="neo-btn neo-btn-secondary px-4 py-2 whitespace-nowrap shrink-0"
                 data-testid="github-link"
-              />
+              >
+                <Github className="w-4 h-4 mr-2" /> View on GitHub
+              </a>
             </div>
 
             {data.description && (
@@ -178,12 +180,12 @@ export default function GitHubRepoPage() {
           />
 
           {/* Tab switcher: Plain English summary | Repo X-Ray architecture */}
-          <div className="flex gap-2 mb-0 border-b-4 border-foreground" role="tablist" aria-label="Repo views">
+          <div className="flex flex-wrap gap-2 mb-0 border-b-4 border-foreground" role="tablist" aria-label="Repo views">
             <button
               role="tab"
               aria-selected={activeTab === "summary"}
               onClick={() => setActiveTab("summary")}
-              className={`px-5 py-3 font-black uppercase text-sm border-2 border-b-0 border-foreground -mb-[4px] flex items-center gap-2 ${
+              className={`px-3 sm:px-5 py-3 font-black uppercase text-sm border-2 border-b-0 border-foreground -mb-[4px] flex items-center gap-2 flex-1 sm:flex-none justify-center sm:justify-start ${
                 activeTab === "summary" ? "bg-pastel-mint text-black" : "bg-background text-foreground hover:bg-muted"
               }`}
               data-testid="tab-summary"
@@ -194,7 +196,7 @@ export default function GitHubRepoPage() {
               role="tab"
               aria-selected={activeTab === "xray"}
               onClick={() => setActiveTab("xray")}
-              className={`px-5 py-3 font-black uppercase text-sm border-2 border-b-0 border-foreground -mb-[4px] flex items-center gap-2 ${
+              className={`px-3 sm:px-5 py-3 font-black uppercase text-sm border-2 border-b-0 border-foreground -mb-[4px] flex items-center gap-2 flex-1 sm:flex-none justify-center sm:justify-start ${
                 activeTab === "xray" ? "bg-primary text-primary-foreground" : "bg-background text-foreground hover:bg-muted"
               }`}
               data-testid="tab-xray"
@@ -245,14 +247,14 @@ export default function GitHubRepoPage() {
                 src={xrayUrl(owner, repo)}
                 title={`Repo X-Ray: ${owner}/${repo}`}
                 className="w-full border-0"
-                style={{ height: "80vh", minHeight: "600px" }}
+                style={{ height: "70vh", minHeight: "300px", maxHeight: "800px" }}
                 loading="lazy"
                 sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
               />
             </div>
           )}
 
-          <div className="flex gap-4 mt-8">
+          <div className="flex flex-col sm:flex-row gap-4 mt-8">
             <a 
               href={data.html_url} 
               target="_blank" 
@@ -266,7 +268,7 @@ export default function GitHubRepoPage() {
                 navigator.clipboard.writeText(`Check out ${data.name}: ${data.html_url}`);
                 toast.success("Link copied!");
               }}
-              className="neo-btn neo-btn-secondary px-6 py-3"
+              className="neo-btn neo-btn-secondary px-6 py-3 w-full sm:w-auto justify-center"
               data-testid="share-repo"
             >
               <Share2 className="w-5 h-5 mr-2" /> Share

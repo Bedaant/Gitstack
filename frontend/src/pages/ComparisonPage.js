@@ -122,7 +122,7 @@ export default function ComparisonPage() {
                   value={t1}
                   onChange={(e) => setT1(e.target.value)}
                   placeholder="e.g. Supabase"
-                  className="neo-input p-4 text-2xl font-black focus:bg-background/30 transition-colors"
+                  className="neo-input p-4 text-xl sm:text-2xl font-black focus:bg-background/30 transition-colors"
                   data-testid="tool1-input"
                 />
               </div>
@@ -144,7 +144,7 @@ export default function ComparisonPage() {
                   value={t2}
                   onChange={(e) => setT2(e.target.value)}
                   placeholder="e.g. Appwrite"
-                  className="neo-input p-4 text-2xl font-black focus:bg-background/30 transition-colors"
+                  className="neo-input p-4 text-xl sm:text-2xl font-black focus:bg-background/30 transition-colors"
                   data-testid="tool2-input"
                 />
               </div>
