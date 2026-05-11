@@ -9,6 +9,7 @@ import { Footer } from "../components/Footer";
 import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
 import { saveStackLocally, isStackSaved } from "../utils/localStacks";
+import { trackEvent } from "../utils/analytics";
 
 const LOADING_STEPS = [
   "Parsing your idea...",
@@ -186,6 +187,7 @@ export default function StackGenerator() {
       setStack(res.data.stack || []);
       setSaved(isStackSaved(idea));
       clearDraft();
+      trackEvent("stack_generated", { idea: idea.slice(0, 50), tool_count: res.data.stack?.length || 0 });
     } catch (e) {
       toast.error("Failed to generate stack. Try again.");
       console.error(e);
@@ -197,6 +199,7 @@ export default function StackGenerator() {
     if (!stack || saved) return;
     saveStackLocally(idea, stack);
     setSaved(true);
+    trackEvent("stack_saved", { idea: idea.slice(0, 50), tool_count: stack.length });
     toast.success("Stack saved! View it in My Stacks →", {
       action: { label: "View", onClick: () => window.location.href = '/dashboard' },
     });
@@ -209,6 +212,7 @@ export default function StackGenerator() {
       const name = idea.length > 60 ? idea.slice(0, 57) + '...' : idea;
       const res = await axios.post(`${API}/stacks/publish`, { name, idea, tools: stack });
       setPublicSlug(res.data.stack_id);
+      trackEvent("stack_published", { idea: idea.slice(0, 50), tool_count: stack.length });
       toast.success("Stack published! Share the link →");
     } catch {
       toast.error("Couldn't publish. Try again.");
@@ -234,6 +238,7 @@ export default function StackGenerator() {
     try {
       const res = await axios.post(`${API}/ai/stack-master-prompt`, { idea, tools: stack });
       setMasterPrompt(res.data.prompt);
+      trackEvent("enhanced_prompt_generated", { idea: idea.slice(0, 50), tool_count: stack.length });
       toast.success("Enhanced prompt generated!");
     } catch (e) {
       toast.error("Failed to generate enhanced prompt. Using instant prompt instead.");
@@ -431,6 +436,7 @@ export default function StackGenerator() {
                       onClick={() => {
                         const text = `My stack for "${idea}":\n${stack.map((t, i) => `${i+1}. ${t.name}`).join(', ')}\n\nBuilt with @GitStackDev: ${window.location.origin}/stack-generator`;
                         const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+                        trackEvent("stack_shared", { platform: "twitter", idea: idea.slice(0, 50) });
                         window.open(xUrl, '_blank');
                       }}
                       className="neo-btn px-6 py-3 flex-1"
@@ -631,6 +637,7 @@ export default function StackGenerator() {
                         ]),
                       ].join("\n");
                       navigator.clipboard.writeText(fullGuide);
+                      trackEvent("setup_guide_copied", { idea: idea.slice(0, 50), tool_count: stack.length });
                       toast.success("Full setup guide copied!");
                     }}
                     className="neo-btn neo-btn-primary px-6 py-3 w-full font-black"
@@ -668,6 +675,7 @@ export default function StackGenerator() {
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(masterPrompt || instantPrompt);
+                            trackEvent("master_prompt_copied", { idea: idea.slice(0, 50), enhanced: !!masterPrompt, tool_count: stack.length });
                             toast.success("Master prompt copied!");
                           }}
                           className="absolute top-2 right-2 bg-background text-foreground px-3 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"

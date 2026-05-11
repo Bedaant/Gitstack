@@ -1,5 +1,5 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import React, { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { ThemeProvider } from "next-themes";
 import { ClerkProvider } from "@clerk/clerk-react";
@@ -9,6 +9,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { ErrorBoundary } from "react-error-boundary";
 import { AlertTriangle } from "lucide-react";
 import { NewsletterPopup } from "./components/ui/NewsletterPopup";
+import { trackPageView } from "./utils/analytics";
 
 const CLERK_KEY = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
 
@@ -82,9 +83,19 @@ const ErrorFallback = ({ error, resetErrorBoundary }) => {
   );
 };
 
+const RouteTracker = () => {
+  const location = useLocation();
+  useEffect(() => {
+    trackPageView(location.pathname + location.search);
+  }, [location]);
+  return null;
+};
+
 const AppRouter = () => {
   return (
-    <Routes>
+    <>
+      <RouteTracker />
+      <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/dead-tool-detector" element={<DeadToolDetector />} />
       <Route path="/stack-generator" element={<StackGenerator />} />
@@ -125,6 +136,7 @@ const AppRouter = () => {
       <Route path="/preferences" element={<PreferencesPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </>
   );
 };
 
