@@ -1086,22 +1086,38 @@ async def stack_master_prompt(request: Request, req: StackMasterPromptRequest):
     import json
     tools_json = json.dumps(req.tools, indent=2)
 
+    # Build explicit clone commands section
+    clone_commands = []
+    for tool in req.tools:
+        gh = tool.get("githubUrl", "")
+        if gh and "github.com" in gh:
+            import re
+            match = re.search(r'github\.com/([^/]+/[^/]+)', gh)
+            if match:
+                clone_commands.append(f"git clone https://github.com/{match.group(1)}.git")
+    
+    clone_section = "\n".join(clone_commands) if clone_commands else "# (clone commands will be provided)"
+
     prompt = f"""The user wants to build: {req.idea}
 
 They have selected this stack of open-source tools:
 {tools_json}
 
+IMPORTANT: Include these EXACT git clone commands at the beginning of the setup instructions:
+{clone_section}
+
 Generate a comprehensive "master prompt" that the user can copy-paste into an AI coding assistant (Cursor, v0, Claude, ChatGPT, Replit, Bolt, Lovable, etc.) to generate a complete, production-ready setup.
 
-The master prompt should instruct the AI to create:
-1. A docker-compose.yml that runs ALL services together with proper networking
-2. A .env.example with all required environment variables for each service
-3. A setup.sh script that clones repos, builds images, and starts everything
-4. Health checks for each service
-5. Basic nginx or Caddy reverse proxy config for routing between services
-6. Inter-service connection instructions (e.g., how app A connects to database B)
-7. A README.md with step-by-step setup instructions
-8. Common pitfalls and troubleshooting tips specific to these tools
+The master prompt MUST include:
+1. The exact git clone commands listed above (do not omit these)
+2. A docker-compose.yml that runs ALL services together with proper networking
+3. A .env.example with all required environment variables for each service
+4. A setup.sh script that clones repos (using the exact URLs above), builds images, and starts everything with one command
+5. Health checks for each service
+6. Basic nginx or Caddy reverse proxy config for routing between services
+7. Inter-service connection instructions (e.g., how app A connects to database B)
+8. A README.md with step-by-step setup instructions
+9. Common pitfalls and troubleshooting tips specific to these tools
 
 Make the prompt detailed enough that a non-technical founder can hand it to any AI assistant and get a working system. Include specific port numbers, default credentials where appropriate, and service dependency order.
 
