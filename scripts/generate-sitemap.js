@@ -16,7 +16,7 @@ const fs = require("fs");
 const path = require("path");
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001/api";
-const SITE_URL = "https://gitstack.pro";
+const SITE_URL = "https://www.gitstack.pro";
 const OUT = path.join(__dirname, "..", "frontend", "public", "sitemap.xml");
 
 async function fetchJson(url) {
@@ -59,25 +59,25 @@ async function main() {
   // ── Static core pages ──
   const staticPages = [
     { path: "/", changefreq: "daily", priority: "1.0" },
-    { path: "/tools", changefreq: "daily", priority: "0.9" },
-    { path: "/marketplace", changefreq: "daily", priority: "0.9" },
-    { path: "/collections", changefreq: "weekly", priority: "0.7" },
-    { path: "/repo-of-the-day", changefreq: "daily", priority: "0.7" },
-    { path: "/compare", changefreq: "weekly", priority: "0.6" },
-    { path: "/stack-generator", changefreq: "weekly", priority: "0.9" },
-    { path: "/roast-my-stack", changefreq: "weekly", priority: "0.9" },
-    { path: "/dead-tool-detector", changefreq: "weekly", priority: "0.9" },
-    { path: "/repo-translator", changefreq: "weekly", priority: "0.8" },
-    { path: "/repo-xray", changefreq: "weekly", priority: "0.8" },
-    { path: "/readme-badge", changefreq: "monthly", priority: "0.7" },
-    { path: "/idea-exists", changefreq: "weekly", priority: "0.8" },
-    { path: "/error-explainer", changefreq: "weekly", priority: "0.8" },
-    { path: "/founder-stacks", changefreq: "weekly", priority: "0.8" },
-    { path: "/about", changefreq: "monthly", priority: "0.5" },
-    { path: "/terms", changefreq: "yearly", priority: "0.3" },
-    { path: "/privacy", changefreq: "yearly", priority: "0.3" },
-    { path: "/faq", changefreq: "weekly", priority: "0.8" },
-    { path: "/blog", changefreq: "daily", priority: "0.8" },
+    { path: "/tools/", changefreq: "daily", priority: "0.9" },
+    { path: "/marketplace/", changefreq: "daily", priority: "0.9" },
+    { path: "/collections/", changefreq: "weekly", priority: "0.7" },
+    { path: "/repo-of-the-day/", changefreq: "daily", priority: "0.7" },
+    { path: "/compare/", changefreq: "weekly", priority: "0.6" },
+    { path: "/stack-generator/", changefreq: "weekly", priority: "0.9" },
+    { path: "/roast-my-stack/", changefreq: "weekly", priority: "0.9" },
+    { path: "/dead-tool-detector/", changefreq: "weekly", priority: "0.9" },
+    { path: "/repo-translator/", changefreq: "weekly", priority: "0.8" },
+    { path: "/repo-xray/", changefreq: "weekly", priority: "0.8" },
+    { path: "/readme-badge/", changefreq: "monthly", priority: "0.7" },
+    { path: "/idea-exists/", changefreq: "weekly", priority: "0.8" },
+    { path: "/error-explainer/", changefreq: "weekly", priority: "0.8" },
+    { path: "/founder-stacks/", changefreq: "weekly", priority: "0.8" },
+    { path: "/about/", changefreq: "monthly", priority: "0.5" },
+    { path: "/terms/", changefreq: "yearly", priority: "0.3" },
+    { path: "/privacy/", changefreq: "yearly", priority: "0.3" },
+    { path: "/faq/", changefreq: "weekly", priority: "0.8" },
+    { path: "/blog/", changefreq: "daily", priority: "0.8" },
   ];
 
   for (const p of staticPages) {
@@ -96,7 +96,7 @@ async function main() {
       const id = t.tool_id || t.id;
       if (!id) continue;
       urls.push({
-        loc: `${SITE_URL}/tools/${id}`,
+        loc: `${SITE_URL}/tools/${id}/`,
         changefreq: "weekly",
         priority: "0.7",
         lastmod: toXmlDate(t.updated_at || t.created_at),
@@ -113,7 +113,7 @@ async function main() {
       const id = t.topic_id || t.id;
       if (!id) continue;
       urls.push({
-        loc: `${SITE_URL}/topics/${id}`,
+        loc: `${SITE_URL}/topics/${id}/`,
         changefreq: "weekly",
         priority: "0.6",
       });
@@ -129,7 +129,7 @@ async function main() {
       const id = c.collection_id || c.id;
       if (!id) continue;
       urls.push({
-        loc: `${SITE_URL}/collections/${id}`,
+        loc: `${SITE_URL}/collections/${id}/`,
         changefreq: "weekly",
         priority: "0.6",
         lastmod: toXmlDate(c.updated_at || c.created_at),
@@ -146,7 +146,7 @@ async function main() {
       const id = p.product_id || p.id;
       if (!id) continue;
       urls.push({
-        loc: `${SITE_URL}/marketplace/${id}`,
+        loc: `${SITE_URL}/marketplace/${id}/`,
         changefreq: "daily",
         priority: "0.9",
         lastmod: toXmlDate(p.created_at || p.updated_at),
@@ -170,7 +170,7 @@ async function main() {
       if (!slug || seenAlts.has(slug)) continue;
       seenAlts.add(slug);
       urls.push({
-        loc: `${SITE_URL}/alternatives/${slug}`,
+        loc: `${SITE_URL}/alternatives/${slug}/`,
         changefreq: "weekly",
         priority: "0.8",
       });
@@ -186,7 +186,7 @@ async function main() {
       const fullName = r.full_name;
       if (!fullName || !fullName.includes("/")) continue;
       urls.push({
-        loc: `${SITE_URL}/r/${fullName}`,
+        loc: `${SITE_URL}/r/${fullName}/`,
         changefreq: "weekly",
         priority: "0.6",
       });
@@ -201,7 +201,7 @@ async function main() {
     const blogManifest = JSON.parse(fs.readFileSync(blogManifestPath, "utf8"));
     for (const post of blogManifest.posts || []) {
       urls.push({
-        loc: `${SITE_URL}/blog/${post.slug}`,
+        loc: `${SITE_URL}/blog/${post.slug}/`,
         changefreq: "weekly",
         priority: "0.7",
         lastmod: toXmlDate(post.date),
