@@ -124,7 +124,7 @@ export const Hero = () => {
               className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 neo-btn neo-btn-primary px-5 py-2.5 font-black whitespace-nowrap items-center gap-2"
               data-testid="hero-search-btn"
             >
-              {mode === "idea" ? <><Sparkles className="w-4 h-4" /> Generate Stack</> : <><BookOpen className="w-4 h-4" /> Translate</>}
+              {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate</> : <><Sparkles className="w-4 h-4" /> Find Free Tools</>}
             </button>
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-background border-4 border-black neo-shadow-lg z-50 max-h-80 overflow-y-auto">
@@ -151,7 +151,7 @@ export const Hero = () => {
             type="submit"
             className="sm:hidden neo-btn neo-btn-primary w-full py-3 mt-3 font-black flex items-center justify-center gap-2"
           >
-            {mode === "idea" ? <><Sparkles className="w-4 h-4" /> Generate Stack</> : <><BookOpen className="w-4 h-4" /> Translate Repo</>}
+            {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate Repo</> : <><Sparkles className="w-4 h-4" /> Find Free Tools</>}
           </button>
           {/* Mode indicator — reduces cognitive friction about what will happen */}
           {mode && (
@@ -159,7 +159,7 @@ export const Hero = () => {
               {mode === "translate" ? (
                 <><span className="text-primary font-bold">🔗 GitHub URL detected</span> <span className="text-muted-foreground">— we'll translate it to plain English</span></>
               ) : (
-                <><span className="text-primary font-bold">💡 Idea detected</span> <span className="text-muted-foreground">— we'll build a stack for you</span></>
+                <><span className="text-primary font-bold">💡 Need detected</span> <span className="text-muted-foreground">— we'll find free tools and build your stack</span></>
               )}
             </p>
           )}
