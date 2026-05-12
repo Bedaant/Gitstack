@@ -121,7 +121,7 @@ export const Hero = () => {
             />
             <button
               type="submit"
-              className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 neo-btn neo-btn-primary px-5 py-2.5 font-black whitespace-nowrap items-center gap-2"
+              className="!hidden sm:!flex absolute right-2 top-1/2 -translate-y-1/2 neo-btn neo-btn-primary px-5 py-2.5 font-black whitespace-nowrap items-center gap-2"
               data-testid="hero-search-btn"
             >
               {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate</> : <><Sparkles className="w-4 h-4" /> Find Free Tools</>}
@@ -149,7 +149,7 @@ export const Hero = () => {
           {/* Mobile full-width submit */}
           <button
             type="submit"
-            className="sm:hidden neo-btn neo-btn-primary w-full py-3 mt-3 font-black flex items-center justify-center gap-2"
+            className="sm:!hidden neo-btn neo-btn-primary w-full py-3 mt-3 font-black flex items-center justify-center gap-2"
           >
             {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate Repo</> : <><Sparkles className="w-4 h-4" /> Find Free Tools</>}
           </button>

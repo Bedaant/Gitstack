@@ -50,11 +50,11 @@ export const TopicsGrid = ({ topics, loading }) => {
               <button
                 key={topic.topic_id}
                 onClick={() => navigate(`/topics/${topic.topic_id}`)}
-                className={`neo-card p-5 text-left flex items-center gap-4 text-foreground ${topic.bg_color} hover:border-primary transition-colors`}
+                className={`neo-card p-5 text-left flex items-center gap-4 text-foreground ${topic.bg_color || ''} hover:border-primary transition-colors`}
                 data-testid={`topic-${topic.topic_id}`}
               >
                 <div className="w-12 h-12 bg-background border-2 border-foreground flex items-center justify-center flex-shrink-0">
-                  <IconComponent className={`w-6 h-6 ${topic.color}`} strokeWidth={2} />
+                  <IconComponent className={`w-6 h-6 ${topic.color || ''}`} strokeWidth={2} />
                 </div>
                 <div>
                   <h3 className="font-bold">{topic.name}</h3>

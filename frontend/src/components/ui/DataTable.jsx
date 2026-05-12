@@ -16,7 +16,7 @@ export function DataTable({ data, columns, emptyMessage = "No data" }) {
   });
 
   return (
-    <div className="border-2 border-black overflow-hidden">
+    <div className="border-2 border-black overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-muted border-b-2 border-black">
           {table.getHeaderGroups().map((hg) => (

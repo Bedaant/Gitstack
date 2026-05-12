@@ -60,8 +60,8 @@ export const NewsletterPopup = () => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="neo-card bg-background max-w-md w-full p-8 relative animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+      <div className="neo-card bg-background max-w-md w-full p-8 relative animate-in zoom-in-95 duration-200 my-auto">
         <button 
           onClick={handleClose}
           className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"

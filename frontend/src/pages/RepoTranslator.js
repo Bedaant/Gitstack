@@ -108,6 +108,7 @@ export default function RepoTranslator() {
                 value={url}
                 onChange={(e) => setUrl(e.target.value || "")}
                 onPaste={(e) => {
+                  e.preventDefault();
                   const pastedData = e.clipboardData.getData("text");
                   if (pastedData) setUrl(pastedData);
                 }}

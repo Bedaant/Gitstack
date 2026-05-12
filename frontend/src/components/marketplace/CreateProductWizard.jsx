@@ -207,7 +207,7 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold block mb-1">Currency *</label>
                   <select className="neo-input w-full" value={currency} onChange={(e) => setField("currency", e.target.value)}>
@@ -232,7 +232,7 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
               </div>
               {setupAvailable && (
                 <div className="space-y-3 neo-card p-3 bg-pastel-yellow/20">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-bold block mb-1">Setup Price ({currency})</label>
                       <input type="number" min="1" max="1000" step="0.01" className="neo-input w-full" value={setupPrice} onChange={(e) => setField("setupPrice", e.target.value)} />

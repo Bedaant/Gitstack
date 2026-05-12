@@ -135,14 +135,14 @@ export default function DeadToolDetector() {
                 <div className="neo-card p-8 bg-pastel-mint text-center border-4 border-black border-dashed relative overflow-hidden text-black">
                   <DollarSign className="absolute -left-4 -top-4 w-24 h-24 text-foreground/5 -rotate-12" />
                   <p className="text-sm font-mono uppercase tracking-widest mb-1 font-bold">Estimated Annual Savings</p>
-                  <p className="text-7xl font-black italic drop-shadow-md">
+                  <p className="text-4xl sm:text-5xl md:text-7xl font-black italic drop-shadow-md break-all">
                     ${totalSavings.toLocaleString()}
                   </p>
                   <p className="text-xs font-bold uppercase mt-2 text-foreground/70 tracking-wider">Per Year · Forever</p>
                 </div>
 
-                <div className="neo-card bg-background overflow-hidden border-4 border-foreground shadow-[8px_8px_0px_0px_hsl(var(--foreground))]">
-                  <div className="grid grid-cols-4 gap-4 p-4 bg-foreground text-background text-[10px] font-mono uppercase tracking-widest font-black">
+                <div className="neo-card bg-background overflow-x-auto border-4 border-foreground shadow-[8px_8px_0px_0px_hsl(var(--foreground))]">
+                  <div className="grid grid-cols-4 gap-4 p-4 bg-foreground text-background text-[10px] font-mono uppercase tracking-widest font-black min-w-[600px]">
                     <div>Paid Tool</div>
                     <div>Price</div>
                     <div>Free Alternative</div>
@@ -153,7 +153,7 @@ export default function DeadToolDetector() {
                       key={`${item.paidTool}-${idx}`}
                       initial={{ background: "hsl(var(--background))" }}
                       whileHover={{ background: "var(--pastel-mint)" }}
-                      className="grid grid-cols-4 gap-4 p-5 border-t-2 border-foreground items-start transition-colors"
+                      className="grid grid-cols-4 gap-4 p-5 border-t-2 border-foreground items-start transition-colors min-w-[600px]"
                       data-testid={`result-row-${item.paidTool}`}
                     >
                       <div className="font-bold text-lg">{item.paidTool}</div>
