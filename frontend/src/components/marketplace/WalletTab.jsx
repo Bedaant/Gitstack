@@ -33,7 +33,7 @@ export const WalletTab = ({ wallet, transactions, onChange }) => {
     }
   };
 
-  const fmt = (c) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const fmt = (c) => (c / 100).toLocaleString("en-IN", { style: "currency", currency: "INR" });
 
   return (
     <div className="space-y-6">

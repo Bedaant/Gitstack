@@ -227,7 +227,7 @@ function PurchasesPanel({ purchases, loading }) {
               {p.setup_request && StatusBadge(p.setup_request.status)}
             </div>
             {/* BUG-09 FIX: field is created_at (not purchased_at) and amount_cents (not price_paid_cents) */}
-            <p className="text-xs text-muted-foreground mb-2">{new Date(p.created_at).toLocaleDateString()} · {(p.amount_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}</p>
+            <p className="text-xs text-muted-foreground mb-2">{new Date(p.created_at).toLocaleDateString()} · {(p.amount_cents / 100).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</p>
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => handleDownload(p.purchase_id)} className="neo-btn neo-btn-primary px-3 py-1.5 text-xs font-black inline-flex items-center gap-1">
                 <Download className="w-3 h-3" /> Download

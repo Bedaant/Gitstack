@@ -366,7 +366,12 @@ async def seed(production: bool = False):
     if production:
         print("⚠️  PRODUCTION MODE — inserting into live database")
 
-    client = AsyncIOMotorClient(mongo_url)
+    import ssl
+    client = AsyncIOMotorClient(
+        mongo_url,
+        tls=True,
+        tlsAllowInvalidCertificates=True,
+    )
     db = client[db_name]
 
     # ── Curated seller ──
@@ -390,12 +395,79 @@ async def seed(production: bool = False):
     # ── Insert curated products ──
     inserted = 0
     for template in CURATED_PRODUCTS:
+        UNSPLASH_IMAGES = {
+            "OpenCRM": [
+                "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&h=600&fit=crop",
+            ],
+            "BookStack": [
+                "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1512314889357-e157c22f938d?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=600&fit=crop",
+            ],
+            "InvoiceForge": [
+                "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=800&h=600&fit=crop",
+            ],
+            "ShopLite": [
+                "https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1607082349566-187342175e2f?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1556740758-90de374c12ad?w=800&h=600&fit=crop",
+            ],
+            "VisionKit": [
+                "https://images.unsplash.com/photo-1555255707-c07966088b7b?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1507146426996-ef05306b995a?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&h=600&fit=crop",
+            ],
+            "MCP-Notion": [
+                "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1517842645767-c639042777db?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&h=600&fit=crop",
+            ],
+            "MCP-Slack": [
+                "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800&h=600&fit=crop",
+            ],
+            "SaaS-Boiler": [
+                "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&h=600&fit=crop",
+            ],
+            "AI-Agent-Template": [
+                "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1531746790731-6c087fecd65a?w=800&h=600&fit=crop",
+            ],
+            "Clerk-Auth-Skill": [
+                "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&h=600&fit=crop",
+            ],
+            "DeployScript": [
+                "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1667372393119-c8f473882e8e?w=800&h=600&fit=crop",
+                "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&h=600&fit=crop",
+            ],
+        }
         doc = {
             "product_id": str(uuid4()),
             "seller_user_id": curated_seller,
             **template,
             "published": True,
-            "screenshots": [f"https://placehold.co/600x400/2563EB/FFF?text={template['title'].replace(' ', '+')}"],
+            "sold_out": True,
+            "max_purchases": 50,
+            "screenshots": UNSPLASH_IMAGES.get(template['title'], [f"https://placehold.co/600x400/2563EB/FFF?text={template['title'].replace(' ', '+')}"]),
             "r2_file_key": f"sources/{template['title'].lower().replace(' ', '-')}.zip",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }

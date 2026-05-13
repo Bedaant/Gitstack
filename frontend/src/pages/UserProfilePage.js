@@ -385,7 +385,7 @@ export default function UserProfilePage() {
                     <div className="font-black mb-1 line-clamp-1">{p.title}</div>
                     <div className="text-sm text-muted-foreground line-clamp-2">{p.tagline}</div>
                     <div className="font-black text-primary mt-2">
-                      {(p.price_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}
+                      {(p.price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: p.currency || "INR" })}
                     </div>
                   </Link>
                 ))}

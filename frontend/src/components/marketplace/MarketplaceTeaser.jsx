@@ -28,7 +28,7 @@ export const MarketplaceTeaser = ({ owner, repo, toolId, variant = "banner", fal
   if (products.length === 0) return fallback;
 
   const first = products[0];
-  const price = (first.source_price_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const price = (first.source_price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: first.currency || "INR" });
 
   if (variant === "inline") {
     return (

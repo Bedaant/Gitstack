@@ -1,11 +1,16 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Download, ShoppingBag, Star, BadgeCheck, Wrench } from "lucide-react";
+import { Download, ShoppingBag, Star, BadgeCheck, Wrench, Ban } from "lucide-react";
 
 export const ProductCard = ({ product }) => {
   const price = (product.source_price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: product.currency || "INR" });
   return (
-    <Link to={`/marketplace/${product.product_id}`} className="neo-card block hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all bg-background overflow-hidden">
+    <Link to={`/marketplace/${product.product_id}`} className="neo-card block hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all bg-background overflow-hidden relative">
+      {product.sold_out && (
+        <div className="absolute top-3 left-3 z-10 bg-red-600 text-white text-xs font-black uppercase px-3 py-1 border-2 border-black shadow-[3px_3px_0px_0px_#000]">
+          <Ban className="w-3 h-3 inline mr-1" /> Sold Out
+        </div>
+      )}
       <div className="aspect-video bg-muted border-b-4 border-black overflow-hidden">
         {product.screenshots?.[0] ? (
           <img src={product.screenshots[0]} alt={product.title} className="w-full h-full object-cover" />
@@ -16,7 +21,7 @@ export const ProductCard = ({ product }) => {
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-1">
           <h3 className="font-black text-foreground line-clamp-1">{product.title}</h3>
-          <span className="font-black text-primary whitespace-nowrap">{price}</span>
+          <span className={`font-black whitespace-nowrap ${product.sold_out ? 'text-muted-foreground line-through' : 'text-primary'}`}>{price}</span>
         </div>
         <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{product.tagline}</p>
         <div className="flex items-center justify-between text-xs text-muted-foreground">

@@ -166,12 +166,12 @@ export default function SellPage() {
           <div className="neo-card p-3 bg-pastel-mint/20">
             <p className="text-[10px] font-black uppercase text-muted-foreground">Wallet</p>
             {/* BUG-08 FIX: backend uses balance_cents, not available_balance_cents */}
-            <p className="text-lg font-black">{((data.wallet?.balance_cents || 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}</p>
+            <p className="text-lg font-black">{((data.wallet?.balance_cents || 0) / 100).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</p>
           </div>
           <div className="neo-card p-3 bg-pastel-lavender/20">
             <p className="text-[10px] font-black uppercase text-muted-foreground">Escrow</p>
             {/* BUG-08 FIX: backend uses escrow_cents, not escrow_balance_cents */}
-            <p className="text-lg font-black">{((data.wallet?.escrow_cents || 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}</p>
+            <p className="text-lg font-black">{((data.wallet?.escrow_cents || 0) / 100).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</p>
           </div>
           <div className="neo-card p-3 bg-pastel-yellow/20">
             <p className="text-[10px] font-black uppercase text-muted-foreground">Listings</p>

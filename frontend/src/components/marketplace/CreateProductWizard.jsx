@@ -337,8 +337,8 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
                 <p className="font-black text-sm mb-1">{title || "Untitled"}</p>
                 <p className="text-xs text-muted-foreground mb-2">{tagline}</p>
                 <p className="text-sm font-black text-primary">
-                  {(parseFloat(sourcePrice || 0)).toLocaleString("en-US", { style: "currency", currency: "USD" })}
-                  {setupAvailable && <> + {(parseFloat(setupPrice || 0)).toLocaleString("en-US", { style: "currency", currency: "USD" })} setup</>}
+                  {(parseFloat(sourcePrice || 0)).toLocaleString("en-IN", { style: "currency", currency: currency || "INR" })}
+                  {setupAvailable && <> + {(parseFloat(setupPrice || 0)).toLocaleString("en-IN", { style: "currency", currency: currency || "INR" })} setup</>}
                 </p>
                 <div className="flex flex-wrap gap-1 mt-2">
                   <span className="text-[10px] font-black uppercase bg-foreground text-background px-2 py-0.5">{category}</span>

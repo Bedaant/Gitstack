@@ -14,7 +14,7 @@ import { API } from "../utils/api";
 import { toast } from "sonner";
 import {
   ArrowLeft, Download, Share2, BadgeCheck, Wrench, ShoppingBag,
-  Star, ExternalLink, Github, ChevronLeft, ChevronRight, Loader2
+  Star, ExternalLink, Github, ChevronLeft, ChevronRight, Loader2, Ban
 } from "lucide-react";
 
 export default function MarketplaceProductPage() {
@@ -231,7 +231,13 @@ export default function MarketplaceProductPage() {
                   {product.seller_verified && <BadgeCheck className="w-4 h-4 text-primary" />}
                 </div>
                 <div className="mb-4">
-                  <p className="text-3xl font-black">{price(product.source_price_cents)}</p>
+                  {product.sold_out ? (
+                    <div className="bg-red-600 text-white text-sm font-black uppercase px-3 py-1 inline-block border-2 border-black shadow-[3px_3px_0px_0px_#000] mb-2">
+                      Sold Out
+                    </div>
+                  ) : (
+                    <p className="text-3xl font-black">{price(product.source_price_cents)}</p>
+                  )}
                   <p className="text-xs text-muted-foreground">One-time purchase</p>
                 </div>
 
@@ -247,7 +253,11 @@ export default function MarketplaceProductPage() {
                   </div>
                 )}
 
-                {!user ? (
+                {product.sold_out ? (
+                  <button disabled className="neo-btn neo-btn-secondary px-4 py-2 w-full font-black text-sm inline-flex items-center justify-center gap-2 opacity-50 cursor-not-allowed">
+                    <Ban className="w-4 h-4" /> Sold Out
+                  </button>
+                ) : !user ? (
                   <button onClick={login} className="neo-btn neo-btn-primary px-4 py-2 w-full font-black text-sm">
                     Login to Buy
                   </button>
