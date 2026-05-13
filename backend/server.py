@@ -1592,6 +1592,7 @@ Make it exciting and accessible to non-technical people!"""
 
 class NewsletterSubscribeRequest(BaseModel):
     email: str
+    source: Optional[str] = None
 
 @api_router.post("/newsletter/subscribe")
 async def subscribe_newsletter(req: NewsletterSubscribeRequest):
@@ -1610,6 +1611,7 @@ async def subscribe_newsletter(req: NewsletterSubscribeRequest):
     # Save subscriber
     await db.newsletter_subscribers.insert_one({
         "email": email,
+        "source": req.source,
         "subscribed_at": datetime.now(timezone.utc).isoformat(),
         "status": "active"
     })
@@ -3944,11 +3946,16 @@ class PublishToggle(BaseModel):
 def get_r2_client():
     import boto3
     from botocore.config import Config as BotoConfig
+    account_id = os.environ.get("R2_ACCOUNT_ID")
+    access_key = os.environ.get("R2_ACCESS_KEY_ID")
+    secret_key = os.environ.get("R2_SECRET_ACCESS_KEY")
+    if not account_id or not access_key or not secret_key:
+        raise HTTPException(status_code=503, detail="Storage not configured")
     return boto3.client(
         "s3",
-        endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
         config=BotoConfig(signature_version="s3v4"),
         region_name="auto",
     )
@@ -3997,14 +4004,18 @@ def get_razorpay_client():
     return razorpay.Client(auth=(os.environ["RAZORPAY_KEY_ID"], os.environ["RAZORPAY_KEY_SECRET"]))
 
 def verify_razorpay_signature(order_id: str, payment_id: str, signature: str) -> bool:
-    secret = os.environ["RAZORPAY_KEY_SECRET"].encode()
+    secret = os.environ.get("RAZORPAY_KEY_SECRET")
+    if not secret:
+        return False
     msg = f"{order_id}|{payment_id}".encode()
-    expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
+    expected = hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
 
 def verify_razorpay_webhook_signature(body: bytes, signature: str) -> bool:
-    secret = os.environ["RAZORPAY_WEBHOOK_SECRET"].encode()
-    expected = hmac.new(secret, body, hashlib.sha256).hexdigest()
+    secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET")
+    if not secret:
+        return False
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
 
 # ---- Seller Onboarding (Task 7) ----
@@ -4329,19 +4340,20 @@ async def create_order(data: CreateOrderRequest, request: Request):
 
 async def _complete_purchase(purchase: dict, payment_id: str):
     """Idempotent: mark purchase complete, credit wallet, create setup_request if needed."""
-    if purchase.get("status") == "completed":
-        return
+    # Atomic check-and-set: filter ensures we only complete once
     product = await db.marketplace_products.find_one({"product_id": purchase["product_id"]})
     if not product:
         return
     fee_pct = int(os.environ.get("PLATFORM_FEE_PERCENT", "15"))
     seller_id = product["seller_user_id"]
     now = datetime.now(timezone.utc)
-    await db.marketplace_purchases.update_one(
-        {"purchase_id": purchase["purchase_id"]},
+    result = await db.marketplace_purchases.update_one(
+        {"purchase_id": purchase["purchase_id"], "status": {"$ne": "completed"}},
         {"$set": {"status": "completed", "razorpay_payment_id": payment_id,
                   "completed_at": now.isoformat()}},
     )
+    if result.modified_count == 0:
+        return  # Already completed by another process
     source_seller_cut = int(product["source_price_cents"] * (100 - fee_pct) / 100)
     await db.seller_wallets.update_one(
         {"seller_user_id": seller_id},
@@ -4480,11 +4492,13 @@ async def download_product(purchase_id: str, request: Request):
 async def _release_setup_escrow(sr: dict, reason: str):
     now = datetime.now(timezone.utc).isoformat()
     new_status = "completed" if reason == "buyer_confirmed" else "auto_released"
-    await db.setup_requests.update_one(
-        {"request_id": sr["request_id"]},
+    result = await db.setup_requests.update_one(
+        {"request_id": sr["request_id"], "buyer_confirmed": False},
         {"$set": {"buyer_confirmed": True, "status": new_status,
                   "released_at": now, "release_reason": reason}},
     )
+    if result.modified_count == 0:
+        return  # Already released by another process
     await db.seller_wallets.update_one(
         {"seller_user_id": sr["seller_user_id"]},
         {"$inc": {"balance_cents": sr["escrow_amount_cents"],

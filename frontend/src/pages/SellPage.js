@@ -179,7 +179,7 @@ export default function SellPage() {
           </div>
           <div className="neo-card p-3 bg-pastel-pink/20">
             <p className="text-[10px] font-black uppercase text-muted-foreground">Pending Setups</p>
-            <p className="text-lg font-black">{data.setup_requests?.filter((r) => r.status !== "completed").length || 0}</p>
+            <p className="text-lg font-black">{data.pending_setup_requests || 0}</p>
           </div>
         </div>
 

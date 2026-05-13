@@ -116,6 +116,7 @@ const AppRouter = () => {
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
       <Route path="/u/me" element={<MeRedirect />} />
       <Route path="/marketplace" element={<MarketplacePage />} />
+      <Route path="/marketplace/sell" element={<Navigate to="/sell" replace />} />
       <Route path="/marketplace/:productId" element={<MarketplaceProductPage />} />
       <Route path="/sell" element={<RequireAuth><SellPage /></RequireAuth>} />
       <Route path="/alternatives/:tool" element={<AlternativesPage />} />

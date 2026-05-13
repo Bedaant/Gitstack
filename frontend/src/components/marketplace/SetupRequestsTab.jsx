@@ -62,31 +62,31 @@ export const SetupRequestsTab = () => {
             <h4 className="font-black uppercase text-sm mb-2">{group.replace("_", " ")} ({groups[group].length})</h4>
             <div className="space-y-3">
               {groups[group].map((r) => (
-                <div key={r.id} className="neo-card p-4">
+                <div key={r.request_id} className="neo-card p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <StatusBadge status={r.status} />
                         <span className="text-sm font-black">{r.product_title}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">Buyer: {r.buyer_name} · {r.buyer_email}</p>
+                      <p className="text-xs text-muted-foreground">Buyer: {r.buyer?.name || "Unknown"} · {r.buyer?.email || "No email"}</p>
                       {r.auto_release_at && (
                         <p className="text-xs text-primary font-bold mt-1">Auto-releases {r.auto_release_at}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <a href={`mailto:${r.buyer_email}`} className="neo-btn neo-btn-secondary px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1">
+                      <a href={`mailto:${r.buyer?.email || ""}`} className="neo-btn neo-btn-secondary px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1">
                         <Mail className="w-3 h-3" /> Email Buyer
                       </a>
                       {r.status === "pending" && (
-                        <button onClick={() => updateStatus(r.id, "in_progress")} className="neo-btn neo-btn-primary px-3 py-1.5 text-xs font-bold">
+                        <button onClick={() => updateStatus(r.request_id, "in_progress")} className="neo-btn neo-btn-primary px-3 py-1.5 text-xs font-bold">
                           Mark In Progress
                         </button>
                       )}
                       {r.status === "in_progress" && (
                         <button onClick={() => {
                           const note = window.prompt("Optional completion note:") || "";
-                          updateStatus(r.id, "completed", note);
+                          updateStatus(r.request_id, "completed", note);
                         }} className="neo-btn neo-btn-primary px-3 py-1.5 text-xs font-bold">
                           Mark Complete
                         </button>
