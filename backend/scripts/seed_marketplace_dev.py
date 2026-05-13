@@ -1,9 +1,6 @@
-"""Seed marketplace data with curated products + realistic dev data.
+"""Seed marketplace with 10 real products for non-technical founders.
 
 Run:
-    cd backend && python scripts/seed_marketplace_dev.py
-
-Production:
     cd backend && python scripts/seed_marketplace_dev.py --production
 """
 import asyncio
@@ -15,320 +12,438 @@ from uuid import uuid4
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from faker import Faker
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
 load_dotenv()
 
-fake = Faker()
-Faker.seed(42)
-
 # Categories must match backend Literal exactly
 CATEGORIES = ["saas", "mcp-server", "computer-vision", "template", "skill", "other"]
-CATEGORY_LABELS = {
-    "saas": "SaaS",
-    "mcp-server": "MCP Servers",
-    "computer-vision": "Computer Vision",
-    "template": "Templates",
-    "skill": "Skills",
-    "other": "Other",
-}
 SELLER_NAMES = ["alice_dev", "bob_builder", "charlie_code", "dana_designs", "eve_engineer"]
 
-# ── Curated products from agent_instructions/marketplace-products.md ──
 CURATED_PRODUCTS = [
     {
-        "title": "OpenCRM",
-        "tagline": "A modern, open-source CRM that looks like Pipedrive but costs nothing. Next.js frontend, Prisma ORM, PostgreSQL backend.",
-        "description": """OpenCRM is a fully functional customer relationship management system built on top of the Twenty CRM open-source core. It includes contact management, deal pipelines, task tracking, email integration, and a clean dashboard that non-technical founders can actually use. Unlike HubSpot's $45/mo starter plan, you pay once and host it forever on any VPS for $5/mo.
+        "title": "CustomerBook",
+        "tagline": "Never lose a lead again. Track customers, follow-ups, and deals in one place.",
+        "description": """**The Problem You're Facing**
 
-What you get:
-- Complete Next.js 14 source code
-- Prisma schema + PostgreSQL migrations
-- Docker Compose setup (one command deploy)
-- Email sync via Nodemailer
-- Kanban-style deal pipeline
-- Team member roles and permissions
-- Mobile-responsive UI
+Your customer data is scattered across Excel sheets, WhatsApp chats, and notebooks. You forget to follow up. Hot leads go cold. You have no idea how much revenue is in your pipeline. You're essentially flying blind.
 
-Setup Service: We dockerize it on your DigitalOcean / AWS / Hetzner server, configure your domain SSL, connect your email provider, and import your existing CSV contacts.""",
+**What CustomerBook Does**
+
+CustomerBook is a simple CRM built for Indian founders who don't want to pay HubSpot ₹3,600/month. It gives you one clean dashboard to manage every customer interaction.
+
+**What You Get:**
+- **Contact Database** — Store every lead and customer with phone, email, company, and notes
+- **Deal Pipeline** — Drag deals from "New Lead" → "Meeting Scheduled" → "Proposal Sent" → "Won"
+- **Follow-up Reminders** — Never forget a follow-up. Get reminded before leads go cold
+- **Revenue Dashboard** — See your monthly pipeline, closed deals, and projected revenue at a glance
+- **Mobile Access** — Works perfectly on your phone. Update deals while you're on the road
+- **Team Access** — Add your sales team. Everyone sees the same data, no more confusion
+
+**The Savings:**
+HubSpot Starter: ₹3,600/month = ₹43,200/year
+CustomerBook: ₹2,400 one-time
+**You save ₹40,800 in the first year alone.**
+
+**Setup Service (₹1,500):**
+We import your existing customer list, set up your sales stages, configure follow-up reminders, and train you in a 30-minute video call. You'll be tracking deals within an hour.
+
+**Who This Is For:**
+Freelancers, agencies, consultants, real estate agents, coaches — anyone who sells services and needs to track leads without complexity.""",
+        "category": "saas",
+        "source_price_cents": 2400,
+        "currency": "INR",
+        "setup_available": True,
+        "setup_price_cents": 1500,
+        "setup_description": "Import contacts, configure pipeline, set reminders, 30-min training call",
+        "setup_delivery_days": 1,
+        "github_repo_url": "https://github.com/twentyhq/twenty",
+        "purchase_count": 23,
+        "avg_rating": 4.7,
+        "review_count": 8,
+    },
+    {
+        "title": "AppointmentPro",
+        "tagline": "Stop the WhatsApp scheduling dance. Let clients book themselves and pay upfront.",
+        "description": """**The Problem You're Facing**
+
+"Are you free Tuesday at 3?" "No, what about Wednesday?" "Wednesday I'm busy, Thursday?" — This back-and-forth wastes 20 minutes per booking. Clients forget appointments. You lose revenue from no-shows. You look unprofessional.
+
+**What AppointmentPro Does**
+
+AppointmentPro replaces Calendly with your own branded booking page. Clients see your availability, pick a slot, pay a deposit, and receive an automatic Zoom link. Zero back-and-forth.
+
+**What You Get:**
+- **Branded Booking Page** — Your logo, your colors, your domain. Looks like you built it
+- **Deposit Collection** — Require payment before booking so no-shows cost you nothing
+- **Automatic Zoom Links** — Meeting link generated and emailed to both parties
+- **SMS Reminders** — Client gets reminded 1 hour before. No more forgotten calls
+- **Google Calendar Sync** — Your availability stays in sync automatically
+- **Buffer Time** — Set gaps between meetings so you're not rushing
+
+**The Savings:**
+Calendly Professional: ₹1,000/month = ₹12,000/year
+AppointmentPro: ₹2,000 one-time
+**You save ₹10,000 in the first year.**
+
+**Setup Service (₹1,500):**
+We brand the page with your logo and colors, connect your Google Calendar, set your availability hours, configure deposit amounts, and give you the link to share.
+
+**Who This Is For:**
+Consultants, coaches, doctors, lawyers, salon owners, tutors — anyone who takes appointments and is tired of scheduling chaos.""",
+        "category": "saas",
+        "source_price_cents": 2000,
+        "currency": "INR",
+        "setup_available": True,
+        "setup_price_cents": 1500,
+        "setup_description": "Brand page, connect calendar, set availability, configure deposits",
+        "setup_delivery_days": 1,
+        "github_repo_url": "https://github.com/calcom/cal.com",
+        "purchase_count": 18,
+        "avg_rating": 4.5,
+        "review_count": 6,
+    },
+    {
+        "title": "InvoiceFast",
+        "tagline": "Create GST invoices in 2 clicks. Get paid faster with automatic reminders.",
+        "description": """**The Problem You're Facing**
+
+You're creating invoices in Word or Excel. Every invoice takes 15 minutes to format. Clients delay payment because there's no easy "Pay Now" button. You have no idea who owes you money or for how long. Tax season is a nightmare.
+
+**What InvoiceFast Does**
+
+InvoiceFast is a self-hosted invoicing tool built for Indian businesses. GST-compliant invoices, automatic payment collection, and payment reminders — all in one place.
+
+**What You Get:**
+- **GST-Compliant Invoices** — Auto-calculates CGST, SGST, IGST. Your CA will thank you
+- **"Pay Now" Button** — Clients pay via UPI, credit card, debit card, or net banking instantly
+- **Payment Reminders** — Automatic email reminders for overdue invoices (gentle, then firm)
+- **Client Portal** — Clients log in to see all their invoices and payment history
+- **Recurring Invoices** — Monthly retainers? Set it once, invoices go out automatically
+- **Expense Tracking** — Log business expenses and see your profit after costs
+
+**The Savings:**
+QuickBooks Simple Start: ₹1,500/month = ₹18,000/year
+InvoiceFast: ₹1,600 one-time
+**You save ₹16,400 in the first year.**
+
+**Setup Service (₹1,000):**
+We add your logo, GST number, bank details, and create your first invoice template. Send your first invoice in 15 minutes.
+
+**Who This Is For:**
+Freelancers, agencies, small businesses, consultants, contractors — anyone who sends invoices and wants to get paid faster.""",
+        "category": "saas",
+        "source_price_cents": 1600,
+        "currency": "INR",
+        "setup_available": True,
+        "setup_price_cents": 1000,
+        "setup_description": "Add logo, GST, bank details, create first invoice template",
+        "setup_delivery_days": 1,
+        "github_repo_url": "https://github.com/InvoicePlane/InvoicePlane",
+        "purchase_count": 31,
+        "avg_rating": 4.8,
+        "review_count": 12,
+    },
+    {
+        "title": "ShopOne",
+        "tagline": "Your own online store. No Shopify fees. Keep 100% of every sale.",
+        "description": """**The Problem You're Facing**
+
+You sell on Instagram and WhatsApp but have no proper store. Orders get lost in DMs. You can't collect payments properly. Shopify charges ₹2,000/month PLUS 2% of every sale. On ₹1 lakh revenue, that's ₹2,000 + ₹4,000 = ₹6,000 gone.
+
+**What ShopOne Does**
+
+ShopOne gives you a complete online store that you own. Product catalog, shopping cart, payment collection, and order tracking — with zero platform fees per sale.
+
+**What You Get:**
+- **Product Catalog** — Add unlimited products with photos, descriptions, variants (size, color)
+- **Shopping Cart & Checkout** — Smooth buying experience that converts browsers to buyers
+- **Payment Collection** — Razorpay integration for UPI, cards, wallets. Money goes straight to your account
+- **Order Management** — Track orders from "Placed" → "Shipped" → "Delivered"
+- **Customer Accounts** — Buyers can log in, see order history, and reorder
+- **Inventory Tracking** — Know when stock is low before you run out
+- **Zero Transaction Fees** — You pay nothing per sale. Keep 100%.
+
+**The Savings:**
+Shopify Basic: ₹24,000/year + 2% per sale
+ShopOne: ₹2,900 one-time + 0% per sale
+On ₹5 lakh revenue: **You save ₹34,000 in the first year.**
+
+**Setup Service (₹2,500):**
+We add up to 20 products, configure payment collection, set up shipping options, connect your domain, and launch your store.
+
+**Who This Is For:**
+Product sellers, fashion brands, handmade goods, digital product creators, food businesses — anyone who wants to sell online without giving away margin.""",
         "category": "saas",
         "source_price_cents": 2900,
         "currency": "INR",
         "setup_available": True,
-        "setup_price_cents": 1500,
-        "setup_description": "Docker deploy on your VPS + SSL + email config + CSV import",
-        "setup_delivery_days": 2,
-        "github_repo_url": "https://github.com/twentyhq/twenty",
-        "purchase_count": 7,
-        "avg_rating": 4.6,
-        "review_count": 3,
-    },
-    {
-        "title": "BookStack",
-        "tagline": "Self-hosted appointment booking that beats Calendly. Stripe payments, Zoom auto-generation, reminder emails.",
-        "description": """BookStack gives you a branded booking page where clients schedule appointments, pay deposits, and receive automatic Zoom links — without Calendly's $12/mo fee. Built on the Cal.com open-source core with custom theming so it matches your brand colors and logo.
-
-What you get:
-- Full Next.js booking interface
-- Stripe checkout integration for paid bookings
-- Google Calendar / Outlook two-way sync
-- Automatic Zoom/Meet link generation
-- SMS + email reminder system
-- Custom availability rules and buffer times
-- Admin dashboard with analytics
-
-Setup Service: We brand it with your colors/logo, connect your Stripe, sync your calendar, and deploy to your domain with SSL.""",
-        "category": "saas",
-        "source_price_cents": 2500,
-        "currency": "INR",
-        "setup_available": True,
-        "setup_price_cents": 1900,
-        "setup_description": "Brand theming + Stripe connect + calendar sync + domain deploy",
-        "setup_delivery_days": 3,
-        "github_repo_url": "https://github.com/calcom/cal.com",
-        "purchase_count": 5,
-        "avg_rating": 4.4,
-        "review_count": 2,
-    },
-    {
-        "title": "InvoiceForge",
-        "tagline": "Self-hosted invoicing for freelancers and agencies. PDF generation, Stripe payments, recurring billing, client portal.",
-        "description": """InvoiceForge is a complete invoicing and billing platform based on InvoicePlane. Create beautiful PDF invoices, accept Stripe payments, set up recurring subscriptions, and give clients a portal to view their payment history. No more QuickBooks ($15/mo) or FreshBooks ($17/mo).
-
-What you get:
-- Full PHP/MySQL source code
-- 5 professional PDF invoice templates
-- Stripe + PayPal payment gateway support
-- Recurring invoice automation
-- Client self-service portal
-- Expense tracking and reporting
-- Multi-currency and tax support
-- REST API for integrations
-
-Setup Service: We install it on your server, configure your tax settings, upload your logo, connect Stripe, and send a test invoice.""",
-        "category": "saas",
-        "source_price_cents": 1900,
-        "currency": "INR",
-        "setup_available": True,
-        "setup_price_cents": 1000,
-        "setup_description": "Server install + tax config + logo upload + Stripe connect + test invoice",
-        "setup_delivery_days": 1,
-        "github_repo_url": "https://github.com/InvoicePlane/InvoicePlane",
-        "purchase_count": 8,
-        "avg_rating": 4.7,
-        "review_count": 4,
-    },
-    {
-        "title": "VisionKit",
-        "tagline": "Production-ready computer vision API starter. OCR, object detection, and image classification in one Docker container.",
-        "description": """VisionKit is a FastAPI-based microservice that wraps YOLOv8 and EasyOCR into a single deployable API. Upload an image, get back detected objects, bounding boxes, confidence scores, and extracted text. Perfect for founders building document scanners, quality control tools, or AI-powered apps.
-
-What you get:
-- FastAPI server with async endpoints
-- YOLOv8 object detection pre-trained on COCO
-- EasyOCR text extraction (80+ languages)
-- Image classification pipeline
-- Docker + GPU support (CUDA)
-- Swagger UI for testing
-- Python client SDK
-- Rate limiting and API key auth
-
-Setup Service: We deploy to your cloud server (AWS/GCP/Hetzner), configure GPU drivers if available, set up reverse proxy with SSL, and provide API docs.""",
-        "category": "computer-vision",
-        "source_price_cents": 4900,
-        "currency": "INR",
-        "setup_available": True,
-        "setup_price_cents": 2900,
-        "setup_description": "Cloud deploy + GPU config + SSL reverse proxy + API docs",
-        "setup_delivery_days": 3,
-        "github_repo_url": "https://github.com/ultralytics/ultralytics",
-        "purchase_count": 3,
-        "avg_rating": 4.8,
-        "review_count": 1,
-    },
-    {
-        "title": "MCP-Notion",
-        "tagline": "Let AI agents read and write your Notion workspaces. MCP server with full database, page, and block support.",
-        "description": """MCP-Notion is a production-ready Model Context Protocol server that connects Claude, Cursor, and other AI assistants directly to your Notion workspace. Your AI can query databases, create pages, update properties, and manage projects without you copy-pasting context.
-
-What you get:
-- Full TypeScript MCP server implementation
-- Notion API integration with OAuth
-- Database query and CRUD operations
-- Page creation and content blocks
-- Property type support (rich_text, select, multi_select, date, formula, relation)
-- Error handling and rate-limit compliance
-- Environment configuration template
-- Deployment guide for Cloudflare Workers and Node.js
-
-Setup Service: We create your Notion integration, generate your API token, deploy the MCP server, and verify it works with Claude Desktop.""",
-        "category": "mcp-server",
-        "source_price_cents": 1500,
-        "currency": "INR",
-        "setup_available": True,
-        "setup_price_cents": 1000,
-        "setup_description": "Notion integration + API token + MCP deploy + Claude Desktop verify",
-        "setup_delivery_days": 1,
-        "github_repo_url": "https://github.com/makenotion/notion-mcp-server",
-        "purchase_count": 6,
-        "avg_rating": 4.3,
-        "review_count": 2,
-    },
-    {
-        "title": "MCP-Slack",
-        "tagline": "Connect AI agents to your Slack workspace. Send messages, search channels, and manage threads via MCP.",
-        "description": """MCP-Slack turns your AI assistant into a team member that can read Slack conversations, send messages, search channels, and summarize threads. Built on the official MCP protocol so it works with Claude, Cursor, and any MCP-compatible client.
-
-What you get:
-- TypeScript MCP server with Slack Web API
-- Channel listing and message search
-- Send messages and thread replies
-- User lookup and presence detection
-- File upload support
-- Slack Bolt framework for Slack-native commands
-- OAuth 2.0 installation flow
-- Deployment configs for Railway, Render, and self-host
-
-Setup Service: We create your Slack app, configure OAuth scopes, deploy the MCP server, and test message sending from Claude.""",
-        "category": "mcp-server",
-        "source_price_cents": 1500,
-        "currency": "INR",
-        "setup_available": True,
-        "setup_price_cents": 1000,
-        "setup_description": "Slack app creation + OAuth scopes + MCP deploy + message test",
-        "setup_delivery_days": 1,
-        "github_repo_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
-        "purchase_count": 4,
-        "avg_rating": 4.2,
-        "review_count": 1,
-    },
-    {
-        "title": "SaaS-Boiler",
-        "tagline": "The only Next.js starter you need. Auth, Stripe, database, emails, and dashboard — pre-wired and production-ready.",
-        "description": """SaaS-Boiler is a battle-tested Next.js 14 starter that eliminates 40+ hours of setup. It includes authentication, Stripe subscriptions, a PostgreSQL database, transactional emails, an admin dashboard, and a landing page. Fork it, brand it, launch in a weekend.
-
-What you get:
-- Next.js 14 App Router + TypeScript
-- Clerk authentication (magic links + OAuth)
-- Stripe Checkout + Customer Portal
-- Prisma + PostgreSQL schema
-- Resend email templates (welcome, receipt, password reset)
-- Tailwind + shadcn/ui component library
-- Dark mode support
-- Admin dashboard with user analytics
-- SEO-optimized landing page
-- Docker + docker-compose for local dev
-- Deploy guides for Vercel, Railway, Render
-
-Setup Service: We brand the landing page with your copy, configure Stripe products/prices, set up your production database, deploy to Vercel, and connect your custom domain.""",
-        "category": "template",
-        "source_price_cents": 3900,
-        "currency": "INR",
-        "setup_available": True,
         "setup_price_cents": 2500,
-        "setup_description": "Brand landing page + Stripe config + database setup + Vercel deploy + custom domain",
+        "setup_description": "Add 20 products, configure payments, shipping, domain, launch store",
         "setup_delivery_days": 2,
-        "github_repo_url": "https://github.com/t3-oss/create-t3-app",
-        "purchase_count": 12,
-        "avg_rating": 4.9,
+        "github_repo_url": "https://github.com/medusajs/medusa",
+        "purchase_count": 14,
+        "avg_rating": 4.6,
         "review_count": 5,
     },
     {
-        "title": "AI-Agent-Template",
-        "tagline": "Build AI agents that actually work. ReAct pattern, tool calling, memory, and multi-step reasoning — all in one Python template.",
-        "description": """AI-Agent-Template is a production-ready Python framework for building ReAct-style AI agents using LangGraph. It includes tool calling, conversation memory, human-in-the-loop checkpoints, and streaming responses. Stop building agent demos that break in production.
+        "title": "EmailAuto",
+        "tagline": "Turn website visitors into paying customers with automated emails.",
+        "description": """**The Problem You're Facing**
 
-What you get:
-- LangGraph state machine with ReAct pattern
-- Tool registry with 5 pre-built tools (search, calculator, API call, file read, database query)
-- Conversation memory with SQLite persistence
-- Human approval checkpoints for sensitive actions
-- Streaming SSE endpoint for real-time responses
-- FastAPI server with async support
-- Docker container with Python 3.11
-- OpenAI + Anthropic + local model support (via LiteLLM)
-- Observability with LangSmith tracing
-- Deploy configs for Render, Railway, and AWS ECS
+Someone visits your website, likes what they see, but leaves without buying. You never hear from them again. You're manually emailing customers one by one. New signups get no welcome. Old customers forget you exist. You're leaving money on the table every single day.
 
-Setup Service: We customize the tool set for your use case, connect your LLM provider API keys, deploy the API, and provide a Postman collection.""",
-        "category": "template",
-        "source_price_cents": 4500,
-        "currency": "INR",
-        "setup_available": True,
-        "setup_price_cents": 2900,
-        "setup_description": "Custom tools + LLM API keys + API deploy + Postman collection",
-        "setup_delivery_days": 3,
-        "github_repo_url": "https://github.com/langchain-ai/langgraph",
-        "purchase_count": 4,
-        "avg_rating": 4.5,
-        "review_count": 2,
-    },
-    {
-        "title": "Clerk-Auth-Skill",
-        "tagline": "Complete Clerk authentication implementation for Next.js. Organizations, roles, webhooks, and protected routes — explained in plain English.",
-        "description": """Clerk-Auth-Skill is not just code — it's a complete implementation guide + working repo that shows exactly how to add enterprise-grade auth to your Next.js app. Includes organizations (multi-tenancy), role-based access control, webhook handling, and protected API routes. All explained like you're 5.
+**What EmailAuto Does**
 
-What you get:
-- Complete Next.js 14 repo with Clerk integration
-- Organization switching and member management
-- Role-based access (admin, editor, viewer)
-- Middleware for protected routes and API endpoints
-- Webhook handlers for user.created, user.updated, organization.created
-- Custom sign-in/sign-up pages with your branding
-- User profile and account settings components
-- Step-by-step PDF guide (30 pages)
-- Common pitfalls and debugging checklist
+EmailAuto sends the right email to the right person at the right time — automatically. Welcome new subscribers, follow up with leads, and bring back old customers without lifting a finger.
 
-Setup Service: We integrate Clerk into your existing Next.js app, configure your auth flows, set up webhooks, and test every protected route.""",
-        "category": "skill",
+**What You Get:**
+- **Welcome Sequence** — Every new signup gets a series of 5 emails introducing your business and building trust
+- **Abandoned Cart Recovery** — Someone adds to cart but doesn't buy? Automatic reminder email with their items
+- **Follow-up Sequences** — "Day 3: Tips" → "Day 7: Case study" → "Day 14: Special offer"
+- **Newsletter Broadcasting** — Send one email to your entire list. Announce sales, new products, or content
+- **Open & Click Tracking** — See exactly who opened and clicked. Follow up with the engaged ones
+- **Beautiful Templates** — 10 pre-designed email templates with your branding
+
+**The Savings:**
+Mailchimp Essentials: ₹1,100/month = ₹13,200/year
+EmailAuto: ₹1,200 one-time
+**You save ₹12,000 in the first year.**
+
+**Setup Service (₹1,500):**
+We write your welcome email series (5 emails), set up abandoned cart recovery, create a newsletter template, and connect to your website signup form.
+
+**Who This Is For:**
+E-commerce stores, coaches, course creators, SaaS founders, agencies — anyone who has website visitors and wants to convert them into buyers through email.""",
+        "category": "saas",
         "source_price_cents": 1200,
         "currency": "INR",
         "setup_available": True,
         "setup_price_cents": 1500,
-        "setup_description": "Clerk integration + auth flows + webhooks + route testing",
+        "setup_description": "Write 5 welcome emails, set up abandoned cart, create newsletter template",
+        "setup_delivery_days": 2,
+        "github_repo_url": "https://github.com/knadh/listmonk",
+        "purchase_count": 19,
+        "avg_rating": 4.4,
+        "review_count": 4,
+    },
+    {
+        "title": "BusinessSite",
+        "tagline": "A professional website that loads in 1 second and ranks on Google.",
+        "description": """**The Problem You're Facing**
+
+You don't have a website. Or your current site is slow, ugly, and doesn't show up on Google. When potential clients search for you, they find your competitors instead. You look amateur. You're losing credibility and business before you even speak to anyone.
+
+**What BusinessSite Does**
+
+BusinessSite is a complete 5-page website built for speed and search rankings. It makes you look like a serious business from day one.
+
+**What You Get:**
+- **5 Essential Pages** — Home, About, Services, Contact, and Blog
+- **Lightning Fast** — Loads in under 1 second. Google ranks fast sites higher
+- **Mobile Perfect** — Looks stunning on phones. 70% of your traffic is mobile
+- **Contact Form** — Leads fill out a form and it lands in your email instantly
+- **SEO Ready** — Auto-generated sitemap, structured data, meta tags. Google finds you faster
+- **Blog Included** — Publish articles that rank and bring free traffic from Google
+- **Your Own Domain** — yourbusiness.com (we help you buy and connect it)
+- **Dark Mode** — Modern look that impresses visitors
+
+**The Savings:**
+Wix Premium: ₹1,500/month = ₹18,000/year
+BusinessSite: ₹2,900 one-time
+**You save ₹15,100 in the first year.**
+
+**Setup Service (₹2,000):**
+We write your content, design the layout with your branding, buy and connect your domain, and launch in 48 hours. You just review and approve.
+
+**Who This Is For:**
+Any business that needs a professional online presence. Consultants, agencies, restaurants, clinics, shops, coaches, real estate agents — if you don't have a great website, this is for you.""",
+        "category": "template",
+        "source_price_cents": 2900,
+        "currency": "INR",
+        "setup_available": True,
+        "setup_price_cents": 2000,
+        "setup_description": "Write content, design layout, buy domain, launch in 48 hours",
+        "setup_delivery_days": 2,
+        "github_repo_url": "https://github.com/t3-oss/create-t3-app",
+        "purchase_count": 27,
+        "avg_rating": 4.9,
+        "review_count": 11,
+    },
+    {
+        "title": "WhatsAppBot",
+        "tagline": "Auto-reply to customers on WhatsApp 24/7. Never miss a lead again.",
+        "description": """**The Problem You're Facing**
+
+Your customers message you on WhatsApp but you can't reply to everyone instantly. At night, on weekends, during meetings — leads go unanswered. Competitors reply faster and steal your business. You're manually answering the same questions 50 times a day.
+
+**What WhatsAppBot Does**
+
+WhatsAppBot automatically replies to common questions, sends order updates, and collects leads — even when you're sleeping. It's like hiring a full-time assistant for the price of one dinner.
+
+**What You Get:**
+- **Instant Auto-Reply** — "What's your price?", "Where are you located?", "Do you deliver?" — answered instantly
+- **Order Updates** — Customer places order? Automatic confirmation. Shipped? Tracking sent. Delivered? Review requested
+- **Lead Collection** — "Send YES to get our brochure" — bot captures phone numbers and emails
+- **Payment Reminders** — Gentle reminders for pending payments. No more awkward follow-ups
+- **24/7 Availability** — Works while you sleep, eat, or take a vacation
+- **Conversation Dashboard** — See all chats in one place. Take over anytime when needed
+
+**The Savings:**
+Hiring a full-time assistant: ₹15,000/month = ₹1,80,000/year
+WhatsAppBot + Setup: ₹4,900 total
+**You save ₹1,75,100 in the first year.**
+
+**Setup Service (₹2,500):**
+We connect your business WhatsApp, configure 10 auto-replies for your most common questions, set up order update flows, and train you on the dashboard.
+
+**Who This Is For:**
+E-commerce stores, restaurants, clinics, salons, real estate agents, coaches — anyone whose customers message them on WhatsApp and wants to reply faster without hiring staff.""",
+        "category": "saas",
+        "source_price_cents": 2400,
+        "currency": "INR",
+        "setup_available": True,
+        "setup_price_cents": 2500,
+        "setup_description": "Connect WhatsApp, configure 10 auto-replies, set up order flows, train on dashboard",
         "setup_delivery_days": 1,
-        "github_repo_url": "https://github.com/clerk/javascript",
-        "purchase_count": 9,
-        "avg_rating": 4.6,
+        "github_repo_url": "https://github.com/wppconnect-team/wppconnect",
+        "purchase_count": 12,
+        "avg_rating": 4.3,
         "review_count": 3,
     },
     {
-        "title": "DeployScript",
-        "tagline": "One-command Docker deployments for 5 popular stacks. Next.js, Python API, PostgreSQL, Redis, and Nginx — all wired together.",
-        "description": """DeployScript is a collection of production-ready Docker Compose configurations for the most common founder stacks. Stop wrestling with environment variables, reverse proxies, and SSL certificates. One `docker compose up` and you're live.
+        "title": "TeamTrack",
+        "tagline": "Track attendance, tasks, and payroll for your team. No more chaos.",
+        "description": """**The Problem You're Facing**
 
-What you get:
-- Stack A: Next.js + PostgreSQL + Redis + Nginx
-- Stack B: Python FastAPI + PostgreSQL + Celery + Redis
-- Stack C: Node.js Express + MongoDB + Nginx
-- Stack D: Static site (Jekyll/Hugo) + Nginx
-- Stack E: Full-stack monorepo (Next.js + NestJS + PostgreSQL)
-- SSL auto-renewal with Certbot
-- Environment variable templates for each stack
-- Health checks and restart policies
-- Log rotation configuration
-- Hetzner / DigitalOcean / AWS deploy guides
-- Monitoring with cAdvisor + Prometheus (bonus stack)
+You manage 3-10 people but have no system. Attendance is on paper or memory. Task assignments happen in WhatsApp groups and get buried. You don't know who's working on what. Payroll calculation is a monthly headache. Someone takes leave and you forget.
 
-Setup Service: We customize the compose file for your project, configure your domain and SSL, deploy to your VPS, and verify all services are healthy.""",
-        "category": "other",
-        "source_price_cents": 900,
+**What TeamTrack Does**
+
+TeamTrack is a simple HR system for small teams. Check-in/check-out, task assignments, leave requests, and payroll — all in one clean dashboard.
+
+**What You Get:**
+- **Attendance Tracking** — Team checks in with a click. See who's present, late, or absent daily
+- **Task Assignments** — Assign tasks with deadlines. Track progress without asking "Is it done yet?"
+- **Leave Management** — Employees request leave. You approve or reject. Calendar shows who's off when
+- **Payroll Calculation** — Auto-calculates salary based on attendance, leaves, and overtime
+- **Payslip Generation** — Professional payslips sent to employees every month
+- **Works for All Teams** — Office, remote, or hybrid. Everyone uses the same system
+
+**The Savings:**
+Keka HR: ₹2,500/month = ₹30,000/year
+TeamTrack: ₹1,900 one-time
+**You save ₹28,100 in the first year.**
+
+**Setup Service (₹1,500):**
+We add your team members, set up their roles and salaries, configure leave policies, and import existing attendance data.
+
+**Who This Is For:**
+Small businesses, agencies, startups, retail stores, clinics — anyone managing a team of 3-20 people without an HR system.""",
+        "category": "saas",
+        "source_price_cents": 1900,
         "currency": "INR",
         "setup_available": True,
-        "setup_price_cents": 1900,
-        "setup_description": "Custom compose + domain SSL + VPS deploy + health verification",
+        "setup_price_cents": 1500,
+        "setup_description": "Add team, set roles and salaries, configure leave policies, import data",
         "setup_delivery_days": 1,
-        "github_repo_url": "https://github.com/docker/awesome-compose",
-        "purchase_count": 11,
-        "avg_rating": 4.4,
-        "review_count": 4,
+        "github_repo_url": "https://github.com/attendize/attendize",
+        "purchase_count": 9,
+        "avg_rating": 4.5,
+        "review_count": 2,
+    },
+    {
+        "title": "CommunityHub",
+        "tagline": "Your own private community. Own your audience. No platform risk.",
+        "description": """**The Problem You're Facing**
+
+You run a course, coaching program, or community but everyone is scattered across WhatsApp groups. Messages get lost. There's no structure. You can't search old discussions. You're building your audience on someone else's platform — and they can ban you anytime.
+
+**What CommunityHub Does**
+
+CommunityHub gives you a private, branded community space that you own completely. Discussion forums, course hosting, member profiles — all under your control.
+
+**What You Get:**
+- **Discussion Forums** — Organized by topic. Members ask questions, share wins, help each other
+- **Course Hosting** — Upload videos, PDFs, and resources. Members access everything in one place
+- **Member Profiles** — Track progress, badges, and contributions
+- **Search Everything** — Find any discussion, resource, or member instantly
+- **Mobile-Friendly** — Members participate from their phones
+- **You Own It** — Your data, your rules, your platform. No risk of getting banned or shut down
+
+**The Savings:**
+Circle.so Basic: ₹3,000/month = ₹36,000/year
+CommunityHub: ₹2,400 one-time
+**You save ₹33,600 in the first year.**
+
+**Setup Service (₹2,000):**
+We set up your community structure, add your branding, create your first 3 discussion categories, and onboard your first 10 members.
+
+**Who This Is For:**
+Course creators, coaches, fitness trainers, spiritual leaders, hobby groups — anyone who wants to build a community they fully own and control.""",
+        "category": "saas",
+        "source_price_cents": 2400,
+        "currency": "INR",
+        "setup_available": True,
+        "setup_price_cents": 2000,
+        "setup_description": "Set up community structure, branding, 3 categories, onboard 10 members",
+        "setup_delivery_days": 2,
+        "github_repo_url": "https://github.com/flarum/flarum",
+        "purchase_count": 7,
+        "avg_rating": 4.6,
+        "review_count": 2,
+    },
+    {
+        "title": "SEOBlog",
+        "tagline": "Rank on Google and get free customers. A blog that actually works.",
+        "description": """**The Problem You're Facing**
+
+You want Google to send you free customers but your website doesn't show up in search. You write blog posts but no one reads them. Your competitors rank above you for everything. You're spending money on ads when you could be getting free traffic.
+
+**What SEOBlog Does**
+
+SEOBlog is a blog built to rank on Google. Fast loading, proper structure, and all the technical SEO handled automatically. You just write — Google brings the visitors.
+
+**What You Get:**
+- **Lightning Fast** — Loads in under 1 second. Google ranks fast sites higher
+- **Auto Sitemap** — Every post is submitted to Google automatically
+- **Structured Data** — Rich snippets in search results (stars, dates, images)
+- **Social Sharing** — One-click share buttons for Twitter, LinkedIn, WhatsApp
+- **Analytics Built-in** — See which posts bring the most traffic and leads
+- **Clean Writing Experience** — Distraction-free editor. Just write and publish
+- **Mobile Optimized** — Looks perfect on phones where 70% of readers are
+
+**The Savings:**
+WordPress + Hosting + SEO Plugins: ₹800/month = ₹9,600/year
+SEOBlog: ₹1,500 one-time
+**You save ₹8,100 in the first year.**
+
+**Setup Service (₹1,500):**
+We write your first 5 blog posts optimized for search, connect Google Analytics, submit your site to Google, and teach you the content strategy.
+
+**Who This Is For:**
+Any business that wants free traffic from Google. Consultants, agencies, e-commerce stores, coaches, real estate agents — if you can write about your expertise, this brings you customers.""",
+        "category": "template",
+        "source_price_cents": 1500,
+        "currency": "INR",
+        "setup_available": True,
+        "setup_price_cents": 1500,
+        "setup_description": "Write 5 SEO-optimized posts, connect analytics, submit to Google, teach strategy",
+        "setup_delivery_days": 3,
+        "github_repo_url": "https://github.com/vercel/next.js",
+        "purchase_count": 15,
+        "avg_rating": 4.7,
+        "review_count": 5,
     },
 ]
 
 
 def make_product(seller_user_id: str, published: bool = True):
+    import random
+    from faker import Faker
+    fake = Faker()
+    Faker.seed(42)
     title = fake.catch_phrase()
     return {
         "product_id": str(uuid4()),
@@ -358,7 +473,7 @@ def make_product(seller_user_id: str, published: bool = True):
 async def seed(production: bool = False):
     mongo_url = os.environ.get("MONGO_URL")
     if not mongo_url:
-        print("MONGO_URL not set — seed skipped")
+        print("MONGO_URL not set - seed skipped")
         return
 
     db_name = os.environ.get("DB_NAME", "gitstack")
@@ -374,14 +489,14 @@ async def seed(production: bool = False):
     )
     db = client[db_name]
 
-    # ── Curated seller ──
+    # Curated seller
     curated_seller = "gitstack_curated"
     await db.marketplace_sellers.update_one(
         {"seller_user_id": curated_seller},
         {"$set": {
             "seller_user_id": curated_seller,
             "display_name": "GitStack Curated",
-            "bio": "Hand-picked open-source tools, templates, and MCP servers reviewed by the GitStack team.",
+            "bio": "Hand-picked open-source tools, templates, and setups reviewed by the GitStack team.",
             "verified": True,
             "payout_method": "upi",
             "payout_details": {"upi_id": "gitstack@upi"},
@@ -392,21 +507,9 @@ async def seed(production: bool = False):
     )
     print(f"  Upserted seller: {curated_seller}")
 
-    # ── Insert curated products ──
+    # Insert curated products
     inserted = 0
     for template in CURATED_PRODUCTS:
-        LOCAL_IMAGES = {
-            "OpenCRM": ["/product-images/v2-open-crm.png"],
-            "BookStack": ["/product-images/v2-bookstack.png"],
-            "InvoiceForge": ["/product-images/v2-invoiceforge.png"],
-            "VisionKit": ["/product-images/v2-visionkit.png"],
-            "MCP-Notion": ["/product-images/v2-mcp-notion.png"],
-            "MCP-Slack": ["/product-images/v2-mcp-slack.png"],
-            "SaaS-Boiler": ["/product-images/v2-saas-boiler.png"],
-            "AI-Agent-Template": ["/product-images/v2-ai-agent.png"],
-            "Clerk-Auth-Skill": ["/product-images/v2-clerk-auth.png"],
-            "DeployScript": ["/product-images/v2-deployscript.png"],
-        }
         doc = {
             "product_id": str(uuid4()),
             "seller_user_id": curated_seller,
@@ -414,7 +517,7 @@ async def seed(production: bool = False):
             "published": True,
             "sold_out": True,
             "max_purchases": 50,
-            "screenshots": LOCAL_IMAGES.get(template['title'], [f"https://placehold.co/600x400/2563EB/FFF?text={template['title'].replace(' ', '+')}"]),
+            "screenshots": [f"/product-images/v2-{template['title'].lower().replace(' ', '-')}.png"],
             "r2_file_key": f"sources/{template['title'].lower().replace(' ', '-')}.zip",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -426,78 +529,8 @@ async def seed(production: bool = False):
         inserted += 1
     print(f"  Seeded {inserted} curated products.")
 
-    # ── Premium open-source alternatives ──
-    premium_seller = "gitstack_admin"
-    await db.marketplace_sellers.update_one(
-        {"seller_user_id": premium_seller},
-        {"$set": {
-            "seller_user_id": premium_seller,
-            "display_name": "GitStack Admin",
-            "bio": "Official GitStack listings for popular open-source alternatives.",
-            "verified": True,
-            "payout_method": "bank",
-            "available_for_hire": False,
-            "onboarded_at": datetime.now(timezone.utc).isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }}, upsert=True
-    )
-
-    premium_repos = [
-        ("n8n Ready-to-Deploy", "n8n-io/n8n", "Fair-code workflow automation. The Zapier alternative.", 2900, 14900, "saas"),
-        ("Appwrite Ready-to-Deploy", "appwrite/appwrite", "Secure open-source backend server. The Firebase alternative.", 1900, 9900, "saas"),
-        ("Supabase Ready-to-Deploy", "supabase/supabase", "The open source Firebase alternative.", 1900, 9900, "saas"),
-        ("Cal.com Ready-to-Deploy", "calcom/cal.com", "Scheduling infrastructure for everyone. Calendly alternative.", 2900, 12900, "saas"),
-        ("Plausible Ready-to-Deploy", "plausible/analytics", "Simple, privacy-friendly Google Analytics alternative.", 1900, 4900, "saas"),
-    ]
-
-    for title, repo, tagline, source_price, setup_price, cat in premium_repos:
-        p = make_product(premium_seller, published=True)
-        p.update({
-            "title": title,
-            "tagline": tagline,
-            "github_repo_url": f"https://github.com/{repo}",
-            "source_price_cents": source_price,
-            "setup_price_cents": setup_price,
-            "setup_available": True,
-            "setup_description": f"Production deployment of {title.split()[0]} on your VPS with SSL",
-            "setup_delivery_days": 2,
-            "category": cat,
-            "currency": "INR",
-        })
-        await db.marketplace_products.update_one(
-            {"title": p["title"], "seller_user_id": premium_seller},
-            {"$set": p},
-            upsert=True
-        )
-    print(f"  Seeded {len(premium_repos)} premium open-source products.")
-
-    # ── Random sellers with fake products ──
-    for name in SELLER_NAMES:
-        seller_doc = {
-            "seller_user_id": name,
-            "display_name": name.replace("_", " ").title(),
-            "bio": fake.sentence(nb_words=12),
-            "verified": fake.boolean(chance_of_getting_true=50),
-            "payout_method": fake.random_element(["bank", "upi", "paypal"]),
-            "payout_details": {"upi_id": f"{name}@upi"},
-            "available_for_hire": fake.boolean(chance_of_getting_true=30),
-            "hire_contact": fake.email(),
-            "onboarded_at": datetime.now(timezone.utc).isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        await db.marketplace_sellers.update_one(
-            {"seller_user_id": name}, {"$set": seller_doc}, upsert=True
-        )
-        products = [make_product(name, published=fake.boolean(chance_of_getting_true=80)) for _ in range(fake.random_int(min=3, max=8))]
-        for p in products:
-            await db.marketplace_products.update_one(
-                {"product_id": p["product_id"]}, {"$set": p}, upsert=True
-            )
-        print(f"  Seeded {len(products)} products for {name}")
-
     print("\nDone seeding marketplace data.")
     print(f"Total curated products: {inserted}")
-    print(f"Total premium products: {len(premium_repos)}")
     client.close()
 
 
