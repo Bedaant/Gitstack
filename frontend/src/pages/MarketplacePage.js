@@ -7,7 +7,7 @@ import { SEO } from "../components/SEO";
 import { ProductCard } from "../components/ui/ProductCard";
 import { VirtualProductGrid } from "../components/marketplace/VirtualProductGrid";
 import { API } from "../utils/api";
-import { Search, ShoppingBag, Briefcase, ArrowUpDown, SlidersHorizontal } from "lucide-react";
+import { Search, ShoppingBag, Briefcase, ArrowUpDown, SlidersHorizontal, Mail, Loader2, CheckCircle2, Bell } from "lucide-react";
 
 // Track window width reactively so VirtualProductGrid rebalances columns on rotate/resize
 function useWindowWidth() {
@@ -45,6 +45,9 @@ export default function MarketplacePage() {
   const [category, setCategory] = useState("");
   const [sort, setSort] = useState("newest");
   const [page, setPage] = useState(1);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistLoading, setWaitlistLoading] = useState(false);
+  const [waitlistSubscribed, setWaitlistSubscribed] = useState(false);
   const windowWidth = useWindowWidth();
 
   const fetchProducts = useCallback(async () => {
@@ -63,6 +66,19 @@ export default function MarketplacePage() {
       setLoading(false);
     }
   }, [q, category, sort, page]);
+
+  const handleWaitlist = async (e) => {
+    e.preventDefault();
+    if (!waitlistEmail.trim() || !waitlistEmail.includes("@")) return;
+    setWaitlistLoading(true);
+    try {
+      await axios.post(`${API}/newsletter/subscribe`, { email: waitlistEmail, source: "marketplace_waitlist" });
+      setWaitlistSubscribed(true);
+    } catch {
+      // silently fail
+    }
+    setWaitlistLoading(false);
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -169,13 +185,76 @@ export default function MarketplacePage() {
                 <ShoppingBag className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
                 <h2 className="text-2xl font-black uppercase mb-2">The Marketplace is open</h2>
                 <p className="text-muted-foreground mb-5">Be the first to list your indie tool, MCP server, or boilerplate. Set it up in 5 minutes.</p>
-                <Link to="/sell" className="neo-btn neo-btn-primary px-6 py-3 font-black inline-flex items-center gap-2">
-                  <Briefcase className="w-4 h-4" /> Become a Seller
-                </Link>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
+                  <Link to="/sell" className="neo-btn neo-btn-primary px-6 py-3 font-black inline-flex items-center gap-2">
+                    <Briefcase className="w-4 h-4" /> Become a Seller
+                  </Link>
+                </div>
+                <div className="border-t-2 border-border pt-6">
+                  <p className="text-sm font-bold uppercase tracking-wider mb-3 flex items-center justify-center gap-2">
+                    <Bell className="w-4 h-4" /> Get notified when new products launch
+                  </p>
+                  {waitlistSubscribed ? (
+                    <div className="flex items-center justify-center gap-2 text-green-600">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span className="text-sm font-bold">You're on the list! New drops go straight to your inbox.</span>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleWaitlist} className="flex gap-2 max-w-md mx-auto">
+                      <input
+                        type="email"
+                        value={waitlistEmail}
+                        onChange={(e) => setWaitlistEmail(e.target.value)}
+                        placeholder="founder@startup.com"
+                        className="neo-input flex-1 text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={waitlistLoading}
+                        className="neo-btn neo-btn-primary px-4 py-2 text-sm font-black"
+                      >
+                        {waitlistLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Notify Me"}
+                      </button>
+                    </form>
+                  )}
+                </div>
               </div>
             )
           ) : (
             <VirtualProductGrid products={products} width={windowWidth} />
+          )}
+
+          {/* Waitlist banner — shown when products exist too */}
+          {!loading && products.length > 0 && !waitlistSubscribed && (
+            <div className="max-w-7xl mx-auto px-4 md:px-8 pb-10">
+              <div className="neo-card p-6 bg-pastel-yellow text-black border-4 border-black">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Bell className="w-6 h-6" />
+                    <div>
+                      <p className="font-black text-sm uppercase tracking-wide">Want early access to new drops?</p>
+                      <p className="text-xs text-black/70">Get notified when indie builders list new tools and templates.</p>
+                    </div>
+                  </div>
+                  <form onSubmit={handleWaitlist} className="flex gap-2 w-full md:w-auto">
+                    <input
+                      type="email"
+                      value={waitlistEmail}
+                      onChange={(e) => setWaitlistEmail(e.target.value)}
+                      placeholder="founder@startup.com"
+                      className="neo-input flex-1 md:w-64 text-sm bg-white"
+                    />
+                    <button
+                      type="submit"
+                      disabled={waitlistLoading}
+                      className="neo-btn neo-btn-primary px-4 py-2 text-sm font-black"
+                    >
+                      {waitlistLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Join Waitlist"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
           )}
         </section>
       </main>

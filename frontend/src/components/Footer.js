@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame, AlertTriangle, Scale, ShoppingBag, Briefcase, Shield } from "lucide-react";
+import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame, AlertTriangle, Scale, ShoppingBag, Briefcase, Shield, Loader2, CheckCircle2 } from "lucide-react";
+import axios from "axios";
+import { API } from "../utils/api";
 
 const productLinks = [
   { name: "Stack Generator", path: "/stack-generator", icon: Sparkles },
@@ -28,6 +30,23 @@ const legalLinks = [
 ];
 
 export const Footer = () => {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+
+  const handleSubscribe = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !email.includes("@")) return;
+    setLoading(true);
+    try {
+      await axios.post(`${API}/newsletter/subscribe`, { email });
+      setSubscribed(true);
+    } catch {
+      // silently fail in footer
+    }
+    setLoading(false);
+  };
+
   return (
     <footer className="bg-foreground text-background border-t-4 border-primary">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-12">
@@ -96,6 +115,36 @@ export const Footer = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Newsletter */}
+        <div className="border-t border-border pt-8 pb-6">
+          <div className="max-w-xl mx-auto text-center">
+            <p className="font-bold text-sm uppercase tracking-wider mb-3">Subscribe to GitStack Weekly</p>
+            {subscribed ? (
+              <div className="flex items-center justify-center gap-2 text-green-400">
+                <CheckCircle2 className="w-5 h-5" />
+                <span className="text-sm font-bold">You're subscribed! See you Monday.</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSubscribe} className="flex gap-2">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="founder@startup.com"
+                  className="flex-1 px-4 py-2 border-2 border-background bg-transparent text-background placeholder-background/50 font-semibold text-sm focus:border-primary outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="neo-btn neo-btn-primary px-4 py-2 text-sm font-black border-2 border-background"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Subscribe"}
+                </button>
+              </form>
+            )}
           </div>
         </div>
 

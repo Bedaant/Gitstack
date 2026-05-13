@@ -16,6 +16,7 @@ import { Helmet } from "react-helmet-async";
 import { API } from "../utils/api";
 import { Link } from "react-router-dom";
 import { Brain, ShoppingBag, Briefcase } from "lucide-react";
+import { Testimonials } from "../components/sections/Testimonials";
 
 const JSON_LD = {
   "@context": "https://schema.org",
@@ -164,6 +165,7 @@ export default function HomePage() {
       </Helmet>
       <Header />
       <Hero />
+      <NewsletterSignup />
       <section className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         <div className="grid md:grid-cols-3 gap-4">
           <Link to="/repo-translator" className="neo-card p-5 hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all relative">
@@ -188,6 +190,7 @@ export default function HomePage() {
       </section>
       {/* Above-the-fold priority: recommendations + trust */}
       <RecommendationsSection />
+      <Testimonials />
       <SocialProof />
       <TrendingSection />
       <ViralFeatures />
@@ -195,7 +198,6 @@ export default function HomePage() {
       <RepoOfTheDay />
       <TopicsGrid topics={topics} loading={loading} />
       <CommunityStacks />
-      <NewsletterSignup />
       <Footer />
     </div>
   );
