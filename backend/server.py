@@ -4217,8 +4217,8 @@ async def upload_screenshot(product_id: str, request: Request, file: UploadFile 
     product = await db.marketplace_products.find_one({"product_id": product_id})
     if not product or product["seller_user_id"] != user.user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if len(product.get("screenshots", [])) >= 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 screenshots allowed")
+    if len(product.get("screenshots", [])) >= 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 creatives allowed")
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image must be under 5 MB")

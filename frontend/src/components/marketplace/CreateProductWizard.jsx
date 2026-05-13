@@ -285,14 +285,14 @@ export const CreateProductWizard = ({ mode = "create", initialProduct = null, on
           {step === 2 && (
             <div className="space-y-3">
               <h3 className="font-black uppercase text-lg mb-2">Screenshots</h3>
-              <p className="text-xs text-muted-foreground mb-2">At least 1 required before publishing. Up to 5.</p>
+              <p className="text-xs text-muted-foreground mb-2">At least 1 required before publishing. Up to 4 creatives.</p>
               <div className="flex flex-wrap gap-2 mb-3">
                 {screenshots.map((url, idx) => (
                   <div key={idx} className="relative w-24 h-24 border-2 border-black">
                     <img src={url} alt="" className="w-full h-full object-cover" />
                   </div>
                 ))}
-                {screenshots.length < 5 && (
+                {screenshots.length < 4 && (
                   <label className="w-24 h-24 border-2 border-dashed border-foreground flex items-center justify-center cursor-pointer hover:bg-muted">
                     <Image className="w-6 h-6 text-muted-foreground" />
                     <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => e.target.files && uploadScreenshots(e.target.files)} />
