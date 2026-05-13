@@ -396,16 +396,16 @@ async def seed(production: bool = False):
     inserted = 0
     for template in CURATED_PRODUCTS:
         LOCAL_IMAGES = {
-            "OpenCRM": ["/product-images/open-crm.png", "/product-images/open-crm-detail.png", "/product-images/open-crm-benefit.png"],
-            "BookStack": ["/product-images/bookstack.png", "/product-images/bookstack-detail.png", "/product-images/bookstack-benefit.png"],
-            "InvoiceForge": ["/product-images/invoiceforge.png", "/product-images/invoiceforge-detail.png", "/product-images/invoiceforge-benefit.png"],
-            "VisionKit": ["/product-images/visionkit.png", "/product-images/visionkit-detail.png", "/product-images/visionkit-benefit.png"],
-            "MCP-Notion": ["/product-images/mcp-notion.png", "/product-images/mcp-notion-detail.png", "/product-images/mcp-notion-benefit.png"],
-            "MCP-Slack": ["/product-images/mcp-slack.png", "/product-images/mcp-slack-detail.png", "/product-images/mcp-slack-benefit.png"],
-            "SaaS-Boiler": ["/product-images/saas-boiler.png", "/product-images/saas-boiler-detail.png", "/product-images/saas-boiler-benefit.png"],
-            "AI-Agent-Template": ["/product-images/ai-agent.png", "/product-images/ai-agent-detail.png", "/product-images/ai-agent-benefit.png"],
-            "Clerk-Auth-Skill": ["/product-images/clerk-auth.png", "/product-images/clerk-auth-detail.png", "/product-images/clerk-auth-benefit.png"],
-            "DeployScript": ["/product-images/deployscript.png", "/product-images/deployscript-detail.png", "/product-images/deployscript-benefit.png"],
+            "OpenCRM": ["/product-images/open-crm.png"],
+            "BookStack": ["/product-images/bookstack.png"],
+            "InvoiceForge": ["/product-images/invoiceforge.png"],
+            "VisionKit": ["/product-images/visionkit.png"],
+            "MCP-Notion": ["/product-images/mcp-notion.png"],
+            "MCP-Slack": ["/product-images/mcp-slack.png"],
+            "SaaS-Boiler": ["/product-images/saas-boiler.png"],
+            "AI-Agent-Template": ["/product-images/ai-agent.png"],
+            "Clerk-Auth-Skill": ["/product-images/clerk-auth.png"],
+            "DeployScript": ["/product-images/deployscript.png"],
         }
         doc = {
             "product_id": str(uuid4()),
