@@ -155,8 +155,8 @@ export default function MarketplaceProductPage() {
           <div className="lg:col-span-2 space-y-6">
             {screenshots.length > 0 && (
               <div className="neo-card overflow-hidden border-4 border-black">
-                <div className="aspect-video bg-muted relative">
-                  <img src={screenshots[imgIdx]} alt={product.title} className="w-full h-full object-cover" />
+                <div className="bg-muted relative">
+                  <img src={screenshots[imgIdx]} alt={product.title} className="w-full h-auto object-contain" />
                   {screenshots.length > 1 && (
                     <>
                       <button onClick={() => setImgIdx((i) => (i - 1 + screenshots.length) % screenshots.length)} className="absolute left-2 top-1/2 -translate-y-1/2 neo-btn neo-btn-secondary p-1">
@@ -170,8 +170,8 @@ export default function MarketplaceProductPage() {
                 </div>
                 <div className="flex gap-2 p-2 overflow-x-auto">
                   {screenshots.map((url, i) => (
-                    <button key={i} onClick={() => setImgIdx(i)} className={`w-16 h-16 border-2 flex-shrink-0 ${i === imgIdx ? "border-primary" : "border-transparent"}`}>
-                      <img src={url} alt="" className="w-full h-full object-cover" />
+                    <button key={i} onClick={() => setImgIdx(i)} className={`w-20 border-2 flex-shrink-0 ${i === imgIdx ? "border-primary" : "border-transparent"}`}>
+                      <img src={url} alt="" className="w-full h-auto object-contain" />
                     </button>
                   ))}
                 </div>
