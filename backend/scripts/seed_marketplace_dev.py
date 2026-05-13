@@ -396,16 +396,16 @@ async def seed(production: bool = False):
     inserted = 0
     for template in CURATED_PRODUCTS:
         LOCAL_IMAGES = {
-            "OpenCRM": ["/product-images/open-crm.png"],
-            "BookStack": ["/product-images/bookstack.png"],
-            "InvoiceForge": ["/product-images/invoiceforge.png"],
-            "VisionKit": ["/product-images/visionkit.png"],
-            "MCP-Notion": ["/product-images/mcp-notion.png"],
-            "MCP-Slack": ["/product-images/mcp-slack.png"],
-            "SaaS-Boiler": ["/product-images/saas-boiler.png"],
-            "AI-Agent-Template": ["/product-images/ai-agent.png"],
-            "Clerk-Auth-Skill": ["/product-images/clerk-auth.png"],
-            "DeployScript": ["/product-images/deployscript.png"],
+            "OpenCRM": ["/product-images/v2-open-crm.png"],
+            "BookStack": ["/product-images/v2-bookstack.png"],
+            "InvoiceForge": ["/product-images/v2-invoiceforge.png"],
+            "VisionKit": ["/product-images/v2-visionkit.png"],
+            "MCP-Notion": ["/product-images/v2-mcp-notion.png"],
+            "MCP-Slack": ["/product-images/v2-mcp-slack.png"],
+            "SaaS-Boiler": ["/product-images/v2-saas-boiler.png"],
+            "AI-Agent-Template": ["/product-images/v2-ai-agent.png"],
+            "Clerk-Auth-Skill": ["/product-images/v2-clerk-auth.png"],
+            "DeployScript": ["/product-images/v2-deployscript.png"],
         }
         doc = {
             "product_id": str(uuid4()),
