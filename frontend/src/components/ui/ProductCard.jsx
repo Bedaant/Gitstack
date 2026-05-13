@@ -11,11 +11,11 @@ export const ProductCard = ({ product }) => {
           <Ban className="w-3 h-3 inline mr-1" /> Sold Out
         </div>
       )}
-      <div className="aspect-video bg-muted border-b-4 border-black overflow-hidden">
+      <div className="bg-muted border-b-4 border-black overflow-hidden">
         {product.screenshots?.[0] ? (
-          <img src={product.screenshots[0]} alt={product.title} className="w-full h-full object-cover" />
+          <img src={product.screenshots[0]} alt={product.title} className="w-full h-auto object-contain" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center"><ShoppingBag className="w-10 h-10 text-muted-foreground" /></div>
+          <div className="w-full aspect-video flex items-center justify-center"><ShoppingBag className="w-10 h-10 text-muted-foreground" /></div>
         )}
       </div>
       <div className="p-4">
