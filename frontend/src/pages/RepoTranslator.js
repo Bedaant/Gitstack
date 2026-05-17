@@ -72,10 +72,10 @@ export default function RepoTranslator() {
       // Instead of relying on handleTranslate in the dependency array,
       // we extract the core logic or just ignore the warning with eslint-disable
       // Since it's a Vercel build, we need to pass the linter.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       handleTranslate(fakeEvent);
       setAutoStart(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, url, loading, translation]);
 
   const handleShare = () => {
