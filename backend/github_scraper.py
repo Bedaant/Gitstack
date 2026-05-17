@@ -18,7 +18,8 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from bs4 import BeautifulSoup
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -513,14 +514,14 @@ Return ONLY a valid JSON array (no markdown, no explanation):
 Only return clusters that are genuinely distinct trends with clear evidence in the repo list above. If fewer than 3 emerge clearly, return fewer."""
 
         try:
-            genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-            model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction="You are a developer trend analyst. Return only valid JSON arrays."
-            )
-            response = await model.generate_content_async(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
+            client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+            response = await client.aio.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction="You are a developer trend analyst. Return only valid JSON arrays.",
+                    response_mime_type="application/json"
+                )
             )
             raw = response.text.strip()
             # Strip markdown if present
@@ -856,7 +857,6 @@ Only return clusters that are genuinely distinct trends with clear evidence in t
         classified_count = 0
         batch_size = 10
 
-        genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
         for i in range(0, len(needs_classification), batch_size):
             batch = needs_classification[i:i + batch_size]
@@ -896,13 +896,14 @@ Return ONLY a valid JSON array (no markdown) with one object per repo:
 }}}}]"""
 
             try:
-                model = genai.GenerativeModel(
-                    model_name="gemini-2.0-flash",
-                    system_instruction="You classify GitHub repos. Return only valid JSON arrays."
-                )
-                response = await model.generate_content_async(
-                    prompt,
-                    generation_config={"response_mime_type": "application/json"}
+                client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+                response = await client.aio.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction="You classify GitHub repos. Return only valid JSON arrays.",
+                        response_mime_type="application/json"
+                    )
                 )
                 raw = response.text.strip()
                 if raw.startswith("```"):

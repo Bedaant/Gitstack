@@ -22,7 +22,8 @@ from xml.sax.saxutils import escape as xml_escape
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from bs4 import BeautifulSoup
 import jwt
 from jwt import PyJWKClient
@@ -101,7 +102,8 @@ try:
         print(f"[OK] MongoDB client initialized for {db_name} (pool: 10-50)")
 
     if gemini_key:
-        genai.configure(api_key=gemini_key)
+        # genai configuration uses Client now, we will instantiate it where needed
+# client = genai.Client(api_key=gemini_key)
         print("[OK] Gemini AI configured")
     else:
         print("[WARN] GEMINI_API_KEY is missing")
@@ -464,12 +466,16 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
     last_error = None
     for model_name in model_variants:
         try:
-            generation_config = {"response_mime_type": "application/json"} if json_response else {}
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction="You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools."
+            client = genai.Client(api_key=gemini_key)
+            config = types.GenerateContentConfig(
+                system_instruction="You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools.",
+                response_mime_type="application/json" if json_response else "text/plain",
             )
-            response = await model.generate_content_async(prompt, generation_config=generation_config)
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=config
+            )
             return response.text
         except Exception as e:
             last_error = e
@@ -2701,14 +2707,17 @@ async def smart_search(req: SmartSearchRequest):
     # 1. Parse query with AI
     parsed_query = {"keywords": req.query.lower().split(), "intent": "search"}
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction="Parse search queries for GitHub tools."
-        )
+        client = genai.Client(api_key=gemini_key)
         prompt = f"""Parse this search: "{req.query}"
 Return ONLY JSON (no markdown):
 {{"keywords": ["word1", "word2"], "categories": ["ai", "saas"], "github_query": "optimized search for open source tools", "alternative_to": "paid tool name if possible"}}"""
-        response = await model.generate_content_async(prompt)
+        response = await client.aio.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction="Parse search queries for GitHub tools."
+            )
+        )
         import json
         cleaned = response.text.strip()
         if cleaned.startswith("```"):
@@ -4315,9 +4324,11 @@ Return ONLY a JSON array of the EXACT tool names from the list (no extra text), 
     recommended_names = []
     for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]:
         try:
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
+            client = genai.Client(api_key=gemini_key)
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
             text = response.text.strip()
             import re, json
             match = re.search(r'\[.*?\]', text, re.DOTALL)
