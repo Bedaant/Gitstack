@@ -5,6 +5,7 @@ GitHub Scraper Service for GitStack
 - Tiered storage (HOT/WARM/COLD)
 - Runs every 6 hours
 - AI-powered auto topic discovery
+- AI repo classification (complete_solution vs building_block)
 """
 
 import asyncio
@@ -28,10 +29,10 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")  # Optional, increases rate li
 
 # Quality rules
 QUALITY_RULES = {
-    "min_stars_trending": 100,      # Lower for trending (rising stars)
-    "min_stars_search": 200,        # Lower to catch newer trending tools
+    "min_stars_trending": 50,       # Lowered: catch rising stars earlier
+    "min_stars_search": 50,         # Lowered: catch more breadth in warm tier
     "min_contributors": 1,
-    "last_commit_days": 365,        # Active in last 12 months
+    "last_commit_days": 730,        # Extended to 2 years for still-relevant repos
     "must_have_readme": True,
     "must_have_license": True,
 }
@@ -108,10 +109,39 @@ CATEGORIES = [
 ]
 
 # Languages to track
-LANGUAGES = ["", "python", "javascript", "typescript", "go", "rust", "java", "swift", "kotlin"]
+LANGUAGES = ["", "python", "javascript", "typescript", "go", "rust", "java", "swift", "kotlin", "c", "cpp", "csharp", "ruby", "php"]
+
+# Star-range splits for deeper API search coverage
+STAR_RANGES = ["50..500", "500..2000", "2000..10000", "10000..100000"]
+
+# Curated awesome-lists to mine for repo links
+AWESOME_LISTS = [
+    "sindresorhus/awesome",
+    "awesome-selfhosted/awesome-selfhosted",
+    "trimstray/the-book-of-secret-knowledge",
+    "avelino/awesome-go",
+    "vinta/awesome-python",
+    "sorrycc/awesome-javascript",
+    "dypsilon/frontend-dev-bookmarks",
+    "enaqx/awesome-react",
+    "uhub/awesome-rust",
+    "agarrharr/awesome-cli-apps",
+    "jondot/awesome-devenv",
+    "veggiemonk/awesome-docker",
+    "academic/awesome-datascience",
+    "josephmisiti/awesome-machine-learning",
+    "parro-it/awesome-micro-npm-packages",
+    "webpro/awesome-dotfiles",
+]
 
 # New auto-discovered topic TTL (days)
 AUTO_TOPIC_TTL_DAYS = 7
+
+# Classification refresh interval (days) — only re-classify after this period
+CLASSIFICATION_REFRESH_DAYS = 14
+
+# Minimum stars for AI classification (saves Gemini API calls)
+CLASSIFICATION_MIN_STARS = 100
 
 
 class GitHubScraper:
@@ -123,6 +153,58 @@ class GitHubScraper:
         }
         if GITHUB_TOKEN:
             self.headers["Authorization"] = f"token {GITHUB_TOKEN}"
+        # Shared async client with connection pooling for all GitHub API calls
+        self._client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+            timeout=httpx.Timeout(30.0),
+        )
+        self._sem = asyncio.Semaphore(int(os.environ.get("SCRAPER_CONCURRENCY", 25)))
+
+    async def close(self):
+        await self._client.aclose()
+
+    async def _github_get(self, url: str, params: Optional[Dict] = None, retries: int = 3) -> Optional[httpx.Response]:
+        """GitHub API GET with exponential backoff on rate-limit / server errors."""
+        for attempt in range(retries):
+            try:
+                resp = await self._client.get(url, headers=self.headers, params=params, timeout=30)
+                if resp.status_code == 200:
+                    return resp
+                if resp.status_code in (403, 429):
+                    sleep = 2 ** attempt
+                    logger.warning(f"GitHub rate-limit hit, sleeping {sleep}s (attempt {attempt + 1})")
+                    await asyncio.sleep(sleep)
+                elif resp.status_code >= 500:
+                    await asyncio.sleep(1)
+                else:
+                    return resp
+            except Exception as e:
+                logger.warning(f"GitHub GET error ({url}): {e}")
+                await asyncio.sleep(1)
+        return None
+
+    async def batch_get_repo_details(self, full_names: List[str]) -> List[Dict]:
+        """Fetch details for multiple repos in parallel with semaphore."""
+        async def _fetch_one(full_name: str) -> Optional[Dict]:
+            async with self._sem:
+                return await self.get_repo_details(full_name)
+
+        results = await asyncio.gather(*[_fetch_one(fn) for fn in full_names], return_exceptions=True)
+        return [r for r in results if isinstance(r, dict)]
+
+    async def _persist_scraper_state(self, stats: Dict):
+        """Persist scraper run statistics for observability."""
+        try:
+            await self.db.scrape_metadata.update_one(
+                {"key": "last_run"},
+                {"$set": {
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "stats": stats,
+                }},
+                upsert=True,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to persist scraper state: {e}")
 
     async def scrape_trending(self, language: str = "", since: str = "daily") -> List[Dict]:
         """Scrape GitHub trending page (no API needed)"""
@@ -130,83 +212,89 @@ class GitHubScraper:
         repos = []
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers={"User-Agent": "GitStack"}, timeout=30)
-                if response.status_code != 200:
-                    logger.error(f"Failed to fetch trending: {response.status_code}")
-                    return repos
+            response = await self._client.get(url, headers={"User-Agent": "GitStack"}, timeout=30)
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch trending: {response.status_code}")
+                return repos
 
-                soup = BeautifulSoup(response.text, 'html.parser')
-                articles = soup.select('article.Box-row')
+            soup = BeautifulSoup(response.text, 'html.parser')
+            articles = soup.select('article.Box-row')
 
-                for article in articles[:25]:  # Top 25 per language
-                    try:
-                        h2 = article.select_one('h2 a')
-                        if not h2:
-                            continue
-                        full_name = h2.get('href', '').strip('/')
-                        if not full_name or '/' not in full_name:
-                            continue
-
-                        desc_elem = article.select_one('p')
-                        description = desc_elem.get_text(strip=True) if desc_elem else ""
-
-                        stars_elem = article.select_one('a[href$="/stargazers"]')
-                        stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
-                        stars = self._parse_stars(stars_text)
-
-                        lang_elem = article.select_one('[itemprop="programmingLanguage"]')
-                        lang = lang_elem.get_text(strip=True) if lang_elem else "Unknown"
-
-                        today_elem = article.select_one('span.d-inline-block.float-sm-right')
-                        today_stars = 0
-                        if today_elem:
-                            today_text = today_elem.get_text(strip=True)
-                            today_match = re.search(r'([\d,]+)', today_text)
-                            if today_match:
-                                today_stars = int(today_match.group(1).replace(',', ''))
-
-                        repos.append({
-                            "full_name": full_name,
-                            "name": full_name.split('/')[-1],
-                            "description": description,
-                            "stars": stars,
-                            "language": lang,
-                            "today_stars": today_stars,
-                            "trending_since": since,
-                            "source": "trending"
-                        })
-                    except Exception as e:
-                        logger.error(f"Error parsing trending repo: {e}")
+            for article in articles[:25]:  # Top 25 per language
+                try:
+                    h2 = article.select_one('h2 a')
+                    if not h2:
                         continue
+                    full_name = h2.get('href', '').strip('/')
+                    if not full_name or '/' not in full_name:
+                        continue
+
+                    desc_elem = article.select_one('p')
+                    description = desc_elem.get_text(strip=True) if desc_elem else ""
+
+                    stars_elem = article.select_one('a[href$="/stargazers"]')
+                    stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
+                    stars = self._parse_stars(stars_text)
+
+                    lang_elem = article.select_one('[itemprop="programmingLanguage"]')
+                    lang = lang_elem.get_text(strip=True) if lang_elem else "Unknown"
+
+                    today_elem = article.select_one('span.d-inline-block.float-sm-right')
+                    today_stars = 0
+                    if today_elem:
+                        today_text = today_elem.get_text(strip=True)
+                        today_match = re.search(r'([\d,]+)', today_text)
+                        if today_match:
+                            today_stars = int(today_match.group(1).replace(',', ''))
+
+                    repos.append({
+                        "full_name": full_name,
+                        "name": full_name.split('/')[-1],
+                        "description": description,
+                        "stars": stars,
+                        "language": lang,
+                        "today_stars": today_stars,
+                        "trending_since": since,
+                        "source": "trending"
+                    })
+                except Exception as e:
+                    logger.error(f"Error parsing trending repo: {e}")
+                    continue
 
         except Exception as e:
             logger.error(f"Error scraping trending: {e}")
 
         return repos
 
-    async def search_github_api(self, query: str, max_results: int = 100) -> List[Dict]:
-        """Search GitHub via API with quality filters"""
+    async def search_github_api(self, query: str, max_results: int = 300) -> List[Dict]:
+        """Search GitHub via API with quality filters — now with pagination"""
         repos = []
-        per_page = min(max_results, 100)
+        per_page = 100
+        max_pages = min(max_results // per_page, 10)  # GitHub caps at 1000 total
 
         try:
-            async with httpx.AsyncClient() as client:
+            for page in range(1, max_pages + 1):
                 url = f"{GITHUB_API}/search/repositories"
                 params = {
                     "q": query,
                     "sort": "stars",
                     "order": "desc",
-                    "per_page": per_page
+                    "per_page": per_page,
+                    "page": page,
                 }
 
-                response = await client.get(url, headers=self.headers, params=params, timeout=30)
-                if response.status_code != 200:
-                    logger.error(f"GitHub API error: {response.status_code} for query: {query}")
-                    return repos
+                response = await self._github_get(url, params=params)
+                if response is None or response.status_code != 200:
+                    if response:
+                        logger.error(f"GitHub API error: {response.status_code} for query: {query} page {page}")
+                    break
 
                 data = response.json()
-                for item in data.get("items", []):
+                items = data.get("items", [])
+                if not items:
+                    break
+
+                for item in items:
                     repos.append({
                         "full_name": item["full_name"],
                         "name": item["name"],
@@ -225,6 +313,8 @@ class GitHubScraper:
                         "source": "api_search"
                     })
 
+                await asyncio.sleep(0.5)  # Gentle rate-limit between pages
+
         except Exception as e:
             logger.error(f"Error searching GitHub: {e}")
 
@@ -233,56 +323,49 @@ class GitHubScraper:
     async def get_repo_details(self, full_name: str) -> Optional[Dict]:
         """Get detailed info for a specific repo"""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{GITHUB_API}/repos/{full_name}",
-                    headers=self.headers,
-                    timeout=30
-                )
-                if response.status_code != 200:
-                    return None
+            response = await self._github_get(f"{GITHUB_API}/repos/{full_name}")
+            if response is None or response.status_code != 200:
+                return None
 
-                repo = response.json()
+            repo = response.json()
 
-                contrib_response = await client.get(
-                    f"{GITHUB_API}/repos/{full_name}/contributors",
-                    headers=self.headers,
-                    params={"per_page": 1, "anon": "true"},
-                    timeout=30
-                )
-                contributors = 0
-                if contrib_response.status_code == 200:
-                    link_header = contrib_response.headers.get("Link", "")
-                    if "last" in link_header:
-                        match = re.search(r'page=(\d+)>; rel="last"', link_header)
-                        if match:
-                            contributors = int(match.group(1))
-                    else:
-                        contributors = len(contrib_response.json())
+            contrib_response = await self._github_get(
+                f"{GITHUB_API}/repos/{full_name}/contributors",
+                params={"per_page": 1, "anon": "true"},
+            )
+            contributors = 0
+            if contrib_response and contrib_response.status_code == 200:
+                link_header = contrib_response.headers.get("Link", "")
+                if "last" in link_header:
+                    match = re.search(r'page=(\d+)>; rel="last"', link_header)
+                    if match:
+                        contributors = int(match.group(1))
+                else:
+                    contributors = len(contrib_response.json())
 
-                return {
-                    "full_name": repo["full_name"],
-                    "name": repo["name"],
-                    "owner": repo["owner"]["login"],
-                    "description": repo.get("description") or "",
-                    "stars": repo["stargazers_count"],
-                    "forks": repo["forks_count"],
-                    "watchers": repo["watchers_count"],
-                    "language": repo.get("language") or "Unknown",
-                    "topics": repo.get("topics", []),
-                    "html_url": repo["html_url"],
-                    "homepage": repo.get("homepage"),
-                    "created_at": repo["created_at"],
-                    "updated_at": repo["updated_at"],
-                    "pushed_at": repo["pushed_at"],
-                    "open_issues": repo["open_issues_count"],
-                    "license": repo.get("license", {}).get("spdx_id") if repo.get("license") else None,
-                    "contributors": contributors,
-                    "default_branch": repo["default_branch"],
-                    "size": repo["size"],
-                    "archived": repo["archived"],
-                    "disabled": repo["disabled"],
-                }
+            return {
+                "full_name": repo["full_name"],
+                "name": repo["name"],
+                "owner": repo["owner"]["login"],
+                "description": repo.get("description") or "",
+                "stars": repo["stargazers_count"],
+                "forks": repo["forks_count"],
+                "watchers": repo["watchers_count"],
+                "language": repo.get("language") or "Unknown",
+                "topics": repo.get("topics", []),
+                "html_url": repo["html_url"],
+                "homepage": repo.get("homepage"),
+                "created_at": repo["created_at"],
+                "updated_at": repo["updated_at"],
+                "pushed_at": repo["pushed_at"],
+                "open_issues": repo["open_issues_count"],
+                "license": repo.get("license", {}).get("spdx_id") if repo.get("license") else None,
+                "contributors": contributors,
+                "default_branch": repo["default_branch"],
+                "size": repo["size"],
+                "archived": repo["archived"],
+                "disabled": repo["disabled"],
+            }
 
         except Exception as e:
             logger.error(f"Error getting repo details for {full_name}: {e}")
@@ -500,46 +583,154 @@ Only return clusters that are genuinely distinct trends with clear evidence in t
         if result.deleted_count > 0:
             logger.info(f"Expired {result.deleted_count} old auto-discovered topics")
 
+    async def mine_awesome_lists(self) -> List[Dict]:
+        """Mine curated awesome-lists for GitHub repo links."""
+        repos = []
+        for awesome_repo in AWESOME_LISTS:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"{GITHUB_API}/repos/{awesome_repo}/readme",
+                        headers=self.headers, timeout=30
+                    )
+                    if response.status_code != 200:
+                        continue
+                    import base64
+                    content = base64.b64decode(response.json().get("content", "")).decode("utf-8", errors="ignore")
+                    # Extract GitHub repo links
+                    import re as re_mod
+                    links = re_mod.findall(r'https?://github\.com/([\w\-]+/[\w\-.]+)', content)
+                    unique_links = list(set(links))[:50]  # Cap per awesome-list
+                    for full_name in unique_links:
+                        # Clean trailing characters
+                        full_name = full_name.rstrip('.)')
+                        if '/' not in full_name or full_name.count('/') != 1:
+                            continue
+                        repos.append({
+                            "full_name": full_name,
+                            "name": full_name.split("/")[-1],
+                            "description": "",
+                            "stars": 0,
+                            "language": "Unknown",
+                            "source": "awesome_list",
+                            "is_trending": False,
+                        })
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.error(f"Error mining {awesome_repo}: {e}")
+        logger.info(f"Mined {len(repos)} repos from awesome-lists")
+        return repos
+
     async def run_full_scrape(self) -> Dict:
-        """Run complete scraping job"""
-        logger.info("Starting full GitHub scrape...")
+        """Run complete scraping job — scaled for 15-20K repos"""
+        logger.info("Starting full GitHub scrape (scaled)...")
         stats = {
             "trending_fetched": 0,
             "search_fetched": 0,
+            "star_range_fetched": 0,
+            "awesome_list_fetched": 0,
             "hot_added": 0,
             "warm_added": 0,
             "total_processed": 0,
             "auto_topics_created": 0,
+            "repos_classified": 0,
         }
 
         all_repos = {}  # Dedupe by full_name
 
         # 1. Scrape trending for all languages and timeframes
-        for lang in LANGUAGES:
-            for since in ["daily", "weekly"]:
-                logger.info(f"Scraping trending: {lang or 'all'} / {since}")
-                trending = await self.scrape_trending(lang, since)
-                for repo in trending:
+        async def fetch_trending(lang, since):
+            async with self._sem:
+                return await self.scrape_trending(lang, since)
+
+        trending_tasks = [
+            fetch_trending(lang, since)
+            for lang in LANGUAGES for since in ["daily", "weekly"]
+        ]
+        trending_results = await asyncio.gather(*trending_tasks, return_exceptions=True)
+        for result in trending_results:
+            if isinstance(result, list):
+                for repo in result:
                     if repo["full_name"] not in all_repos:
                         repo["is_trending"] = True
                         all_repos[repo["full_name"]] = repo
                         stats["trending_fetched"] += 1
-                await asyncio.sleep(1)  # Rate limiting
 
-        # 2. Search by categories — all of the expanded list
-        date_filter = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-        for category in CATEGORIES:
-            query = f"topic:{category} stars:>50 pushed:>{date_filter}"
-            logger.info(f"Searching: {query}")
-            results = await self.search_github_api(query, max_results=50)
-            for repo in results:
+        # 2. Search by categories — parallel with semaphore
+        date_filter = (datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d")
+
+        async def fetch_category(category):
+            async with self._sem:
+                query = f"topic:{category} stars:>50 pushed:>{date_filter}"
+                results = await self.search_github_api(query, max_results=1000)
+                await asyncio.sleep(0.3)
+                return results
+
+        cat_tasks = [fetch_category(cat) for cat in CATEGORIES]
+        cat_results = await asyncio.gather(*cat_tasks, return_exceptions=True)
+        for result in cat_results:
+            if isinstance(result, list):
+                for repo in result:
+                    if repo["full_name"] not in all_repos:
+                        repo["is_trending"] = False
+                        all_repos[repo["full_name"]] = repo
+                        stats["search_fetched"] += 1
+
+        # 3. Star-range splits for deeper coverage
+        top_categories = CATEGORIES[:30]  # Top 30 categories for range splits
+
+        async def fetch_star_range(category, star_range):
+            async with self._sem:
+                query = f"topic:{category} stars:{star_range} pushed:>{date_filter}"
+                results = await self.search_github_api(query, max_results=1000)
+                await asyncio.sleep(0.3)
+                return results
+
+        range_tasks = [
+            fetch_star_range(cat, sr)
+            for cat in top_categories for sr in STAR_RANGES
+        ]
+        range_results = await asyncio.gather(*range_tasks, return_exceptions=True)
+        for result in range_results:
+            if isinstance(result, list):
+                for repo in result:
+                    if repo["full_name"] not in all_repos:
+                        repo["is_trending"] = False
+                        all_repos[repo["full_name"]] = repo
+                        stats["star_range_fetched"] += 1
+
+        # 4. Mine awesome-lists for repo links
+        try:
+            awesome_repos = await self.mine_awesome_lists()
+            for repo in awesome_repos:
                 if repo["full_name"] not in all_repos:
-                    repo["is_trending"] = False
                     all_repos[repo["full_name"]] = repo
-                    stats["search_fetched"] += 1
-            await asyncio.sleep(1)  # Rate limiting
+                    stats["awesome_list_fetched"] += 1
+        except Exception as e:
+            logger.error(f"Awesome-list mining error: {e}")
 
-        # 3. Filter and score all repos
+        # 5. Enrich awesome-list repos with API data (parallel)
+        needs_enrichment = [
+            fn for fn, r in all_repos.items()
+            if r.get("source") == "awesome_list" and r.get("stars", 0) == 0
+        ]
+
+        async def enrich_repo(full_name):
+            async with self._sem:
+                details = await self.get_repo_details(full_name)
+                await asyncio.sleep(0.3)
+                return full_name, details
+
+        # Enrich up to 200 awesome-list repos (rate limit aware)
+        enrich_tasks = [enrich_repo(fn) for fn in needs_enrichment[:200]]
+        enrich_results = await asyncio.gather(*enrich_tasks, return_exceptions=True)
+        for result in enrich_results:
+            if isinstance(result, tuple):
+                fn, details = result
+                if details and fn in all_repos:
+                    all_repos[fn].update(details)
+
+        # 6. Filter and score all repos
         scored_repos = []
         for repo in all_repos.values():
             if self.passes_quality_filter(repo, repo.get("is_trending", False)):
@@ -547,12 +738,12 @@ Only return clusters that are genuinely distinct trends with clear evidence in t
                 scored_repos.append(repo)
                 stats["total_processed"] += 1
 
-        # 4. Sort by score
+        # 7. Sort by score
         scored_repos.sort(key=lambda x: x["score"], reverse=True)
 
-        # 5. Save to database
-        hot_repos = scored_repos[:500]   # Top 500 = HOT tier
-        warm_repos = scored_repos[500:]  # Rest = WARM tier
+        # 8. Save to database
+        hot_repos = scored_repos[:2000]   # Top 2000 = HOT tier
+        warm_repos = scored_repos[2000:]  # Rest = WARM tier
 
         for repo in hot_repos:
             await self.save_repo(repo, tier="hot")
@@ -562,28 +753,211 @@ Only return clusters that are genuinely distinct trends with clear evidence in t
             await self.save_repo(repo, tier="warm")
             stats["warm_added"] += 1
 
-        # 6. AI auto-discover new topic clusters from trending repos
+        # 9. AI auto-discover new topic clusters from trending repos
         try:
             trending_repos = [r for r in scored_repos if r.get("is_trending")]
             await self.discover_and_create_topics(trending_repos or scored_repos[:80])
         except Exception as e:
             logger.error(f"Auto topic discovery error: {e}")
 
-        # 7. Expire old auto-topics
+        # 9.5 AI-classify repos as complete_solution vs building_block
+        try:
+            classified = await self.classify_repos_batch(scored_repos)
+            stats["repos_classified"] = classified
+        except Exception as e:
+            logger.error(f"Repo classification error: {e}")
+            stats["repos_classified"] = 0
+
+        # 10. Expire old auto-topics
         await self.expire_old_auto_topics()
 
-        # 8. Update scrape metadata
+        # 10.5 Ensure indexes for Solution Finder
+        await self.ensure_indexes()
+
+        # 11. Update scrape metadata
         await self.db.scrape_metadata.update_one(
             {"_id": "last_scrape"},
             {"$set": {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "stats": stats
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "stats": stats,
             }},
             upsert=True
         )
 
         logger.info(f"Scrape complete: {stats}")
         return stats
+
+    def detect_docker_support(self, repo: Dict) -> bool:
+        """Lightweight heuristic: does this repo likely support Docker?"""
+        topics = [t.lower() for t in repo.get("topics", [])]
+        desc = (repo.get("description") or "").lower()
+        name = (repo.get("name") or "").lower()
+        docker_signals = ["docker", "container", "docker-compose", "dockerfile", "kubernetes", "k8s", "helm"]
+        return any(s in topics or s in desc or s in name for s in docker_signals)
+
+    def calculate_health_score(self, repo: Dict) -> int:
+        """Calculate a 0-100 health score for a repo."""
+        score = 0
+        pushed_at = repo.get("pushed_at")
+        if pushed_at:
+            try:
+                pushed_date = datetime.fromisoformat(pushed_at.replace('Z', '+00:00'))
+                days = (datetime.now(timezone.utc) - pushed_date).days
+                if days <= 7: score += 30
+                elif days <= 30: score += 25
+                elif days <= 90: score += 15
+                elif days <= 180: score += 8
+            except Exception:
+                pass
+        stars = repo.get("stars", 0)
+        if stars >= 5000: score += 25
+        elif stars >= 1000: score += 20
+        elif stars >= 500: score += 15
+        elif stars >= 100: score += 10
+        contributors = repo.get("contributors", 0)
+        if contributors >= 50: score += 25
+        elif contributors >= 10: score += 20
+        elif contributors >= 3: score += 12
+        elif contributors >= 1: score += 5
+        if repo.get("license"): score += 10
+        if not repo.get("archived", False): score += 10
+        return min(score, 100)
+
+    async def classify_repos_batch(self, repos: List[Dict]) -> int:
+        """
+        AI-classify repos as complete_solution or building_block.
+        Runs in batches of 10 per Gemini call. Only classifies repos with
+        200+ stars that haven't been classified in the last 14 days.
+        Returns count of repos classified.
+        """
+        now = datetime.now(timezone.utc)
+        refresh_cutoff = (now - timedelta(days=CLASSIFICATION_REFRESH_DAYS)).isoformat()
+
+        # Find repos needing classification
+        needs_classification = []
+        for repo in repos:
+            if repo.get("stars", 0) < CLASSIFICATION_MIN_STARS:
+                continue
+            # Check if already classified recently
+            existing = await self.db.github_repos.find_one(
+                {"full_name": repo["full_name"]},
+                {"_id": 0, "classified_at": 1}
+            )
+            if existing and existing.get("classified_at") and existing["classified_at"] > refresh_cutoff:
+                continue
+            needs_classification.append(repo)
+
+        if not needs_classification:
+            logger.info("No repos need classification")
+            return 0
+
+        logger.info(f"Classifying {len(needs_classification)} repos in batches of 10...")
+        classified_count = 0
+        batch_size = 10
+
+        genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+        for i in range(0, len(needs_classification), batch_size):
+            batch = needs_classification[i:i + batch_size]
+            batch_summaries = []
+            for r in batch:
+                topics_str = ", ".join(r.get("topics", [])[:8])
+                batch_summaries.append(
+                    f"- {r['full_name']}: {r.get('description', '')[:150]} "
+                    f"[topics: {topics_str}] [stars: {r.get('stars', 0)}] "
+                    f"[language: {r.get('language', 'Unknown')}]"
+                )
+
+            prompt = f"""Classify each GitHub repository below.
+
+For EACH repo, determine:
+1. repo_type: "complete_solution" (a full, ready-to-deploy product/app) or "building_block" (a library, SDK, framework, or tool you integrate into your own project)
+2. use_cases: 2-5 business use cases it solves (e.g. "email outreach", "invoice management", "CRM", "project management")
+3. replaces_saas: 1-3 paid SaaS products it can replace (e.g. "Apollo.io", "HubSpot"). Use empty array if none.
+4. has_docker: true/false — does it likely support Docker deployment?
+5. has_api: true/false — does it expose an API?
+6. has_ui: true/false — does it have a web UI?
+7. complementary_tools: 1-3 types of tools that would complement this (e.g. "analytics", "database", "auth")
+
+Repos to classify:
+{chr(10).join(batch_summaries)}
+
+Return ONLY a valid JSON array (no markdown) with one object per repo:
+[{{{{
+  "full_name": "owner/repo",
+  "repo_type": "complete_solution",
+  "use_cases": ["use case 1", "use case 2"],
+  "replaces_saas": ["SaaS1"],
+  "has_docker": true,
+  "has_api": true,
+  "has_ui": true,
+  "complementary_tools": ["analytics", "database"]
+}}}}]"""
+
+            try:
+                model = genai.GenerativeModel(
+                    model_name="gemini-2.0-flash",
+                    system_instruction="You classify GitHub repos. Return only valid JSON arrays."
+                )
+                response = await model.generate_content_async(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                raw = response.text.strip()
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+                classifications = json.loads(raw)
+
+                for cls in classifications:
+                    fn = cls.get("full_name", "")
+                    if not fn:
+                        continue
+                    # Find the matching repo for docker heuristic fallback
+                    matching = next((r for r in batch if r["full_name"] == fn), None)
+                    docker_heuristic = self.detect_docker_support(matching) if matching else False
+
+                    update_fields = {
+                        "repo_type": cls.get("repo_type", "building_block"),
+                        "use_cases": cls.get("use_cases", []),
+                        "replaces_saas": cls.get("replaces_saas", []),
+                        "has_docker": cls.get("has_docker", docker_heuristic),
+                        "has_api": cls.get("has_api", False),
+                        "has_ui": cls.get("has_ui", False),
+                        "complementary_tools": cls.get("complementary_tools", []),
+                        "health_score": self.calculate_health_score(matching) if matching else 0,
+                        "classified_at": now.isoformat(),
+                    }
+                    await self.db.github_repos.update_one(
+                        {"full_name": fn},
+                        {"$set": update_fields}
+                    )
+                    classified_count += 1
+
+                logger.info(f"Classified batch {i // batch_size + 1}: {len(classifications)} repos")
+                await asyncio.sleep(1)  # Rate limit between batches
+
+            except Exception as e:
+                logger.error(f"Classification batch {i // batch_size + 1} failed: {e}")
+                continue
+
+        logger.info(f"Classification complete: {classified_count} repos classified")
+        return classified_count
+
+    async def ensure_indexes(self):
+        """Create MongoDB indexes for Solution Finder queries."""
+        try:
+            await self.db.github_repos.create_index([("repo_type", 1), ("stars", -1)])
+            await self.db.github_repos.create_index([("use_cases", 1)])
+            await self.db.github_repos.create_index([("replaces_saas", 1)])
+            await self.db.github_repos.create_index([("classified_at", 1)])
+            # Upvotes collection
+            await self.db.repo_upvotes.create_index(
+                [("full_name", 1), ("user_id", 1)], unique=True
+            )
+            logger.info("Solution Finder indexes ensured")
+        except Exception as e:
+            logger.error(f"Index creation error: {e}")
 
     async def save_repo(self, repo: Dict, tier: str = "warm"):
         """Save repo to database"""
@@ -610,9 +984,21 @@ Only return clusters that are genuinely distinct trends with clear evidence in t
             "ai_description": None,
         }
 
+        # Preserve existing classification fields (don't overwrite with None)
         await self.db.github_repos.update_one(
             {"full_name": repo["full_name"]},
-            {"$set": doc},
+            {"$set": doc, "$setOnInsert": {
+                "repo_type": None,
+                "use_cases": [],
+                "replaces_saas": [],
+                "has_docker": self.detect_docker_support(repo),
+                "has_api": False,
+                "has_ui": False,
+                "complementary_tools": [],
+                "health_score": 0,
+                "classified_at": None,
+                "upvotes": 0,
+            }},
             upsert=True
         )
 

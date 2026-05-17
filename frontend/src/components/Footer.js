@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame, AlertTriangle, Scale, ShoppingBag, Briefcase, Shield, Loader2, CheckCircle2 } from "lucide-react";
+import { Linkedin, Mail, Github, Skull, Sparkles, BookOpen, Lightbulb, Flame, AlertTriangle, Scale, ShoppingBag, Briefcase, Shield, Loader2, CheckCircle2, Layout } from "lucide-react";
 import axios from "axios";
 import { API } from "../utils/api";
 
@@ -20,6 +20,7 @@ const navLinks = [
   { name: "README Badge", path: "/readme-badge", icon: Shield },
   { name: "Collections", path: "/collections" },
   { name: "All Tools", path: "/tools" },
+  { name: "Solutions Directory", path: "/solutions", icon: Layout },
   { name: "Founder Stacks", path: "/founder-stacks" },
 ];
 

@@ -25,11 +25,23 @@ export default function RepoTranslator() {
   const location = useLocation();
   const [url, setUrl] = useState("");
 
+  const [autoStart, setAutoStart] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const preUrl = params.get('url');
-    if (preUrl) setUrl(preUrl);
+    const isAuto = params.get('auto') === 'true';
+    if (preUrl) {
+      setUrl(preUrl);
+      if (isAuto) setAutoStart(true);
+    }
   }, [location.search]);
+
+  useEffect(() => {
+    if (autoStart && url && !loading && !translation) {
+      handleTranslate(new Event('submit'));
+      setAutoStart(false);
+    }
+  }, [autoStart, url, loading, translation]);
   const [loading, setLoading] = useState(false);
   const [translation, setTranslation] = useState(null);
 
@@ -51,7 +63,7 @@ export default function RepoTranslator() {
   };
 
   const handleTranslate = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!url.trim()) return;
     
     setLoading(true);

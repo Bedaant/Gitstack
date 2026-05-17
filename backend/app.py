@@ -7,11 +7,11 @@ print("--- [GITSTACK PRODUCTION BOOT] ---")
 try:
     from server import app
     port = int(os.environ.get("PORT", 10000))
-    print(f"🚀 Application matches! Binding to port {port}")
+    print(f"[OK] Application ready. Binding to port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 except Exception as e:
-    print(f"💥 BOOT ERROR: {e}")
+    print(f"[ERROR] BOOT FAILED: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)

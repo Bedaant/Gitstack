@@ -7,7 +7,7 @@ import { SEO } from "../components/SEO";
 import { ProductCard } from "../components/ui/ProductCard";
 import { VirtualProductGrid } from "../components/marketplace/VirtualProductGrid";
 import { API } from "../utils/api";
-import { Search, ShoppingBag, Briefcase, ArrowUpDown, SlidersHorizontal, Mail, Loader2, CheckCircle2, Bell } from "lucide-react";
+import { Search, ShoppingBag, Briefcase, ArrowUpDown, SlidersHorizontal, Mail, Loader2, CheckCircle2, Bell, Sparkles } from "lucide-react";
 
 // Track window width reactively so VirtualProductGrid rebalances columns on rotate/resize
 function useWindowWidth() {
@@ -40,6 +40,7 @@ const SORT_OPTIONS = [
 
 export default function MarketplacePage() {
   const [products, setProducts] = useState([]);
+  const [featured, setFeatured] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
@@ -67,6 +68,15 @@ export default function MarketplacePage() {
     }
   }, [q, category, sort, page]);
 
+  const fetchFeatured = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/marketplace/products/featured?limit=6`);
+      setFeatured(data.products || []);
+    } catch {
+      setFeatured([]);
+    }
+  }, []);
+
   const handleWaitlist = async (e) => {
     e.preventDefault();
     if (!waitlistEmail.trim() || !waitlistEmail.includes("@")) return;
@@ -82,7 +92,8 @@ export default function MarketplacePage() {
 
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+    fetchFeatured();
+  }, [fetchProducts, fetchFeatured]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -145,6 +156,19 @@ export default function MarketplacePage() {
               </button>
             ))}
           </div>
+
+          {featured.length > 0 && (
+            <div className="mb-10">
+              <h2 className="text-xl font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" /> Featured Products
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {featured.map((product) => (
+                  <ProductCard key={product.product_id} product={product} />
+                ))}
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

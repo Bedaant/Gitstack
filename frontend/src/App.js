@@ -47,6 +47,9 @@ import { TermsPage, PrivacyPage, AboutPage } from "./pages/LegalPage";
 import BlogListPage from "./pages/BlogListPage";
 import BlogPostPage from "./pages/BlogPostPage";
 import FaqPage from "./pages/FaqPage";
+import SolutionFinder from "./pages/SolutionFinder";
+import SolutionsIndexPage from "./pages/SolutionsIndexPage";
+import SolutionsCategoryPage from "./pages/SolutionsCategoryPage";
 
 const MeRedirect = () => {
   const { user, loading } = useAuth();
@@ -129,6 +132,9 @@ const AppRouter = () => {
       <Route path="/blog" element={<BlogListPage />} />
       <Route path="/blog/:slug" element={<BlogPostPage />} />
       <Route path="/faq" element={<FaqPage />} />
+      <Route path="/solution-finder" element={<SolutionFinder />} />
+      <Route path="/solutions" element={<SolutionsIndexPage />} />
+      <Route path="/solutions/:category" element={<SolutionsCategoryPage />} />
       <Route path="/u/:userId" element={<UserProfilePage />} />
       <Route path="/s/:slug" element={<PublicStackPage />} />
       {/* gitstack.pro/:owner/:repo shortlink — must be last before the 404 catch-all */}
@@ -142,6 +148,11 @@ const AppRouter = () => {
 };
 
 function App() {
+  // Warm up the backend on first load (prevents Render cold-start delays)
+  useEffect(() => {
+    fetch(`${process.env.REACT_APP_BACKEND_URL}/api/health`).catch(() => {});
+  }, []);
+
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <HelmetProvider>

@@ -17,7 +17,7 @@ export default function AlternativesPage() {
     setLoading(true);
     axios.get(`${API}/alternatives/${tool}`)
       .then(res => setData(res.data))
-      .catch(() => setData({ paid_tool: tool, alternatives: [], github_repos: [] }))
+      .catch(() => setData({ paid_tool: tool, alternatives: [], github_repos: [], complete_solutions: [] }))
       .finally(() => setLoading(false));
     // Fire activity event (ignores if not authed)
     axios.post(`${API}/activity`, {
@@ -92,6 +92,56 @@ export default function AlternativesPage() {
             <div className="grid md:grid-cols-3 gap-4 mb-12">
               {data.github_repos.map((r) => (
                 <GhCard key={r.repo_id || r.full_name} repo={r} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Complete Solutions — Phase 5 enrichment */}
+        {!loading && data && data.complete_solutions && data.complete_solutions.length > 0 && (
+          <>
+            <h2 className="text-2xl font-black uppercase mb-4 border-b-4 border-primary pb-2">
+              🚀 Complete Solutions <span className="text-primary">(Ready to Deploy)</span>
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              These repos replace {paidName} entirely — no assembly required.
+            </p>
+            <div className="grid md:grid-cols-2 gap-4 mb-12">
+              {data.complete_solutions.map((r) => (
+                <Link
+                  key={r.full_name}
+                  to={`/r/${r.full_name}`}
+                  className="neo-card p-5 hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all block"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="text-lg font-black">{r.name || r.full_name}</h3>
+                    <span className="text-xs font-bold bg-foreground text-background px-2 py-1 inline-flex items-center gap-1">
+                      <Star className="w-3 h-3" /> {typeof r.stars === "number" ? r.stars.toLocaleString() : r.stars}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{r.description}</p>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {r.has_docker && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded">🐳 Docker</span>
+                    )}
+                    {r.has_ui && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-800 rounded">🖥 UI</span>
+                    )}
+                    {r.has_api && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-800 rounded">⚡ API</span>
+                    )}
+                    {r.language && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-muted rounded">{r.language}</span>
+                    )}
+                  </div>
+                  {r.use_cases && r.use_cases.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {r.use_cases.slice(0, 3).map((uc, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full">{uc}</span>
+                      ))}
+                    </div>
+                  )}
+                </Link>
               ))}
             </div>
           </>

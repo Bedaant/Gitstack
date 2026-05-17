@@ -123,7 +123,35 @@ export default function MarketplaceProductPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <SEO title={`${product.title} — GitStack`} description={product.tagline} image={screenshots[0]} />
+      <SEO
+        title={`${product.title} — GitStack`}
+        description={product.tagline}
+        image={screenshots[0]}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Product",
+          "name": product.title,
+          "description": product.tagline,
+          "image": screenshots[0],
+          "sku": product.product_id,
+          "brand": {
+            "@type": "Brand",
+            "name": product.seller?.display_name || "GitStack Marketplace",
+          },
+          "offers": {
+            "@type": "Offer",
+            "url": `https://gitstack.pro/marketplace/${product.product_id}`,
+            "price": (product.source_price_cents / 100).toString(),
+            "priceCurrency": product.currency || "INR",
+            "availability": product.published ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+          },
+          "aggregateRating": product.review_count > 0 ? {
+            "@type": "AggregateRating",
+            "ratingValue": product.avg_rating?.toString() || "0",
+            "reviewCount": product.review_count.toString(),
+          } : undefined,
+        }}
+      />
       <Header />
       <main className="flex-1 max-w-7xl mx-auto px-4 md:px-8 py-8 w-full">
         <Breadcrumbs items={[

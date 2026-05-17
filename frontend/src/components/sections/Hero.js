@@ -15,6 +15,7 @@ const detectMode = (q) => {
 
 export const Hero = () => {
   const [query, setQuery] = useState("");
+  const [intent, setIntent] = useState("solution"); // Default to solution finder as it's the new core value
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [stats, setStats] = useState(null);
@@ -72,7 +73,11 @@ export const Hero = () => {
       }
     }
 
-    navigate(`/stack-generator?idea=${encodeURIComponent(trimmed)}`);
+    if (intent === "solution") {
+      navigate(`/solution-finder?query=${encodeURIComponent(trimmed)}`);
+    } else {
+      navigate(`/stack-generator?idea=${encodeURIComponent(trimmed)}`);
+    }
   };
 
   const handleSuggestionClick = (s) => {
@@ -108,6 +113,27 @@ export const Hero = () => {
 
         {/* Search */}
         <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-6" ref={searchRef}>
+          
+          {/* Intent Toggle */}
+          <div className="flex justify-center mb-6">
+            <div className="inline-flex bg-muted p-1 border-2 border-black neo-shadow-sm">
+              <button
+                type="button"
+                onClick={() => setIntent("solution")}
+                className={`px-4 py-2 text-sm font-black uppercase transition-colors ${intent === "solution" ? "bg-pastel-yellow text-black border-2 border-black" : "text-muted-foreground border-2 border-transparent hover:text-foreground"}`}
+              >
+                Ready-to-Deploy Products
+              </button>
+              <button
+                type="button"
+                onClick={() => setIntent("stack")}
+                className={`px-4 py-2 text-sm font-black uppercase transition-colors ${intent === "stack" ? "bg-pastel-yellow text-black border-2 border-black" : "text-muted-foreground border-2 border-transparent hover:text-foreground"}`}
+              >
+                DIY Building Blocks
+              </button>
+            </div>
+          </div>
+
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-muted-foreground z-10 hidden sm:block" />
             <input
@@ -115,7 +141,7 @@ export const Hero = () => {
               value={query}
               onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
               onFocus={() => setShowSuggestions(true)}
-              placeholder="I need a CRM, a chatbot, a marketplace..."
+              placeholder={intent === "solution" ? "Search for an open-source CRM, email marketing..." : "I need tools to build a marketplace..."}
               className="neo-input pl-4 sm:pl-14 pr-4 sm:pr-40 text-base sm:text-lg py-4"
               data-testid="hero-search-input"
             />
@@ -124,7 +150,7 @@ export const Hero = () => {
               className="!hidden sm:!flex absolute right-2 top-1/2 -translate-y-1/2 neo-btn neo-btn-primary px-5 py-2.5 font-black whitespace-nowrap items-center gap-2"
               data-testid="hero-search-btn"
             >
-              {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate</> : <><Sparkles className="w-4 h-4" /> Find Free Tools</>}
+              {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate</> : <><Sparkles className="w-4 h-4" /> {intent === "solution" ? "Find Solutions" : "Build Stack"}</>}
             </button>
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-background border-4 border-black neo-shadow-lg z-50 max-h-80 overflow-y-auto">
@@ -151,7 +177,7 @@ export const Hero = () => {
             type="submit"
             className="sm:!hidden neo-btn neo-btn-primary w-full py-3 mt-3 font-black flex items-center justify-center gap-2"
           >
-            {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate Repo</> : <><Sparkles className="w-4 h-4" /> Find Free Tools</>}
+            {mode === "translate" ? <><BookOpen className="w-4 h-4" /> Translate Repo</> : <><Sparkles className="w-4 h-4" /> {intent === "solution" ? "Find Solutions" : "Build Stack"}</>}
           </button>
           {/* Mode indicator — reduces cognitive friction about what will happen */}
           {mode && (
@@ -159,7 +185,7 @@ export const Hero = () => {
               {mode === "translate" ? (
                 <><span className="text-primary font-bold">🔗 GitHub URL detected</span> <span className="text-muted-foreground">— we'll translate it to plain English</span></>
               ) : (
-                <><span className="text-primary font-bold">💡 Need detected</span> <span className="text-muted-foreground">— we'll find free tools and build your stack</span></>
+                <><span className="text-primary font-bold">💡 Need detected</span> <span className="text-muted-foreground">— we'll {intent === "solution" ? "find complete products" : "build your stack"}</span></>
               )}
             </p>
           )}
@@ -172,7 +198,11 @@ export const Hero = () => {
               <button key={ex.label}
                 onClick={() => { 
                   setQuery(ex.query); 
-                  navigate(`/stack-generator?idea=${encodeURIComponent(ex.query)}`);
+                  if (intent === "solution") {
+                    navigate(`/solution-finder?query=${encodeURIComponent(ex.query)}`);
+                  } else {
+                    navigate(`/stack-generator?idea=${encodeURIComponent(ex.query)}`);
+                  }
                 }}
                 className="px-4 py-2 border-2 border-black font-mono text-sm font-semibold neo-shadow bg-background text-foreground hover:bg-pastel-yellow hover:text-black transition-colors flex items-center gap-2"
                 data-testid={`chip-${ex.label}`}>

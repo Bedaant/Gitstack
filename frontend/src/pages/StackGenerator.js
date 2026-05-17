@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
-import { Sparkles, Loader2, ChevronRight, Clock, CheckCircle2, Share2, Copy, BookmarkPlus, BookmarkCheck, ExternalLink, Globe, Mail, Terminal, Wand2, FileCode, Download } from "lucide-react";
+import { Sparkles, Loader2, ChevronRight, Clock, CheckCircle2, Share2, Copy, BookmarkPlus, BookmarkCheck, ExternalLink, Globe, Mail, Terminal, Wand2, FileCode, Download, Rocket, Star, ArrowRight } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SEO } from "../components/SEO";
@@ -47,36 +47,6 @@ function generateCloneCommands(tools) {
     .filter(Boolean);
 }
 
-// ── Helper: generate a basic docker-compose template ──
-function generateDockerCompose(tools) {
-  const services = tools
-    .map((t, i) => {
-      const name = t.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const repo = parseGitHubUrl(t.githubUrl);
-      return repo
-        ? `  ${name}:
-    image: ${repo.split("/")[0]}/${repo.split("/")[1]}:latest
-    container_name: ${name}
-    ports:
-      - "${3000 + i}:${3000 + i}"
-    environment:
-      - NODE_ENV=production
-    restart: unless-stopped`
-        : null;
-    })
-    .filter(Boolean)
-    .join("\n\n");
-
-  return `version: "3.8"
-
-services:
-${services}
-
-networks:
-  default:
-    name: gitstack-network`;
-}
-
 // ── Helper: generate instant master prompt (frontend template) ──
 function generateInstantPrompt(idea, tools) {
   const toolList = tools
@@ -91,28 +61,224 @@ function generateInstantPrompt(idea, tools) {
     .filter(Boolean)
     .join("\n");
 
+  const cloneCommands = generateCloneCommands(tools).join("\n");
+
   return `I want to build: ${idea}
 
-I have selected these open-source tools:
+I have selected these open-source repositories as my foundation:
 ${toolList}
 
 GitHub repositories:
 ${repos}
 
-Please generate a complete, production-ready setup:
+Your task: Build me a single, unified, production-ready application for "${idea}". I will copy-paste this prompt into Cursor / ChatGPT / Claude and you must generate the ENTIRE project — every file, complete code, no placeholders.
 
-1. A docker-compose.yml that runs ALL services together with proper networking
-2. A .env.example with all required environment variables for each service
-3. A setup.sh script that clones repos, builds images, and starts everything with one command
-4. Health checks for each service
-5. Basic nginx or Caddy reverse proxy config for routing between services
-6. Inter-service connection instructions (e.g., how each service talks to the database)
-7. A README.md with step-by-step setup instructions that a non-technical person can follow
-8. Common pitfalls and troubleshooting tips specific to these tools
-9. Default port assignments for each service
-10. Security best practices (don't use default passwords in production, etc.)
+=== STEP 0 — PREREQUISITES ===
+Before starting, ensure you have:
+- Node.js 18+ installed (download from https://nodejs.org — click the green "LTS" button)
+- A code editor (Cursor, VS Code, or Windsurf)
+- Git installed (usually comes with Node.js)
+Verify: run \`node --version\` and \`git --version\` in terminal.
 
-Make everything work together out of the box. Use realistic port numbers. Include comments explaining what each section does.`;
+=== STEP 1 — CLONE REFERENCE REPOS ===
+Run these commands in your terminal FIRST:
+${cloneCommands}
+
+These repos are your architectural foundation. Study their code patterns, database schemas, and UI approaches.
+
+=== STEP 2 — PROJECT PLAN ===
+First generate a \`PROJECT_PLAN.md\` with:
+1. App name and description for "${idea}"
+2. Complete file list
+3. Database schema inferred from "${idea}" (all tables, columns, foreign keys)
+4. API endpoint list
+5. Page/component list
+6. Color palette and design tokens
+7. **MVP vs Phase 2**: If "${idea}" is complex, identify CORE features for MVP and mark advanced features as "Phase 2". Generate ONLY the MVP first.
+
+=== STEP 3 — FRONTEND (Beautiful, Modern UI) ===
+Tech Stack:
+- React 18 with Vite
+- Tailwind CSS for styling
+- shadcn/ui or Radix UI for polished components (buttons, modals, tables, forms, cards, dropdowns)
+- Lucide React for icons
+- React Router for navigation
+- Recharts for charts/analytics
+
+Generate ALL of these:
+1. Landing/Home page — hero section, features grid, CTA buttons
+2. Dashboard — sidebar navigation, KPI stat cards, chart widgets, activity feed
+3. Main feature pages — forms, data tables, detail views (whatever "${idea}" needs)
+4. Auth pages — Login/Register with clean card design
+5. Settings/Profile page with avatar upload
+6. Shared components — Navbar, Sidebar, Footer, Modal, Toast, Loading spinner, Empty state, Confirm dialog
+
+Design requirements:
+- Modern color palette (slate/blue/indigo base with one accent like emerald/violet/amber)
+- Fully responsive (mobile, tablet, desktop)
+- Cards with subtle shadows, rounded-xl corners, smooth transitions
+- Dark mode toggle with system preference detection
+- Forms with real-time validation, error messages, loading states
+- Tables with search, sort, pagination, bulk actions
+- Every component must be fully styled with Tailwind — no unstyled HTML
+- All buttons must have hover and active states
+
+API Client:
+- Create \`client/src/lib/api.js\` — Axios instance with baseURL from env
+- baseURL: \`import.meta.env.VITE_API_URL\` (default: http://localhost:5000)
+- Include JWT interceptor and error handling
+
+=== STEP 4 — BACKEND (Robust API) ===
+Tech Stack:
+- Node.js + Express
+- SQLite database (single file, zero setup) with better-sqlite3
+- JWT authentication (jsonwebtoken)
+- bcrypt for password hashing
+- cors + express-validator + dotenv
+
+Implement ALL endpoints:
+1. POST /api/auth/register — Create user (email validation, password min 6 chars)
+2. POST /api/auth/login — Return JWT
+3. GET /api/auth/me — Current user profile (protected)
+4. GET /api/dashboard/stats — KPI data (protected)
+5. Full CRUD for main entity: GET /api/items (pagination, search, sort), GET /api/items/:id, POST /api/items, PUT /api/items/:id, DELETE /api/items/:id
+6. Any extra endpoints "${idea}" needs
+
+Requirements:
+- Error handling: {success: false, error: "message"}
+- Input validation on every endpoint
+- Auth middleware on private routes
+- Auto-create tables on first start
+- Seed script (\`server/seed.js\`) with 10-20 realistic demo records
+- CORS configured for frontend
+
+=== STEP 5 — DATABASE ===
+- SQLite file-based (\`server/database.sqlite\`)
+- Infer COMPLETE schema from "${idea}" — all tables needed
+- Every table: id (INTEGER PRIMARY KEY), created_at, updated_at
+- Foreign keys with ON DELETE CASCADE
+- Indexes on searched columns
+- Seed data with realistic records
+
+=== STEP 6 — PROJECT STRUCTURE ===
+\`\`\`
+my-app/
+├── client/                     # React frontend (Vite)
+│   ├── src/
+│   │   ├── components/         # Reusable UI components
+│   │   ├── pages/              # Page components
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── context/            # AuthContext, ThemeContext
+│   │   ├── lib/                # api.js (Axios), utils.js
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── package.json
+│   ├── tailwind.config.js
+│   └── .env.example
+├── server/                     # Express backend
+│   ├── index.js                # Server entry + DB setup
+│   ├── routes/                 # API routes
+│   ├── middleware/             # Auth, error handlers
+│   ├── models/                 # DB connection, queries
+│   ├── config/                 # Schema + migrations
+│   ├── seed.js                 # Demo data
+│   └── package.json
+├── .env.example
+├── .cursorrules                # Cursor AI rules
+├── PROJECT_PLAN.md             # Complete architecture plan
+├── README.md
+└── setup.sh                    # One-command setup
+\`\`\`
+
+=== STEP 7 — \`.cursorrules\` FILE ===
+Generate a \`.cursorrules\` file:
+\`\`\`
+# Project Rules for Cursor AI
+- This is a full-stack app: React frontend + Express backend
+- Database: SQLite file at server/database.sqlite
+- Always use async/await for API calls
+- Always validate user input on both frontend and backend
+- When adding a feature, update BOTH frontend and backend
+- Use Tailwind CSS for all styling — no inline styles
+- Use Lucide React icons — no emoji icons
+- Follow existing file structure
+\`\`\`
+
+=== STEP 8 — SETUP SCRIPTS ===
+Create \`setup.sh\` (Mac/Linux):
+\`\`\`bash
+#!/bin/bash
+set -e
+echo "Setting up ${idea}..."
+echo "Step 1/5: Cloning reference repos..."
+${cloneCommands}
+echo "Step 2/5: Installing backend dependencies..."
+cd server && npm install && cd ..
+echo "Step 3/5: Installing frontend dependencies..."
+cd client && npm install && cd ..
+echo "Step 4/5: Setting up database..."
+node server/seed.js
+echo "Step 5/5: Starting servers..."
+echo "Frontend: http://localhost:5173"
+echo "Backend: http://localhost:5000"
+npm run dev
+\`\`\`
+
+Create \`setup.bat\` (Windows):
+\`\`\`batch
+@echo off
+echo Setting up ${idea}...
+echo Step 1/5: Cloning reference repos...
+${cloneCommands}
+echo Step 2/5: Installing backend dependencies...
+cd server && npm install && cd ..
+echo Step 3/5: Installing frontend dependencies...
+cd client && npm install && cd ..
+echo Step 4/5: Setting up database...
+node server/seed.js
+echo Step 5/5: Starting servers...
+echo Frontend: http://localhost:5173
+echo Backend: http://localhost:5000
+npm run dev
+\`\`\`
+
+=== STEP 9 — ENVIRONMENT ===
+\`.env.example\`:
+\`\`\`
+# Backend
+PORT=5000
+JWT_SECRET=change-this-in-production
+DATABASE_URL=./database.sqlite
+NODE_ENV=development
+
+# Frontend
+VITE_API_URL=http://localhost:5000
+
+# APIs (add what "${idea}" needs)
+OPENAI_API_KEY=sk-your-key
+\`\`\`
+
+=== STEP 10 — DEPLOYMENT ===
+Frontend (Vercel):
+1. Push to GitHub
+2. Import on vercel.com, root directory: client/
+3. Add VITE_API_URL env var
+4. Deploy
+
+Backend (Render/Railway):
+1. Push to GitHub
+2. Import on render.com, start command: cd server && npm start
+3. Add env vars
+4. Deploy
+
+=== STEP 11 — CUSTOMIZATION ===
+- App name: edit client/index.html + client/src/components/Navbar.jsx
+- Colors: edit client/tailwind.config.js
+- Logo: replace client/public/logo.svg
+- New fields: edit server/config/database.js + client/src/pages/[Page].jsx
+
+Write COMPLETE code for EVERY file. No placeholders. No TODOs. No "implement later." The app must run with \`./setup.sh\`.`;
 }
 
 // ── Helper: estimate total setup time ──
@@ -156,6 +322,8 @@ export default function StackGenerator() {
   const [publishing, setPublishing] = useState(false);
   const [masterPrompt, setMasterPrompt] = useState("");
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
+  const [completeSolutions, setCompleteSolutions] = useState([]);
+  const [solutionsLoading, setSolutionsLoading] = useState(false);
 
   useEffect(() => {
     if (stack) return;
@@ -188,6 +356,13 @@ export default function StackGenerator() {
       setSaved(isStackSaved(idea));
       clearDraft();
       trackEvent("stack_generated", { idea: idea.slice(0, 50), tool_count: res.data.stack?.length || 0 });
+      // Phase 4: Also fetch complete solutions in parallel
+      setSolutionsLoading(true);
+      setCompleteSolutions([]);
+      axios.post(`${API}/ai/solution-finder`, { query: idea, limit: 3 })
+        .then(r => setCompleteSolutions(r.data.solutions || []))
+        .catch(() => {})
+        .finally(() => setSolutionsLoading(false));
     } catch (e) {
       toast.error("Failed to generate stack. Try again.");
       console.error(e);
@@ -256,7 +431,6 @@ export default function StackGenerator() {
 
   // Pre-compute tab content data
   const cloneCommands = stack ? generateCloneCommands(stack) : [];
-  const dockerCompose = stack ? generateDockerCompose(stack) : "";
   const totalTime = stack ? estimateTotalTime(stack) : "";
   const instantPrompt = stack ? generateInstantPrompt(idea, stack) : "";
 
@@ -517,6 +691,59 @@ export default function StackGenerator() {
                       </button>
                     </form>
                   </div>
+
+                  {/* Phase 4: Complete Solutions section */}
+                  {(completeSolutions.length > 0 || solutionsLoading) && (
+                    <div className="neo-card p-5 bg-pastel-lavender/30 border-2 border-black mt-2">
+                      <p className="font-black text-sm uppercase tracking-wide flex items-center gap-2 mb-3">
+                        <Rocket className="w-4 h-4" /> Or skip assembly — use a complete solution
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-4">
+                        These repos solve your problem end-to-end. No assembly required.
+                      </p>
+                      {solutionsLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Finding complete solutions...
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {completeSolutions.map((sol) => (
+                            <Link
+                              key={sol.full_name}
+                              to={`/r/${sol.full_name}`}
+                              className="flex items-start gap-3 p-3 rounded-lg border-2 border-foreground/20 hover:border-foreground hover:bg-background transition-all block"
+                            >
+                              <div className="w-8 h-8 rounded bg-foreground text-background flex items-center justify-center font-black text-sm flex-shrink-0">
+                                {(sol.name || "?")[0].toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-sm">{sol.name}</span>
+                                  <span className="text-[10px] font-bold bg-foreground text-background px-1.5 py-0.5 flex items-center gap-0.5">
+                                    <Star className="w-2.5 h-2.5" /> {typeof sol.stars === "number" ? sol.stars >= 1000 ? `${(sol.stars/1000).toFixed(1)}k` : sol.stars : sol.stars}
+                                  </span>
+                                  {sol.language && sol.language !== "Unknown" && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-muted rounded">{sol.language}</span>
+                                  )}
+                                  {sol.language && sol.language !== "Unknown" && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">{sol.language}</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{sol.description}</p>
+                              </div>
+                              <ArrowRight className="w-4 h-4 flex-shrink-0 mt-1 text-muted-foreground" />
+                            </Link>
+                          ))}
+                          <Link
+                            to={`/solution-finder?query=${encodeURIComponent(idea)}`}
+                            className="text-xs font-bold text-primary flex items-center gap-1 hover:underline mt-1"
+                          >
+                            See all solutions for this problem <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -553,29 +780,29 @@ export default function StackGenerator() {
                     </div>
                   )}
 
-                  {/* Step 2: Docker Compose */}
+                  {/* Step 2: Install & Start */}
                   <div className="neo-card bg-background overflow-hidden">
                     <div className="p-5">
                       <h3 className="font-black text-sm uppercase tracking-wide mb-3 flex items-center gap-2">
                         <span className="w-6 h-6 bg-foreground text-background text-xs font-bold flex items-center justify-center">2</span>
-                        Start with Docker Compose
+                        Install & Start
                       </h3>
                       <p className="text-sm text-muted-foreground mb-3">
-                        Save this as <code className="font-mono bg-muted px-1">docker-compose.yml</code> and run:
+                        Run these commands in your project folder:
                       </p>
                       <div className="bg-foreground text-background p-4 font-mono text-sm overflow-x-auto relative group mb-3">
-                        <pre className="whitespace-pre">{dockerCompose}</pre>
+                        <pre className="whitespace-pre">npm install</pre>
                         <button
-                          onClick={() => { navigator.clipboard.writeText(dockerCompose); toast.success("Docker compose copied!"); }}
+                          onClick={() => { navigator.clipboard.writeText("npm install"); toast.success("Command copied!"); }}
                           className="absolute top-2 right-2 bg-background text-foreground px-2 py-1 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Copy className="w-3 h-3 inline mr-1" /> Copy
                         </button>
                       </div>
                       <div className="bg-foreground text-background p-4 font-mono text-sm overflow-x-auto relative group">
-                        <pre className="whitespace-pre">docker-compose up -d</pre>
+                        <pre className="whitespace-pre">npm run dev</pre>
                         <button
-                          onClick={() => { navigator.clipboard.writeText("docker-compose up -d"); toast.success("Command copied!"); }}
+                          onClick={() => { navigator.clipboard.writeText("npm run dev"); toast.success("Command copied!"); }}
                           className="absolute top-2 right-2 bg-background text-foreground px-2 py-1 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Copy className="w-3 h-3 inline mr-1" /> Copy
@@ -625,13 +852,14 @@ export default function StackGenerator() {
                         `## Step 1: Clone repositories`,
                         cloneCommands.join("\n"),
                         ``,
-                        `## Step 2: Docker Compose`,
-                        dockerCompose,
+                        `## Step 2: Install dependencies`,
+                        `npm install`,
                         ``,
-                        `docker-compose up -d`,
+                        `## Step 3: Start the app`,
+                        `npm run dev`,
                         ``,
                         ...stack.flatMap((t, i) => [
-                          `## Step ${i + 3}: Configure ${t.name}`,
+                          `## Step ${i + 4}: Configure ${t.name}`,
                           ...(t.setupSteps || []).map((s, j) => `${j + 1}. ${s}`),
                           ``,
                         ]),

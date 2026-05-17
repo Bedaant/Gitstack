@@ -1,37 +1,27 @@
-"""Unit tests for marketplace endpoints using mongomock (no real MongoDB needed).
-
-Note: mongomock's sync cursor does not support Motor's async .to_list(), so
-cached list endpoints (which use .to_list) are tested via direct DB asserts.
-"""
+"""Unit tests for marketplace endpoints using mongomock (no real MongoDB needed)."""
 import pytest
 import mongomock
-from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
-# Patch motor.motor_asyncio.AsyncIOMotorClient before importing server
-import motor.motor_asyncio
-original_motor_client = motor.motor_asyncio.AsyncIOMotorClient
-
-def _mock_motor_client(*args, **kwargs):
-    return mongomock.MongoClient()
-
-motor.motor_asyncio.AsyncIOMotorClient = _mock_motor_client
-
-# Must import after patching
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 FastAPICache.init(InMemoryBackend(), prefix="test")
 
-from server import app, db
+from server import app, db, limiter
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    """Drop all collections before each test."""
+    """Drop all collections and reset rate limits before each test."""
     for name in db.list_collection_names():
         db.drop_collection(name)
+    try:
+        limiter._storage.reset()
+    except Exception:
+        pass
     yield
 
 
@@ -75,15 +65,15 @@ def test_get_product():
     }
     db.marketplace_products.insert_one(product)
 
-    # Get single product (does not use .to_list)
+    # Get single product
     response = client.get("/api/marketplace/products/prod-001")
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Test MCP Server"
     assert data["seller"]["seller_user_id"] == "seller_1"
 
-    # Verify DB state directly
-    doc = db.marketplace_products.find_one({"product_id": "prod-001"})
+    # Verify DB state directly (find_one is async, skip to avoid event-loop issues in sync test)
+    doc = db.marketplace_products._coll.find_one({"product_id": "prod-001"})
     assert doc["title"] == "Test MCP Server"
 
 

@@ -194,12 +194,42 @@ async function main() {
     console.log(`   ✅ ${Math.min(trending.length, 200)} repos`);
   }
 
-  // ── Blog posts (if blog manifest exists) ──
+  // ── Solutions categories ──
+  console.log("   Fetching solutions...");
+  const solutions = await fetchJson(`${API_BASE}/solutions`);
+  if (solutions?.use_cases) {
+    for (const s of solutions.use_cases) {
+      urls.push({
+        loc: `${SITE_URL}/solutions/${s.slug}/`,
+        changefreq: "weekly",
+        priority: "0.8",
+      });
+    }
+    console.log(`   ✅ ${solutions.use_cases.length} solution categories`);
+  }
+
+  // ── Blog posts (API + static manifest) ──
+  const blogApi = await fetchJson(`${API_BASE}/blog/posts?limit=1000`);
+  if (blogApi?.posts) {
+    console.log("   Fetching blog posts from API...");
+    for (const post of blogApi.posts) {
+      urls.push({
+        loc: `${SITE_URL}/blog/${post.slug}/`,
+        changefreq: "weekly",
+        priority: "0.7",
+        lastmod: toXmlDate(post.created_at),
+      });
+    }
+    console.log(`   ✅ ${blogApi.posts.length} blog posts from API`);
+  }
+  // Fallback to static manifest
   const blogManifestPath = path.join(__dirname, "..", "content", "blog", "manifest.json");
   if (fs.existsSync(blogManifestPath)) {
-    console.log("   Fetching blog posts...");
+    console.log("   Fetching static blog posts...");
     const blogManifest = JSON.parse(fs.readFileSync(blogManifestPath, "utf8"));
+    const seenSlugs = new Set((blogApi?.posts || []).map((p) => p.slug));
     for (const post of blogManifest.posts || []) {
+      if (seenSlugs.has(post.slug)) continue;
       urls.push({
         loc: `${SITE_URL}/blog/${post.slug}/`,
         changefreq: "weekly",
@@ -207,7 +237,7 @@ async function main() {
         lastmod: toXmlDate(post.date),
       });
     }
-    console.log(`   ✅ ${blogManifest.posts?.length || 0} blog posts`);
+    console.log(`   ✅ ${blogManifest.posts?.length || 0} static blog posts`);
   }
 
   // ── Write XML ──

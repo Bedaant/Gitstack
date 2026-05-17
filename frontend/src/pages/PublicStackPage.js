@@ -8,6 +8,7 @@ import { Footer } from "../components/Footer";
 import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
 import { GitHubLink } from "../components/ui/GitHubLink";
+import { ShareButtons } from "../components/ShareButtons";
 
 export default function PublicStackPage() {
   const { slug } = useParams();
@@ -75,12 +76,28 @@ export default function PublicStackPage() {
   const toolNames = tools.slice(0, 5).map(t => t.name).join(", ");
   const seoDescription = `${idea}: a tech stack with ${tools.length} open-source tools${toolNames ? ` including ${toolNames}` : ""}. Free alternatives for non-technical founders.`;
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": idea,
+    "description": seoDescription.slice(0, 160),
+    "totalTime": "PT2H",
+    "step": tools.map((tool, i) => ({
+      "@type": "HowToStep",
+      "position": i + 1,
+      "name": tool.name,
+      "text": tool.description || tool.reason || `Add ${tool.name} to your stack`,
+      "url": tool.githubUrl,
+    })),
+  };
+
   return (
     <div className="min-h-screen">
       <SEO
         title={`${idea} — Tech Stack`}
         description={seoDescription.slice(0, 160)}
         path={`/s/${slug}`}
+        jsonLd={jsonLd}
       />
       <Header />
       <main className="py-12 px-4">
@@ -140,13 +157,22 @@ export default function PublicStackPage() {
               <button onClick={handleCopyLink} className="neo-btn neo-btn-secondary px-4 py-2 font-bold text-sm flex items-center gap-2">
                 <Copy className="w-4 h-4" /> Copy Link
               </button>
-              <button onClick={handleShare} className="neo-btn neo-btn-secondary px-4 py-2 font-bold text-sm flex items-center gap-2">
-                <Share2 className="w-4 h-4" /> Share
-              </button>
+              <ShareButtons url={window.location.href} title={idea} className="flex-shrink-0" />
               <Link to="/stack-generator" className="neo-btn neo-btn-primary px-4 py-2 font-bold text-sm">
                 Build Mine →
               </Link>
             </div>
+          </div>
+
+          {/* Viral backlink — appears on every shared stack */}
+          <div className="text-center py-6 border-t border-muted">
+            <p className="text-xs text-muted-foreground">
+              Powered by{" "}
+              <Link to="/" className="font-bold text-primary hover:underline">
+                GitStack
+              </Link>{" "}
+              — Discover open-source tools for founders
+            </p>
           </div>
         </div>
       </main>

@@ -1,11 +1,16 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Download, ShoppingBag, Star, BadgeCheck, Wrench, Ban } from "lucide-react";
+import { Download, ShoppingBag, Star, BadgeCheck, Wrench, Ban, Sparkles } from "lucide-react";
 
 export const ProductCard = ({ product }) => {
   const price = (product.source_price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: product.currency || "INR" });
   return (
     <Link to={`/marketplace/${product.product_id}`} className="neo-card block hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none transition-all bg-background overflow-hidden relative">
+      {product.featured && (
+        <div className="absolute top-3 left-3 z-10 bg-amber-500 text-white text-xs font-black uppercase px-3 py-1 border-2 border-black shadow-[3px_3px_0px_0px_#000]">
+          <Sparkles className="w-3 h-3 inline mr-1" /> Featured
+        </div>
+      )}
       {product.sold_out && (
         <div className="absolute top-3 left-3 z-10 bg-red-600 text-white text-xs font-black uppercase px-3 py-1 border-2 border-black shadow-[3px_3px_0px_0px_#000]">
           <Ban className="w-3 h-3 inline mr-1" /> Sold Out

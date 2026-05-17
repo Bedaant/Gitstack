@@ -88,10 +88,17 @@ try:
     if not mongo_url:
         print("[CRITICAL ERROR] MONGO_URL is not set!")
     else:
-        # Use a longer timeout for the initial connection check
-        client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
+        # Connection pooling for scale (max 50 connections, keep 10 warm)
+        client = AsyncIOMotorClient(
+            mongo_url,
+            serverSelectionTimeoutMS=5000,
+            maxPoolSize=50,
+            minPoolSize=10,
+            maxIdleTimeMS=45000,
+            waitQueueTimeoutMS=5000,
+        )
         db = client[db_name]
-        print(f"[OK] MongoDB client initialized for {db_name}")
+        print(f"[OK] MongoDB client initialized for {db_name} (pool: 10-50)")
 
     if gemini_key:
         genai.configure(api_key=gemini_key)
@@ -110,6 +117,108 @@ GITHUB_HEADERS = {
     **({"Authorization": f"token {_gh_token}"} if _gh_token else {}),
 }
 
+# Shared async HTTP client for backend routes (connection pooling)
+_shared_httpx_client: httpx.AsyncClient = None
+
+def _get_httpx_client() -> httpx.AsyncClient:
+    global _shared_httpx_client
+    if _shared_httpx_client is None or _shared_httpx_client.is_closed:
+        _shared_httpx_client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
+            timeout=httpx.Timeout(30.0),
+        )
+    return _shared_httpx_client
+
+
+# Cache invalidation helpers
+async def invalidate_solutions_cache():
+    """Invalidate solution-related caches after scraper updates."""
+    try:
+        backend = FastAPICache.get_backend()
+        # fastapi-cache2 uses namespace:prefix:key pattern; clear is coarse-grained
+        await backend.clear(namespace="fastapi-cache", key="list_solutions_index")
+        await backend.clear(namespace="fastapi-cache", key="get_solution_category")
+        await backend.clear(namespace="fastapi-cache", key="get_alternatives")
+        await backend.clear(namespace="fastapi-cache", key="list_alternatives_index")
+        logger.info("Solutions caches invalidated")
+    except Exception as e:
+        logger.warning(f"Cache invalidation skipped: {e}")
+
+
+async def invalidate_repo_cache(full_name: str):
+    """Invalidate caches for a specific repo."""
+    try:
+        backend = FastAPICache.get_backend()
+        await backend.clear(namespace="fastapi-cache", key=f"get_related_tools")
+        # Solution-finder uses custom keys; we can't easily evict by repo,
+        # but short TTL (5 min) means they'll refresh quickly.
+    except Exception as e:
+        logger.warning(f"Repo cache invalidation skipped: {e}")
+
+# ── Email validation regex (SEC-05) ──────────────────────────────────
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+
+
+async def _create_indexes_background():
+    """Create all MongoDB indexes in the background so boot stays fast."""
+    try:
+        await db.user_activity.create_index("created_at", expireAfterSeconds=90 * 24 * 3600)
+        await db.user_activity.create_index([("user_id", 1), ("created_at", -1)])
+        await db.marketplace_products.create_index([("seller_user_id", 1)])
+        await db.marketplace_products.create_index([("published", 1), ("created_at", -1)])
+        await db.marketplace_products.create_index([("category", 1), ("published", 1)])
+        await db.marketplace_products.create_index([("github_repo_url", 1)])
+        await db.marketplace_purchases.create_index([("buyer_user_id", 1), ("status", 1)])
+        await db.marketplace_purchases.create_index("razorpay_order_id", unique=True, sparse=True)
+        await db.setup_requests.create_index([("seller_user_id", 1), ("status", 1)])
+        await db.setup_requests.create_index([("auto_release_at", 1)])
+        await db.product_reviews.create_index([("product_id", 1), ("created_at", -1)])
+        await db.product_reviews.create_index([("buyer_user_id", 1), ("product_id", 1)], unique=True)
+        await db.seller_wallets.create_index("seller_user_id", unique=True)
+        await db.wallet_transactions.create_index([("seller_user_id", 1), ("created_at", -1)])
+        # Performance & Scale indexes (Phase 1)
+        await db.github_repos.create_index([("repo_type", 1), ("use_cases", 1), ("stars", -1)])
+        await db.github_repos.create_index([("repo_type", 1), ("stars", -1)])
+        await db.github_repos.create_index([("topics", 1), ("stars", -1)])
+        await db.github_repos.create_index("full_name", unique=True, sparse=True)
+        await db.github_repos.create_index([("last_classified_at", 1)])
+        await db.repo_upvotes.create_index([("full_name", 1), ("use_case", 1)])
+        await db.marketplace_products.create_index([("featured", 1), ("featured_until", -1), ("created_at", -1)])
+        logger.info("All indexes created (background)")
+    except Exception as e:
+        logger.warning(f"Index creation (partial) skipped: {e}")
+
+
+async def _maybe_seed():
+    """Only seed if the database is actually empty — avoids redundant work on every reboot."""
+    try:
+        count = await db.tools.estimated_document_count()
+        if count < 10:
+            await seed_database()
+            logger.info("Database seeded (was empty)")
+        else:
+            logger.info(f"Seed skipped — {count} tools already in DB")
+    except Exception as e:
+        logger.warning(f"Seed check failed: {e}")
+
+
+async def _keep_alive_ping():
+    """Ping ourselves every 14 minutes to prevent Render free-tier spin-down."""
+    backend_url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("BACKEND_URL", "")
+    if not backend_url:
+        logger.warning("No RENDER_EXTERNAL_URL set — keep-alive disabled")
+        return
+    await asyncio.sleep(60)  # Let server fully boot first
+    while True:
+        try:
+            async with httpx.AsyncClient() as c:
+                resp = await c.get(f"{backend_url}/api/health", timeout=10)
+                logger.debug(f"Keep-alive ping: {resp.status_code}")
+        except Exception:
+            pass
+        await asyncio.sleep(14 * 60)  # Every 14 minutes
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # Startup
@@ -117,17 +226,11 @@ async def lifespan(_app: FastAPI):
     _scraper_task = asyncio.create_task(_scraper_loop())
     logger.info("Background scraper scheduled (every 6 hours)")
 
-    # One-time seed for production boot
-    asyncio.create_task(seed_database())
-    logger.info("Database seeding started...")
+    # Seed only if DB is empty (fast boot)
+    asyncio.create_task(_maybe_seed())
 
-    # Create user_activity indexes (TTL for 90 days, compound index for queries)
-    try:
-        await db.user_activity.create_index("created_at", expireAfterSeconds=90 * 24 * 3600)
-        await db.user_activity.create_index([("user_id", 1), ("created_at", -1)])
-        logger.info("user_activity indexes created")
-    except Exception as e:
-        logger.warning(f"user_activity index creation skipped: {e}")
+    # Create indexes in background (non-blocking boot)
+    asyncio.create_task(_create_indexes_background())
 
     # Initialize cache (in-memory for dev, Redis in production)
     try:
@@ -144,25 +247,12 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         logger.warning(f"Cache init skipped: {e}")
 
-    # Create marketplace indexes (Phase 3)
-    try:
-        await db.marketplace_products.create_index([("seller_user_id", 1)])
-        await db.marketplace_products.create_index([("published", 1), ("created_at", -1)])
-        await db.marketplace_products.create_index([("category", 1), ("published", 1)])
-        await db.marketplace_products.create_index([("github_repo_url", 1)])
-        await db.marketplace_purchases.create_index([("buyer_user_id", 1), ("status", 1)])
-        await db.marketplace_purchases.create_index("razorpay_order_id", unique=True, sparse=True)
-        await db.setup_requests.create_index([("seller_user_id", 1), ("status", 1)])
-        await db.setup_requests.create_index([("auto_release_at", 1)])
-        await db.product_reviews.create_index([("product_id", 1), ("created_at", -1)])
-        await db.product_reviews.create_index([("buyer_user_id", 1), ("product_id", 1)], unique=True)
-        await db.seller_wallets.create_index("seller_user_id", unique=True)
-        await db.wallet_transactions.create_index([("seller_user_id", 1), ("created_at", -1)])
-        logger.info("marketplace indexes created")
-    except Exception as e:
-        logger.warning(f"marketplace index creation skipped: {e}")
     # Marketplace auto-release escrow worker (hourly)
     asyncio.create_task(auto_release_escrow_loop())
+
+    # Keep-alive self-ping (prevents Render free-tier spin-down)
+    asyncio.create_task(_keep_alive_ping())
+
     asyncio.create_task(send_phone_alert(
         title="🚀 GitStack Server Started",
         message="Backend is live and cron is running (every 6 hours).",
@@ -258,6 +348,8 @@ class UserModel(BaseModel):
     website: Optional[str] = None
     skills: List[str] = []
     public_profile: bool = True
+    subscription_tier: Literal["free", "pro"] = "free"
+    subscription_expires_at: Optional[datetime] = None
 
 class UpdateProfileRequest(BaseModel):
     github_username: Optional[str] = Field(None, max_length=50, pattern=r'^[a-zA-Z0-9\-]+$')
@@ -295,14 +387,22 @@ class RoastRequest(BaseModel):
     tools: List[str] = Field(..., min_length=1, max_length=30)
 
 class SaveStackRequest(BaseModel):
-    name: str
-    tools: List[str]
+    name: str = Field(..., min_length=1, max_length=100)
+    tools: List[str] = Field(..., max_length=50)
     is_public: bool = True
 
 class SmartSearchRequest(BaseModel):
     query: str
-    limit: int = 20
+    limit: int = Field(default=20, ge=1, le=100)
     include_github_live: bool = True
+
+class SolutionFinderRequest(BaseModel):
+    query: str = Field(..., min_length=3, max_length=500)
+    limit: int = Field(default=8, ge=1, le=20)
+
+class RepoUpvoteRequest(BaseModel):
+    full_name: str = Field(..., min_length=3, max_length=200)
+    use_case: str = Field(..., min_length=2, max_length=100)
 
 class RepoTranslateRequest(BaseModel):
     full_name: str
@@ -345,6 +445,16 @@ async def require_auth(request: Request) -> UserModel:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
 
+
+ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+
+async def require_admin(request: Request) -> UserModel:
+    user = await require_auth(request)
+    if user.email and user.email.lower() not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
 # ==================== AI HELPERS ====================
 
 async def call_gemini(prompt: str, json_response: bool = False) -> str:
@@ -367,7 +477,7 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
             continue
 
     logger.error(f"All Gemini models failed. Last error: {last_error}")
-    raise HTTPException(status_code=500, detail=f"AI service temporarily unavailable: {str(last_error)}")
+    raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again.")
 
 # ==================== AUTH ROUTES ====================
 
@@ -400,7 +510,8 @@ async def sync_user(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        logger.warning(f"Auth sync error: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 @api_router.get("/auth/me")
 async def get_me(user: UserModel = Depends(require_auth)):
@@ -540,17 +651,9 @@ async def get_related_tools(tool_id: str):
 
 
 @api_router.get("/tools/trending/list")
+@cache(expire=1800)
 async def get_trending_tools(tab: str = "top_week", language: str = ""):
     """Get real trending repos from GitHub or cache"""
-
-    # Check cache first (valid for 6 hours)
-    cache_key = f"trending_{tab}_{language}"
-    cached = await db.trending_cache.find_one({"cache_key": cache_key}, {"_id": 0})
-
-    if cached:
-        cached_time = datetime.fromisoformat(cached.get("cached_at", "2000-01-01"))
-        if datetime.now(timezone.utc) - cached_time < timedelta(hours=6):
-            return cached.get("repos", [])
 
     # Scrape GitHub trending
     since_map = {
@@ -565,65 +668,54 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
     repos = []
     try:
         url = f"https://github.com/trending/{language}?since={since}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers={"User-Agent": "GitStack"}, timeout=30)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                articles = soup.select('article.Box-row')
+        client = _get_httpx_client()
+        response = await client.get(url, headers={"User-Agent": "GitStack"}, timeout=30)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            articles = soup.select('article.Box-row')
 
-                for i, article in enumerate(articles[:15]):
-                    try:
-                        h2 = article.select_one('h2 a')
-                        if not h2:
-                            continue
-                        full_name = h2.get('href', '').strip('/')
-                        if not full_name or '/' not in full_name:
-                            continue
-
-                        desc_elem = article.select_one('p')
-                        description = desc_elem.get_text(strip=True) if desc_elem else ""
-
-                        stars_elem = article.select_one('a[href$="/stargazers"]')
-                        stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
-                        stars = stars_text.strip().replace(',', '')
-                        if 'k' in stars.lower():
-                            stars = str(int(float(stars.lower().replace('k', '')) * 1000))
-
-                        lang_elem = article.select_one('[itemprop="programmingLanguage"]')
-                        lang = lang_elem.get_text(strip=True) if lang_elem else "Unknown"
-
-                        today_elem = article.select_one('span.d-inline-block.float-sm-right')
-                        today_stars = ""
-                        if today_elem:
-                            today_stars = today_elem.get_text(strip=True)
-
-                        repos.append({
-                            "tool_id": full_name.replace("/", "_").lower(),
-                            "name": full_name.split('/')[-1],
-                            "full_name": full_name,
-                            "description": description[:200],
-                            "stars": stars,
-                            "language": lang,
-                            "today_stars": today_stars,
-                            "github_url": f"https://github.com/{full_name}",
-                            "difficulty": "Intermediate",
-                            "rank": i + 1
-                        })
-                    except Exception as e:
-                        logger.error(f"Error parsing trending repo: {e}")
+            for i, article in enumerate(articles[:15]):
+                try:
+                    h2 = article.select_one('h2 a')
+                    if not h2:
+                        continue
+                    full_name = h2.get('href', '').strip('/')
+                    if not full_name or '/' not in full_name:
                         continue
 
-        # Cache results
-        if repos:
-            await db.trending_cache.update_one(
-                {"cache_key": cache_key},
-                {"$set": {
-                    "cache_key": cache_key,
-                    "repos": repos,
-                    "cached_at": datetime.now(timezone.utc).isoformat()
-                }},
-                upsert=True
-            )
+                    desc_elem = article.select_one('p')
+                    description = desc_elem.get_text(strip=True) if desc_elem else ""
+
+                    stars_elem = article.select_one('a[href$="/stargazers"]')
+                    stars_text = stars_elem.get_text(strip=True) if stars_elem else "0"
+                    stars = stars_text.strip().replace(',', '')
+                    if 'k' in stars.lower():
+                        stars = str(int(float(stars.lower().replace('k', '')) * 1000))
+
+                    lang_elem = article.select_one('[itemprop="programmingLanguage"]')
+                    lang = lang_elem.get_text(strip=True) if lang_elem else "Unknown"
+
+                    today_elem = article.select_one('span.d-inline-block.float-sm-right')
+                    today_stars = ""
+                    if today_elem:
+                        today_stars = today_elem.get_text(strip=True)
+
+                    repos.append({
+                        "tool_id": full_name.replace("/", "_").lower(),
+                        "name": full_name.split('/')[-1],
+                        "full_name": full_name,
+                        "description": description[:200],
+                        "stars": stars,
+                        "language": lang,
+                        "today_stars": today_stars,
+                        "github_url": f"https://github.com/{full_name}",
+                        "difficulty": "Intermediate",
+                        "rank": i + 1
+                    })
+                except Exception as e:
+                    logger.error(f"Error parsing trending repo: {e}")
+                    continue
+
     except Exception as e:
         logger.error(f"Error fetching trending: {e}")
         # Fallback to curated tools
@@ -935,8 +1027,9 @@ async def get_topic_tools(topic_id: str):
     # Search curated tools
     or_conditions = []
     for kw in keywords:
-        or_conditions.append({"tags": {"$regex": kw, "$options": "i"}})
-        or_conditions.append({"category": {"$regex": kw, "$options": "i"}})
+        escaped_kw = re.escape(kw)  # SEC-12: prevent ReDoS from AI-generated keywords
+        or_conditions.append({"tags": {"$regex": escaped_kw, "$options": "i"}})
+        or_conditions.append({"category": {"$regex": escaped_kw, "$options": "i"}})
 
     tools = await db.tools.find(
         {"$or": or_conditions} if or_conditions else {},
@@ -946,9 +1039,10 @@ async def get_topic_tools(topic_id: str):
     # Search github_repos with expanded keywords
     gh_or = [{"topics": {"$in": keywords}}]
     for kw in keywords[:8]:  # More coverage
-        gh_or.append({"topics": {"$regex": kw, "$options": "i"}})
-        gh_or.append({"description": {"$regex": kw, "$options": "i"}})
-        gh_or.append({"name": {"$regex": kw, "$options": "i"}})
+        escaped_kw = re.escape(kw)  # SEC-12: prevent ReDoS
+        gh_or.append({"topics": {"$regex": escaped_kw, "$options": "i"}})
+        gh_or.append({"description": {"$regex": escaped_kw, "$options": "i"}})
+        gh_or.append({"name": {"$regex": escaped_kw, "$options": "i"}})
 
     remaining = max(100 - len(tools), 20)
     gh_repos = await db.github_repos.find(
@@ -1050,7 +1144,15 @@ async def stack_generator(request: Request, req: StackGeneratorRequest):
 
     prompt = f"""Help a non-technical founder build: {context}
 
-Recommend 4-6 free/open-source GitHub tools to build this idea.
+Recommend 4-6 free/open-source GitHub CODE repositories to build this idea.
+
+IMPORTANT RULES:
+- ONLY suggest repositories that contain SOURCE CODE (React, Node.js, Python, etc.) which can be cloned, modified, and customized.
+- DO NOT suggest infrastructure tools that need separate installation like: Ollama, n8n, Metabase, Airbyte, or any tool that runs as its own server/platform.
+- If the idea needs AI, suggest a repo that already has OpenAI API integration (not Ollama).
+- If the idea needs automation, suggest a repo with built-in workflow logic (not n8n).
+- If the idea needs analytics, suggest a repo with built-in chart components (not Metabase).
+- Each repo should be a real, working product that the founder can clone and tweak for their own use case.
 
 Return ONLY a valid JSON array (no markdown):
 [
@@ -1098,30 +1200,254 @@ async def stack_master_prompt(request: Request, req: StackMasterPromptRequest):
     
     clone_section = "\n".join(clone_commands) if clone_commands else "# (clone commands will be provided)"
 
-    prompt = f"""The user wants to build: {req.idea}
+    prompt = f"""You are an expert full-stack developer and product architect. A non-technical founder wants to build: "{req.idea}"
 
-They have selected this stack of open-source tools:
+They have selected these open-source repositories as their foundation:
 {tools_json}
 
-IMPORTANT: Include these EXACT git clone commands at the beginning of the setup instructions:
+MANDATORY CLONE COMMANDS (run these in your terminal first):
 {clone_section}
 
-Generate a comprehensive "master prompt" that the user can copy-paste into an AI coding assistant (Cursor, v0, Claude, ChatGPT, Replit, Bolt, Lovable, etc.) to generate a complete, production-ready setup.
+Your task is to generate a complete "Master Prompt" that the founder can copy-paste into Cursor, Claude, ChatGPT, or Windsurf. The target AI must produce a SINGLE, UNIFIED, production-ready application — NOT multiple separate repos running side-by-side.
 
-The master prompt MUST include:
-1. The exact git clone commands listed above (do not omit these)
-2. A docker-compose.yml that runs ALL services together with proper networking
-3. A .env.example with all required environment variables for each service
-4. A setup.sh script that clones repos (using the exact URLs above), builds images, and starts everything with one command
-5. Health checks for each service
-6. Basic nginx or Caddy reverse proxy config for routing between services
-7. Inter-service connection instructions (e.g., how app A connects to database B)
-8. A README.md with step-by-step setup instructions
-9. Common pitfalls and troubleshooting tips specific to these tools
+HOW TO BUILD IT:
+1. RUN the git clone commands above in your terminal to download the reference repos.
+2. The AI will study these repos using its knowledge of their architecture, database design, and patterns.
+3. EXTRACT the best patterns, components, and logic from each repo.
+4. BUILD ONE cohesive application from scratch that combines all these patterns into the founder's specific idea: "{req.idea}".
+5. CUSTOMIZE everything — branding, colors, business logic, data models — to match the founder's use case.
 
-Make the prompt detailed enough that a non-technical founder can hand it to any AI assistant and get a working system. Include specific port numbers, default credentials where appropriate, and service dependency order.
+The final output must be a single codebase. Generate EVERY file completely. No placeholders. No TODOs.
 
-Return ONLY the master prompt text. No markdown code blocks, no explanations outside the prompt. The prompt must be ready to copy-paste directly into an AI coding assistant."""
+=== STEP 0 — PREREQUISITES ===
+Before starting, the user must have:
+- Node.js 18+ installed (download from https://nodejs.org — click the green "LTS" button, then Next-Next-Finish)
+- A code editor (Cursor, VS Code, or Windsurf)
+- Git installed (usually comes with Node.js installer)
+
+Verify installation: open terminal and run `node --version` and `git --version`
+
+=== STEP 1 — PROJECT PLAN ===
+First, generate a `PROJECT_PLAN.md` file that contains:
+1. App name and description based on "{req.idea}"
+2. Complete file list (every file that will be created)
+3. Database schema (all tables, columns, foreign keys) inferred from "{req.idea}"
+4. API endpoint list
+5. Page/component list
+6. Color palette and design tokens
+7. **MVP vs Phase 2**: If "{req.idea}" is complex (more than 3-4 major features), identify the CORE MVP features and mark advanced features as "Phase 2". Generate ONLY the MVP first. Phase 2 should be listed as future enhancements in PROJECT_PLAN.md.
+
+=== STEP 2 — FRONTEND (Beautiful, Modern UI) ===
+Tech Stack:
+- React 18 with Vite (fast dev server, modern build)
+- Tailwind CSS for styling (beautiful, responsive design)
+- shadcn/ui or Radix UI primitives for polished components (buttons, modals, tables, forms, cards, dropdowns)
+- Lucide React for icons
+- React Router for navigation
+- Recharts for analytics/charts (if needed)
+
+Required Pages & Components (generate ALL of these):
+1. Landing/Home page with hero section, features grid, and CTA buttons
+2. Dashboard page with sidebar navigation, stats cards, and recent activity
+3. Main feature pages (forms, data tables, detail views, lists) — whatever "{req.idea}" needs
+4. Auth pages (Login, Register) with clean, centered card design
+5. Settings/Profile page with avatar upload and preference toggles
+6. Shared components: Navbar, Sidebar, Footer, Modal, Toast notifications, Loading spinner, Empty state, Confirm dialog
+
+Design Requirements:
+- Use a modern color palette (slate/blue/indigo base with one accent color like emerald/violet/amber)
+- Every page must be responsive (mobile, tablet, desktop)
+- Use cards with subtle shadows, rounded-xl corners, and smooth transitions
+- Include dark mode toggle with system preference detection
+- Forms must have real-time validation, error messages, and loading states
+- Tables must have search, sort, pagination, and bulk actions
+- Dashboard must have KPI cards, chart widgets, and activity feed
+- All buttons must have hover and active states
+- Use proper spacing (padding, margins, gap) — never cramped layouts
+
+Frontend-Backend Connection:
+- Create `client/src/lib/api.js` — Axios instance with baseURL from env
+- baseURL must read from `import.meta.env.VITE_API_URL` (default: `http://localhost:5000`)
+- Include request/response interceptors for JWT token and error handling
+- Every API call must have loading state and error handling in the UI
+
+=== STEP 3 — BACKEND (Robust API) ===
+Tech Stack:
+- Node.js + Express
+- SQLite database (zero setup, single file) with better-sqlite3
+- JWT authentication (jsonwebtoken)
+- bcrypt for password hashing
+- cors enabled for frontend
+- express-validator for input validation
+- dotenv for environment variables
+
+Required API Endpoints (implement ALL of these):
+1. POST /api/auth/register — Create new user (validate email, password min 6 chars)
+2. POST /api/auth/login — Return JWT token
+3. GET /api/auth/me — Return current user profile (protected)
+4. GET /api/dashboard/stats — Return KPI data for dashboard (protected)
+5. CRUD endpoints for the MAIN entity of "{req.idea}"
+   - GET /api/items — List all with pagination (page, limit), search (q), sort (sortBy, order)
+   - GET /api/items/:id — Get single item
+   - POST /api/items — Create new item (validated)
+   - PUT /api/items/:id — Update item
+   - DELETE /api/items/:id — Delete item
+6. Any additional endpoints "{req.idea}" specifically needs
+
+Backend Requirements:
+- Proper error handling with consistent JSON format: `{success: false, error: "message"}`
+- Input validation on every endpoint using express-validator
+- Authentication middleware protecting private routes (verify JWT)
+- Auto-create tables on first server start (run CREATE TABLE IF NOT EXISTS)
+- Seed data script (`server/seed.js`) with realistic demo data
+- CORS configured to allow frontend origin
+
+=== STEP 4 — DATABASE ===
+- SQLite file-based database (`server/database.sqlite`)
+- Infer the COMPLETE schema from "{req.idea}" — create ALL tables needed
+- Every table must have: id (INTEGER PRIMARY KEY), created_at, updated_at
+- Foreign keys with ON DELETE CASCADE where appropriate
+- Indexes on frequently searched columns
+- Include `server/seed.js` with 10-20 realistic demo records
+
+=== STEP 5 — PROJECT STRUCTURE ===
+Generate the complete folder structure with every file:
+```
+my-app/
+├── client/                     # React frontend (Vite)
+│   ├── src/
+│   │   ├── components/         # Reusable UI components (Navbar, Sidebar, Modal, etc.)
+│   │   ├── pages/              # Page components (Home, Dashboard, Auth, etc.)
+│   │   ├── hooks/              # Custom React hooks (useAuth, useApi, useTheme)
+│   │   ├── context/            # AuthContext, ThemeContext
+│   │   ├── lib/                # api.js (Axios), utils.js, constants.js
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── package.json            # ALL dependencies with exact versions
+│   ├── tailwind.config.js
+│   └── .env.example            # VITE_API_URL=http://localhost:5000
+├── server/                     # Express backend
+│   ├── index.js                # Server entry, DB setup, route mounting
+│   ├── routes/                 # API route files (auth.js, items.js, dashboard.js)
+│   ├── middleware/             # auth.js (JWT verify), errorHandler.js, validate.js
+│   ├── models/                 # db.js (SQLite connection), queries.js
+│   ├── config/                 # database.js (schema + migrations)
+│   ├── seed.js                 # Demo data population
+│   └── package.json            # ALL dependencies with exact versions
+├── .env.example                # Combined env for both frontend and backend
+├── .cursorrules                # Cursor AI rules for this project
+├── PROJECT_PLAN.md             # Complete plan and architecture
+├── README.md                   # Setup and customization guide
+└── setup.sh                    # One-command setup
+```
+
+=== STEP 6 — `.cursorrules` FILE ===
+Generate a `.cursorrules` file with:
+```
+# Project Rules for Cursor AI
+- This is a full-stack app: React frontend (client/) + Express backend (server/)
+- Database: SQLite file at server/database.sqlite
+- Always use async/await for API calls
+- Always validate user input on both frontend and backend
+- When adding a feature, update BOTH frontend and backend
+- Use Tailwind CSS for all styling — no inline styles
+- Use Lucide React icons — no emoji icons
+- Follow existing file structure — don't create new folders without reason
+```
+
+=== STEP 7 — SETUP SCRIPTS ===
+
+Create `setup.sh` for Mac/Linux:
+```bash
+#!/bin/bash
+set -e
+echo "Setting up {req.idea}..."
+echo "Step 1/5: Cloning reference repos..."
+{clone_section}
+echo "Step 2/5: Installing backend dependencies..."
+cd server && npm install && cd ..
+echo "Step 3/5: Installing frontend dependencies..."
+cd client && npm install && cd ..
+echo "Step 4/5: Setting up database..."
+node server/seed.js
+echo "Step 5/5: Starting development servers..."
+echo "Frontend will run on http://localhost:5173"
+echo "Backend will run on http://localhost:5000"
+npm run dev
+```
+
+Create `setup.bat` for Windows:
+```batch
+@echo off
+echo Setting up {req.idea}...
+echo Step 1/5: Cloning reference repos...
+{clone_section}
+echo Step 2/5: Installing backend dependencies...
+cd server && npm install && cd ..
+echo Step 3/5: Installing frontend dependencies...
+cd client && npm install && cd ..
+echo Step 4/5: Setting up database...
+node server/seed.js
+echo Step 5/5: Starting development servers...
+echo Frontend: http://localhost:5173
+echo Backend: http://localhost:5000
+npm run dev
+```
+
+=== STEP 8 — ENVIRONMENT (`.env.example`) ===
+# Backend
+PORT=5000
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+DATABASE_URL=./database.sqlite
+NODE_ENV=development
+
+# Frontend
+VITE_API_URL=http://localhost:5000
+
+# Third-party APIs (add what "{req.idea}" needs)
+OPENAI_API_KEY=sk-your-key-here
+# STRIPE_SECRET_KEY=sk_test_...
+# SENDGRID_API_KEY=SG...
+
+=== STEP 9 — DEPLOYMENT ===
+Frontend (Vercel):
+1. Push code to GitHub
+2. Import repo on vercel.com
+3. Set root directory to `client/`
+4. Add environment variable: VITE_API_URL=https://your-backend-url.com
+5. Deploy
+
+Backend (Render/Railway):
+1. Push code to GitHub
+2. Import repo on render.com or railway.app
+3. Set start command: `cd server && npm start`
+4. Add environment variables from .env.example
+5. Deploy
+
+Database: SQLite works on all platforms, no separate DB server needed.
+
+=== STEP 10 — CUSTOMIZATION GUIDE ===
+Include in README.md:
+- Change app name: edit `client/index.html` title and `client/src/components/Navbar.jsx`
+- Change colors: edit `client/tailwind.config.js` theme.extend.colors
+- Change logo: replace `client/public/logo.svg`
+- Add new fields: edit `server/config/database.js` schema + `client/src/pages/[Page].jsx` form
+- Add new API endpoint: create route in `server/routes/` + add UI in `client/src/pages/`
+
+IMPORTANT RULES:
+- Write COMPLETE, WORKING code for EVERY file. No placeholders. No TODOs. No "implement this later."
+- Every component must be fully styled with Tailwind — no unstyled HTML.
+- The app must be runnable after running `./setup.sh` — no extra setup.
+- DO NOT use Docker. DO NOT use docker-compose.
+- DO NOT require the founder to install separate servers or platforms.
+- Build all functionality INTO the codebase, not as external dependencies.
+- Generate files in this order: PROJECT_PLAN.md → .cursorrules → database schema → backend → frontend → setup.sh → README.md
+
+TONE & FORMATTING:
+- The prompt you generate must act as a direct, strict command to the target AI.
+- Command the AI to avoid placeholders and write complete, functional code.
+- Return ONLY the raw master prompt text. Do NOT wrap it in markdown code blocks. Do NOT add introductory or concluding remarks. Just the raw, copy-pasteable prompt string."""
 
     try:
         result = await call_gemini(prompt, json_response=False)
@@ -1129,6 +1455,264 @@ Return ONLY the master prompt text. No markdown code blocks, no explanations out
     except Exception as e:
         logger.error(f"Master prompt generation failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate master prompt. Try again.")
+
+# ==================== SOLUTION FINDER ====================
+
+async def _cache_and_classify_repo(repo_data: dict):
+    """Cache a repo from live GitHub search and run AI classification on it."""
+    from github_scraper import GitHubScraper
+    try:
+        scraper = GitHubScraper(db)
+        # Save basic repo data
+        await scraper.save_repo(repo_data, tier="warm")
+        # Run single-repo AI classification
+        await scraper.classify_repos_batch([repo_data])
+    except Exception as e:
+        logger.warning(f"Cache+classify failed for {repo_data.get('full_name', '?')}: {e}")
+
+@api_router.post("/ai/solution-finder")
+@limiter.limit("10/minute")
+async def solution_finder(request: Request, req: SolutionFinderRequest):
+    """
+    Find complete, ready-to-deploy open-source solutions for a business problem.
+    3-layer fallback: Local DB → Live GitHub → Gemini Discovery.
+    Results are cached so subsequent searches are instant.
+    """
+    import json as _json
+
+    query = req.query.strip()
+    cache_key = f"solution_finder:{hashlib.md5(query.lower().encode()).hexdigest()}"
+
+    # Try cache first (FastAPICache backend: Redis or in-memory)
+    try:
+        backend = FastAPICache.get_backend()
+        cached_raw = await backend.get(cache_key)
+        if cached_raw:
+            return _json.loads(cached_raw)
+    except Exception:
+        pass
+
+    solutions = []
+    seen_names = set()
+    source_info = {"layer_used": "local_db"}
+
+    # --- Step 1: Extract keywords from natural language query ---
+    keywords = query.lower().split()[:5]
+    try:
+        kw_prompt = f"""Extract 3-5 search keywords from this query for finding open-source GitHub repos:
+"{query}"
+Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "optimized GitHub search query"}}"""
+        kw_result = await call_gemini(kw_prompt, json_response=True)
+        cleaned = kw_result.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+        parsed = _json.loads(cleaned)
+        keywords = parsed.get("keywords", keywords)
+        github_query = parsed.get("github_query", query)
+    except Exception:
+        github_query = query
+
+    # --- Layer 1: Local DB search (instant) ---
+    text_regex = "|".join(re.escape(k) for k in keywords[:5])
+    local_query = {
+        "repo_type": "complete_solution",
+        "$or": [
+            {"use_cases": {"$regex": text_regex, "$options": "i"}},
+            {"description": {"$regex": text_regex, "$options": "i"}},
+            {"replaces_saas": {"$regex": text_regex, "$options": "i"}},
+            {"topics": {"$in": keywords}},
+        ]
+    }
+    local_results = await db.github_repos.find(
+        local_query, {"_id": 0}
+    ).sort("stars", -1).limit(req.limit).to_list(req.limit)
+
+    for r in local_results:
+        r["match_source"] = "local_db"
+        solutions.append(r)
+        seen_names.add(r["full_name"])
+
+    # Also search unclassified repos that match well
+    if len(solutions) < req.limit:
+        unclassified_query = {
+            "repo_type": None,
+            "stars": {"$gte": 200},
+            "$or": [
+                {"description": {"$regex": text_regex, "$options": "i"}},
+                {"topics": {"$in": keywords}},
+            ]
+        }
+        unclassified = await db.github_repos.find(
+            unclassified_query, {"_id": 0}
+        ).sort("stars", -1).limit(req.limit - len(solutions)).to_list(req.limit - len(solutions))
+        for r in unclassified:
+            if r["full_name"] not in seen_names:
+                r["match_source"] = "local_db"
+                solutions.append(r)
+                seen_names.add(r["full_name"])
+
+    # --- Layer 2: Live GitHub API search (if < 3 results) ---
+    if len(solutions) < 3:
+        source_info["layer_used"] = "github_live"
+        try:
+            client = _get_httpx_client()
+            response = await client.get(
+                "https://api.github.com/search/repositories",
+                params={
+                    "q": f"{github_query} stars:>100",
+                    "sort": "stars",
+                    "order": "desc",
+                    "per_page": 10
+                },
+                headers=GITHUB_HEADERS,
+                timeout=15
+            )
+            if response.status_code == 200:
+                data = response.json()
+                for item in data.get("items", []):
+                    fn = item["full_name"]
+                    if fn in seen_names:
+                        continue
+                    if item.get("archived"):
+                        continue
+                    repo_data = {
+                        "full_name": fn,
+                        "name": item["name"],
+                        "owner": item["owner"]["login"],
+                        "description": item.get("description") or "",
+                        "stars": item["stargazers_count"],
+                        "forks": item["forks_count"],
+                        "language": item.get("language") or "Unknown",
+                        "topics": item.get("topics", []),
+                        "html_url": item["html_url"],
+                        "pushed_at": item.get("pushed_at"),
+                        "license": item.get("license", {}).get("spdx_id") if item.get("license") else None,
+                        "contributors": 0,
+                        "source": "user_search",
+                        "match_source": "github_live",
+                    }
+                    solutions.append(repo_data)
+                    seen_names.add(fn)
+                    # Fire-and-forget: cache and classify
+                    asyncio.create_task(_cache_and_classify_repo(repo_data))
+        except Exception as e:
+            logger.error(f"Solution Finder Layer 2 error: {e}")
+
+    # --- Layer 3: Gemini-assisted discovery (if still < 3 results) ---
+    if len(solutions) < 3:
+        source_info["layer_used"] = "ai_discovered"
+        try:
+            discover_prompt = f"""Name 5-8 real, actively maintained open-source GitHub repositories that solve this problem:
+"{query}"
+
+Only include repos that:
+- Actually exist on GitHub
+- Have 50+ stars
+- Are complete, deployable solutions (not libraries or SDKs)
+
+Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence why it fits"}}]"""
+            discover_result = await call_gemini(discover_prompt, json_response=True)
+            cleaned = discover_result.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+            suggestions = _json.loads(cleaned)
+
+            # Validate each suggestion exists on GitHub
+            client = _get_httpx_client()
+            for suggestion in suggestions[:8]:
+                fn = suggestion.get("full_name", "")
+                if not fn or fn in seen_names:
+                    continue
+                try:
+                    gh_resp = await client.get(
+                        f"https://api.github.com/repos/{fn}",
+                        headers=GITHUB_HEADERS,
+                        timeout=10
+                    )
+                    if gh_resp.status_code == 200:
+                        item = gh_resp.json()
+                        if item.get("archived") or item.get("stargazers_count", 0) < 50:
+                            continue
+                        repo_data = {
+                            "full_name": item["full_name"],
+                            "name": item["name"],
+                            "owner": item["owner"]["login"],
+                            "description": item.get("description") or "",
+                            "stars": item["stargazers_count"],
+                            "forks": item["forks_count"],
+                            "language": item.get("language") or "Unknown",
+                            "topics": item.get("topics", []),
+                            "html_url": item["html_url"],
+                            "pushed_at": item.get("pushed_at"),
+                            "license": item.get("license", {}).get("spdx_id") if item.get("license") else None,
+                            "contributors": 0,
+                            "source": "user_search",
+                            "match_source": "ai_discovered",
+                            "match_reason": suggestion.get("reason", ""),
+                        }
+                        solutions.append(repo_data)
+                        seen_names.add(fn)
+                        asyncio.create_task(_cache_and_classify_repo(repo_data))
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.error(f"Solution Finder Layer 3 error: {e}")
+
+    # --- Calculate health scores for results that don't have one ---
+    from github_scraper import GitHubScraper
+    scraper = GitHubScraper(db)
+    for sol in solutions:
+        if not sol.get("health_score"):
+            sol["health_score"] = scraper.calculate_health_score(sol)
+        if "has_docker" not in sol:
+            sol["has_docker"] = scraper.detect_docker_support(sol)
+
+    result = {
+        "solutions": solutions[:req.limit],
+        "query_keywords": keywords,
+        "total": len(solutions),
+        **source_info,
+    }
+
+    # Store in cache (5 minute TTL)
+    try:
+        backend = FastAPICache.get_backend()
+        await backend.set(cache_key, _json.dumps(result), expire=300)
+    except Exception:
+        pass
+
+    return result
+
+
+@api_router.post("/ai/solution-finder/upvote")
+@limiter.limit("30/minute")
+async def upvote_repo_use_case(request: Request, req: RepoUpvoteRequest, user: UserModel = Depends(require_auth)):
+    """Let authenticated users upvote a repo for a specific use case. Grows the use_cases tags organically."""
+    # Record the upvote (unique per user+repo)
+    try:
+        await db.repo_upvotes.insert_one({
+            "full_name": req.full_name,
+            "user_id": user.user_id,
+            "use_case": req.use_case.lower().strip(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        # Duplicate — user already upvoted this combo
+        return {"message": "Already upvoted", "upvoted": True}
+
+    # Increment upvote count on the repo
+    await db.github_repos.update_one(
+        {"full_name": req.full_name},
+        {"$inc": {"upvotes": 1}}
+    )
+
+    # Add the use_case to the repo's use_cases if not already present
+    await db.github_repos.update_one(
+        {"full_name": req.full_name, "use_cases": {"$ne": req.use_case.lower().strip()}},
+        {"$push": {"use_cases": req.use_case.lower().strip()}}
+    )
+
+    return {"message": "Upvoted!", "upvoted": True}
 
 @api_router.post("/ai/repo-translator")
 @limiter.limit("10/minute")
@@ -1595,12 +2179,13 @@ class NewsletterSubscribeRequest(BaseModel):
     source: Optional[str] = None
 
 @api_router.post("/newsletter/subscribe")
-async def subscribe_newsletter(req: NewsletterSubscribeRequest):
+@limiter.limit("5/minute")  # SEC-04: prevent subscriber-list flooding / SMTP abuse
+async def subscribe_newsletter(request: Request, req: NewsletterSubscribeRequest):
     """Subscribe to the GitStack daily digest"""
     email = req.email.lower().strip()
 
-    # Basic validation
-    if not email or "@" not in email or "." not in email:
+    # SEC-05: Proper email validation (reject garbage like a@b.c)
+    if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="Invalid email address")
 
     # Check if already subscribed
@@ -1617,7 +2202,6 @@ async def subscribe_newsletter(req: NewsletterSubscribeRequest):
     })
 
     # Send welcome email (fire-and-forget so API stays fast)
-    import asyncio
     asyncio.create_task(_safe_send_welcome(email))
 
     return {"message": "Successfully subscribed to GitStack daily digest!", "status": "new"}
@@ -1696,9 +2280,9 @@ async def update_preferences(req: PreferencesUpdateRequest):
     return {"message": "Preferences updated", "preferences": cleaned}
 
 
-@api_router.get("/newsletter/unsubscribe")
-async def unsubscribe(token: str):
-    """One-click unsubscribe using a token."""
+@api_router.post("/newsletter/unsubscribe")
+async def unsubscribe_post(token: str):
+    """Unsubscribe using a token (POST to prevent CSRF via embedded images)."""
     email = _verify_email_token(token)
     result = await db.newsletter_subscribers.update_one(
         {"email": email},
@@ -1712,6 +2296,15 @@ async def unsubscribe(token: str):
         raise HTTPException(status_code=404, detail="Subscriber not found")
 
     return {"message": "Unsubscribed successfully", "email": email}
+
+
+# SEC-10: Keep GET for backward-compat email links, but return a confirmation page hint
+@api_router.get("/newsletter/unsubscribe")
+async def unsubscribe_get(token: str):
+    """GET handler for email links — validates token and returns confirmation prompt.
+    The frontend should show a 'Confirm Unsubscribe' button that POSTs."""
+    email = _verify_email_token(token)  # validate token is real
+    return {"email": email, "action": "confirm", "message": "Click confirm to unsubscribe."}
 
 @api_router.get("/newsletter/count")
 async def get_newsletter_count():
@@ -1824,7 +2417,8 @@ async def track_onboarding_intent_from_frontend(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        logger.warning(f"Onboarding intent error: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 
 # ==================== SEARCH AUTOCOMPLETE ====================
@@ -2024,7 +2618,8 @@ class PublishStackRequest(BaseModel):
     tools: List[Dict[str, Any]]
 
 @api_router.post("/stacks/publish")
-async def publish_stack(req: PublishStackRequest):
+@limiter.limit("5/minute")
+async def publish_stack(request: Request, req: PublishStackRequest):
     """Publish a stack publicly without requiring auth — anyone gets a shareable URL."""
     slug = f"s_{uuid.uuid4().hex[:10]}"
     stack = {
@@ -2064,16 +2659,6 @@ async def email_stack(req: EmailStackRequest):
     }
     await db.email_stacks.insert_one(doc)
 
-    # Also add to newsletter list so they get daily digest
-    existing = await db.newsletter_subscribers.find_one({"email": email})
-    if not existing:
-        await db.newsletter_subscribers.insert_one({
-            "email": email,
-            "subscribed_at": datetime.now(timezone.utc).isoformat(),
-            "status": "active",
-            "source": "email_stack",
-        })
-
     # Actually email the stack immediately (fire-and-forget)
     import asyncio
     asyncio.create_task(_safe_send_stack(email, req.idea, req.tools))
@@ -2090,6 +2675,7 @@ async def _safe_send_stack(email: str, idea: str, tools: list):
 # ==================== STATS ====================
 
 @api_router.get("/stats")
+@cache(expire=300)
 async def get_stats():
     """Live counters for social proof on homepage."""
     stacks_count = await db.user_stacks.count_documents({})
@@ -2190,10 +2776,16 @@ Return ONLY JSON (no markdown):
         except Exception as e:
             logger.error(f"GitHub live search error: {e}")
 
+    # Split results into solutions vs building blocks (Phase 6)
+    complete_solutions = [r for r in results if r.get("repo_type") == "complete_solution"]
+    building_blocks = [r for r in results if r.get("repo_type") != "complete_solution"]
+
     return {
         "query": req.query,
         "parsed": parsed_query,
         "results": results[:req.limit],
+        "solutions": complete_solutions[:5],
+        "building_blocks": building_blocks[:req.limit],
         "total": len(results)
     }
 
@@ -3910,6 +4502,23 @@ class MarketplaceProductUpdate(BaseModel):
     setup_description: Optional[str] = Field(None, max_length=1000)
     setup_delivery_days: Optional[int] = Field(None, ge=1, le=30)
 
+class FeatureProductRequest(BaseModel):
+    days: int = Field(7, ge=1, le=90)
+
+class AffiliateUpdateRequest(BaseModel):
+    collection: Literal["github_repos", "tools"]
+    id: str
+    affiliate_url: Optional[str] = Field(None, max_length=500)
+
+class BlogPostCreate(BaseModel):
+    slug: str
+    title: str
+    excerpt: str
+    content: str
+    tags: List[str] = []
+    cover_image: Optional[str] = None
+    source_repos: List[str] = []
+
 class SellerOnboardRequest(BaseModel):
     display_name: str = Field(..., min_length=2, max_length=100)
     bio: str = Field(default="", max_length=500)
@@ -4074,6 +4683,8 @@ async def create_product(data: MarketplaceProductCreate, request: Request):
         "screenshots": [],
         "r2_file_key": None,
         "published": False,
+        "featured": False,
+        "featured_until": None,
         "purchase_count": 0,
         "setup_count": 0,
         "avg_rating": 0.0,
@@ -4092,9 +4703,10 @@ async def list_products(q: Optional[str] = None, category: Optional[str] = None,
     page = max(page, 1)
     query: dict = {"published": True, "r2_file_key": {"$ne": None}}
     if q:
+        safe_q = re.escape(q)
         query["$or"] = [
-            {"title": {"$regex": q, "$options": "i"}},
-            {"tagline": {"$regex": q, "$options": "i"}},
+            {"title": {"$regex": safe_q, "$options": "i"}},
+            {"tagline": {"$regex": safe_q, "$options": "i"}},
         ]
     if category:
         query["category"] = category
@@ -4118,6 +4730,31 @@ async def list_products(q: Optional[str] = None, category: Optional[str] = None,
         p["seller_name"] = (seller or {}).get("display_name")
         p["seller_verified"] = (seller or {}).get("verified", False)
     return {"products": products, "page": page}
+
+@api_router.get("/marketplace/products/featured")
+@cache(expire=300)
+async def list_featured_products(limit: int = 6):
+    """Returns currently featured marketplace products."""
+    limit = min(max(limit, 1), 20)
+    now = datetime.now(timezone.utc).isoformat()
+    query = {
+        "published": True,
+        "featured": True,
+        "featured_until": {"$gt": now},
+        "r2_file_key": {"$ne": None},
+    }
+    cursor = (db.marketplace_products
+              .find(query, {"_id": 0, "description": 0, "r2_file_key": 0})
+              .sort("featured_until", -1).limit(limit))
+    products = await cursor.to_list(limit)
+    for p in products:
+        seller = await db.marketplace_sellers.find_one(
+            {"seller_user_id": p["seller_user_id"]},
+            {"_id": 0, "display_name": 1, "verified": 1},
+        )
+        p["seller_name"] = (seller or {}).get("display_name")
+        p["seller_verified"] = (seller or {}).get("verified", False)
+    return {"products": products}
 
 @api_router.get("/marketplace/my-products")
 async def list_my_products(request: Request):
@@ -4287,6 +4924,58 @@ async def toggle_publish(product_id: str, data: PublishToggle, request: Request)
     except Exception:
         pass
     return {"ok": True, "published": data.published}
+
+# ---- Admin: Featured Listings ----
+
+@api_router.post("/admin/products/{product_id}/feature")
+async def feature_product(product_id: str, data: FeatureProductRequest, user: UserModel = Depends(require_admin)):
+    """Admin endpoint to feature a product for N days."""
+    product = await db.marketplace_products.find_one({"product_id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    featured_until = (datetime.now(timezone.utc) + timedelta(days=data.days)).isoformat()
+    await db.marketplace_products.update_one(
+        {"product_id": product_id},
+        {"$set": {"featured": True, "featured_until": featured_until}}
+    )
+    # Invalidate caches
+    try:
+        await FastAPICache.clear(namespace="gitstack")
+    except Exception:
+        pass
+    return {"ok": True, "featured_until": featured_until}
+
+@api_router.post("/admin/products/{product_id}/unfeature")
+async def unfeature_product(product_id: str, user: UserModel = Depends(require_admin)):
+    """Admin endpoint to remove featured status."""
+    await db.marketplace_products.update_one(
+        {"product_id": product_id},
+        {"$set": {"featured": False, "featured_until": None}}
+    )
+    try:
+        await FastAPICache.clear(namespace="gitstack")
+    except Exception:
+        pass
+    return {"ok": True}
+
+@api_router.put("/admin/affiliate")
+async def update_affiliate(data: AffiliateUpdateRequest, user: UserModel = Depends(require_admin)):
+    """Admin endpoint to set/clear affiliate URL on a repo or tool."""
+    if data.collection == "github_repos":
+        await db.github_repos.update_one(
+            {"full_name": data.id},
+            {"$set": {"affiliate_url": data.affiliate_url}}
+        )
+    elif data.collection == "tools":
+        await db.tools.update_one(
+            {"tool_id": data.id},
+            {"$set": {"affiliate_url": data.affiliate_url}}
+        )
+    try:
+        await FastAPICache.clear(namespace="gitstack")
+    except Exception:
+        pass
+    return {"ok": True}
 
 # ---- Razorpay Checkout (Tasks 12, 13, 14) ----
 
@@ -4523,7 +5212,7 @@ async def list_setup_requests(request: Request):
     for it in items:
         buyer = await db.users.find_one(
             {"user_id": it["buyer_user_id"]},
-            {"_id": 0, "name": 1, "email": 1, "picture": 1},
+            {"_id": 0, "name": 1, "picture": 1},
         )
         product = await db.marketplace_products.find_one(
             {"product_id": it["product_id"]}, {"_id": 0, "title": 1}
@@ -4600,6 +5289,7 @@ async def get_wallet(request: Request):
     return {"wallet": wallet, "transactions": txns}
 
 @api_router.post("/marketplace/wallet/withdraw")
+@limiter.limit("3/hour")  # SEC-06: rate-limit withdrawals to prevent rapid draining
 async def request_withdrawal(data: WithdrawalRequest, request: Request):
     user = await get_current_user(request)
     if not user:
@@ -4738,6 +5428,61 @@ async def get_public_seller(seller_id: str):
                        "picture": (user_doc or {}).get("picture")},
             "products": products}
 
+# ==================== SEO SOLUTIONS DIRECTORY ====================
+
+@api_router.get("/solutions")
+@cache(expire=3600)
+async def list_solutions_index():
+    """Returns top 50 use cases for programmatic SEO directory."""
+    pipeline = [
+        {"$match": {"repo_type": "complete_solution", "use_cases": {"$exists": True, "$not": {"$size": 0}}}},
+        {"$unwind": "$use_cases"},
+        {"$group": {"_id": "$use_cases", "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gte": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 50}
+    ]
+    results = await db.github_repos.aggregate(pipeline).to_list(50)
+    return {
+        "use_cases": [
+            {
+                "name": r["_id"],
+                "slug": re.sub(r"[^a-z0-9]+", "-", r["_id"].lower()).strip("-"),
+                "repo_count": r["count"]
+            }
+            for r in results
+        ]
+    }
+
+@api_router.get("/solutions/{slug}")
+@cache(expire=600)
+async def get_solution_category(slug: str):
+    """Returns complete solutions matching a specific use case slug."""
+    human_name = slug.replace("-", " ")
+    query = {
+        "repo_type": "complete_solution",
+        "use_cases": {"$regex": human_name, "$options": "i"}
+    }
+    repos = await db.github_repos.find(query, {"_id": 0}).sort("score", -1).limit(20).to_list(20)
+    for r in repos:
+        product = await db.marketplace_products.find_one(
+            {"github_repo_url": {"$regex": re.escape(r["full_name"]), "$options": "i"}, "published": True},
+            {"_id": 0, "product_id": 1, "price_cents": 1, "seller_user_id": 1}
+        )
+        if product:
+            seller = await db.marketplace_sellers.find_one({"seller_user_id": product["seller_user_id"]})
+            r["marketplace_setup"] = {
+                "product_id": product["product_id"],
+                "price": product.get("price_cents", 0) / 100,
+                "seller_name": (seller or {}).get("display_name", "Developer")
+            }
+    return {
+        "use_case": human_name.title(),
+        "slug": slug,
+        "count": len(repos),
+        "repos": repos
+    }
+
 # ==================== ALTERNATIVES SEO PAGES ====================
 
 @api_router.get("/alternatives/{tool_slug}")
@@ -4775,12 +5520,25 @@ async def get_alternatives(tool_slug: str):
         {"_id": 0}
     ).sort("stars", -1).limit(10).to_list(10)
 
+    # Search complete solutions that replace this SaaS (Phase 5 enrichment)
+    complete_solutions = await db.github_repos.find(
+        {
+            "repo_type": "complete_solution",
+            "replaces_saas": {"$regex": regex_pattern, "$options": "i"}
+        },
+        {"_id": 0}
+    ).sort("stars", -1).limit(5).to_list(5)
+    # Deduplicate against gh results
+    gh_names = {r.get("full_name") for r in gh}
+    complete_solutions = [s for s in complete_solutions if s.get("full_name") not in gh_names]
+
     return {
         "paid_tool": pretty,
         "slug": tool_slug,
         "alternatives": curated,
         "github_repos": gh,
-        "count": len(curated) + len(gh),
+        "complete_solutions": complete_solutions,
+        "count": len(curated) + len(gh) + len(complete_solutions),
     }
 
 
@@ -4789,7 +5547,7 @@ async def get_alternatives(tool_slug: str):
 async def list_alternatives_index():
     """Lists all paid tools that have alternatives (for index page + sitemap)."""
     pipeline = [
-        {"$match": {"paid_alternative": {"$ne": None, "$ne": ""}}},
+        {"$match": {"paid_alternative": {"$nin": [None, ""]}}},
         {"$group": {"_id": "$paid_alternative", "count": {"$sum": 1}}},
         {"$match": {"count": {"$gte": 1}}},
         {"$sort": {"count": -1}},
@@ -4808,6 +5566,96 @@ async def list_alternatives_index():
     }
 
 
+# ---- Blog Posts ----
+
+@api_router.get("/blog/posts")
+@cache(expire=600)
+async def list_blog_posts(page: int = 1, limit: int = 20):
+    limit = min(max(limit, 1), 50)
+    page = max(page, 1)
+    cursor = (db.blog_posts
+              .find({}, {"_id": 0, "content": 0})
+              .sort("created_at", -1)
+              .skip((page - 1) * limit)
+              .limit(limit))
+    posts = await cursor.to_list(limit)
+    return {"posts": posts, "page": page}
+
+@api_router.get("/blog/posts/{slug}")
+@cache(expire=600)
+async def get_blog_post(slug: str):
+    post = await db.blog_posts.find_one({"slug": slug}, {"_id": 0})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
+
+@api_router.post("/admin/blog/auto-generate", status_code=201)
+async def auto_generate_blog_post(user: UserModel = Depends(require_admin)):
+    """Auto-generate a blog post from top newly-classified complete_solution repos."""
+    now = datetime.now(timezone.utc)
+    week_ago = (now - timedelta(days=7)).isoformat()
+    repos = await (db.github_repos
+                   .find({
+                       "repo_type": "complete_solution",
+                       "classified_at": {"$gt": week_ago},
+                   }, {"_id": 0})
+                   .sort("stars", -1)
+                   .limit(5)
+                   .to_list(5))
+    if not repos:
+        raise HTTPException(status_code=404, detail="No newly classified repos found in the last 7 days")
+
+    repo_names = [r["full_name"] for r in repos]
+    repo_details = "\n".join([
+        f"- {r['full_name']}: {r.get('description', '')} (⭐ {r.get('stars', 0)})"
+        for r in repos
+    ])
+    theme = repos[0].get("use_cases", ["Open Source"])[0] if repos[0].get("use_cases") else "Open Source"
+
+    prompt = f"""Write an 800-word blog post titled "Top 5 Open-Source {theme.title()} Tools This Week" for a technical audience of startup founders.
+
+Cover these repositories:
+{repo_details}
+
+Format the output as JSON with these exact keys:
+- title: the post title
+- excerpt: a 1-sentence summary
+- content: the full post in Markdown
+- tags: an array of 5 relevant tags
+
+Return ONLY the JSON object, no markdown code blocks."""
+
+    try:
+        result = await call_gemini(prompt, json_response=True)
+        import json as _json
+        cleaned = result.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+        parsed = _json.loads(cleaned)
+    except Exception as e:
+        logger.error(f"Blog auto-generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate blog post")
+
+    slug = re.sub(r"[^a-z0-9]+", "-", parsed["title"].lower()).strip("-")[:80]
+    # Ensure unique slug
+    existing = await db.blog_posts.find_one({"slug": slug})
+    if existing:
+        slug = f"{slug}-{now.strftime('%Y%m%d')}"
+
+    post = {
+        "slug": slug,
+        "title": parsed["title"],
+        "excerpt": parsed["excerpt"],
+        "content": parsed["content"],
+        "tags": parsed.get("tags", []),
+        "source_repos": repo_names,
+        "created_at": now.isoformat(),
+    }
+    await db.blog_posts.insert_one(post)
+    post.pop("_id", None)
+    return post
+
+
 # ==================== DYNAMIC SITEMAP ====================
 
 @app.get("/sitemap-urls.json")
@@ -4824,10 +5672,20 @@ async def sitemap_urls():
 
     # All paid alternatives
     alt_pipeline = [
-        {"$match": {"paid_alternative": {"$ne": None, "$ne": ""}}},
+        {"$match": {"paid_alternative": {"$nin": [None, ""]}}},
         {"$group": {"_id": "$paid_alternative"}},
     ]
     alts = await db.tools.aggregate(alt_pipeline).to_list(100)
+
+    # Top 50 Solutions Use Cases
+    sol_pipeline = [
+        {"$match": {"repo_type": "complete_solution"}},
+        {"$unwind": "$use_cases"},
+        {"$group": {"_id": "$use_cases", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 50}
+    ]
+    sol_cases = await db.github_repos.aggregate(sol_pipeline).to_list(50)
 
     return {
         "translator_repos": [r["full_name"] for r in trending if r.get("full_name")],
@@ -4835,6 +5693,10 @@ async def sitemap_urls():
         "alternative_slugs": [
             re.sub(r"[^a-z0-9]+", "-", a["_id"].lower()).strip("-")
             for a in alts if a.get("_id")
+        ],
+        "solution_slugs": [
+            re.sub(r"[^a-z0-9]+", "-", s["_id"].lower()).strip("-")
+            for s in sol_cases if s.get("_id")
         ],
     }
 
@@ -4861,6 +5723,7 @@ async def sitemap_xml():
         "/idea-exists",
         "/error-explainer",
         "/founder-stacks",
+        "/solution-finder",
         "/about",
         "/terms",
         "/privacy",
@@ -4877,10 +5740,19 @@ async def sitemap_xml():
     tools = await db.tools.find({}, {"_id": 0, "tool_id": 1}).limit(800).to_list(800)
 
     alt_pipeline = [
-        {"$match": {"paid_alternative": {"$ne": None, "$ne": ""}}},
+        {"$match": {"paid_alternative": {"$nin": [None, ""]}}},
         {"$group": {"_id": "$paid_alternative"}},
     ]
     alts = await db.tools.aggregate(alt_pipeline).to_list(300)
+
+    sol_pipeline = [
+        {"$match": {"repo_type": "complete_solution"}},
+        {"$unwind": "$use_cases"},
+        {"$group": {"_id": "$use_cases", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 50}
+    ]
+    sol_cases = await db.github_repos.aggregate(sol_pipeline).to_list(50)
 
     live_products = await db.marketplace_products.find(
         {"published": True, "r2_file_key": {"$ne": None}},
@@ -4904,6 +5776,13 @@ async def sitemap_xml():
             slug = re.sub(r"[^a-z0-9]+", "-", str(raw).lower()).strip("-")
             if slug:
                 dynamic_urls.append({"loc": f"{site}/alternatives/{slug}", "changefreq": "weekly", "priority": "0.8"})
+
+    for s in sol_cases:
+        raw = s.get("_id")
+        if raw:
+            slug = re.sub(r"[^a-z0-9]+", "-", str(raw).lower()).strip("-")
+            if slug:
+                dynamic_urls.append({"loc": f"{site}/solutions/{slug}", "changefreq": "weekly", "priority": "0.7"})
 
     for p in live_products:
         pid = p.get("product_id")
@@ -4937,7 +5816,7 @@ async def sitemap_xml():
 # ==================== ACTIVATION METRICS ====================
 
 @api_router.get("/metrics/activation")
-async def activation_metrics():
+async def activation_metrics(user: UserModel = Depends(require_auth)):  # SEC-08: protect internal metrics
     """
     Anonymous activation funnel metrics (public, for internal dashboard).
     Tracks: visitors → translators used → stacks saved → marketplace clicks.
@@ -4996,6 +5875,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# SEC-15: Security response headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
 # ==================== PHONE ALERT HELPER ====================
 
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "gitstack-alerts")  # Change this to your topic
@@ -5037,8 +5927,18 @@ async def _scraper_loop():
                 priority="low"
             )
             scraper = GitHubScraper(db)
+            # Record start time
+            try:
+                await db.scrape_metadata.update_one(
+                    {"_id": "last_scrape"},
+                    {"$set": {"started_at": datetime.now(timezone.utc).isoformat()}},
+                    upsert=True,
+                )
+            except Exception:
+                pass
             stats = await scraper.run_full_scrape()
             await scraper.cleanup_old_repos(30)
+            await scraper.close()
             logger.info(f"Cron: Scrape complete — {stats}")
             await send_phone_alert(
                 title="✅ GitStack Scrape Complete",
