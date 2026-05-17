@@ -1,36 +1,39 @@
-# Render Blueprint — One-click deploy for GitStack Backend
-# Docs: https://render.com/docs/blueprint-spec
-
 services:
+  # ── Backend (FastAPI) ──────────────────────────────────────────
   - type: web
     name: gitstack-api
-    runtime: docker
-    repo: https://github.com/YOUR_USERNAME/gitstack
+    runtime: python
     rootDir: backend
-    dockerfilePath: ./Dockerfile
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
-      - key: PORT
-        value: 10000
       - key: MONGO_URL
-        sync: false  # Set in Render Dashboard after deploy
+        sync: false          # fill in Render dashboard
       - key: DB_NAME
         value: gitstack
       - key: GEMINI_API_KEY
-        sync: false
+        sync: false          # fill in Render dashboard
       - key: GITHUB_TOKEN
-        sync: false
+        sync: false          # optional but strongly recommended — raises rate limit to 5000/hr
       - key: CLERK_JWKS_URL
-        sync: false
+        sync: false          # Clerk JWKS endpoint, e.g. https://<instance>.clerk.accounts.dev/.well-known/jwks.json
       - key: CORS_ORIGINS
-        sync: false  # Your Vercel frontend URL
-      - key: REDIS_URL
-        sync: false  # Upstash or Redis Cloud URL
+        sync: false          # set to your frontend URL, e.g. https://gitstack-app.onrender.com
+      - key: NTFY_TOPIC
+        value: gitstack-alerts
+      - key: PYTHON_VERSION
+        value: "3.11"
+      # ── Marketplace: Razorpay ─────────────────────────────────
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
+      - key: PLATFORM_FEE_PERCENT
+        value: "15"
+      # ── Marketplace: Cloudflare R2 ────────────────────────────
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -41,27 +44,81 @@ services:
         value: gitstack-marketplace
       - key: R2_PUBLIC_URL
         sync: false
+      - key: FRONTEND_URL
+        sync: false          # set to https://gitstack.pro
+      - key: EMAIL_TOKEN_SECRET
+        sync: false          # generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+  # ── Cron: Daily Drop ────────────────────────────────────────────
+  - type: cron
+    name: gitstack-daily-drop
+    runtime: python
+    rootDir: backend
+    schedule: "0 4 * * *"    # 9:30 AM IST = 4:00 AM UTC
+    buildCommand: pip install -r requirements.txt
+    startCommand: python email_jobs.py
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: gitstack
       - key: SMTP_HOST
         value: smtp.resend.com
       - key: SMTP_PORT
-        value: 587
+        value: "587"
       - key: SMTP_USER
         value: resend
       - key: SMTP_PASSWORD
         sync: false
-      - key: SMTP_FROM_EMAIL
-        value: hello@gitstack.pro
-      - key: SMTP_FROM_NAME
-        value: GitStack
-      - key: EMAIL_TOKEN_SECRET
-        generateValue: true  # Auto-generated secret
+      - key: SMTP_TLS
+        value: "true"
       - key: FRONTEND_URL
-        sync: false  # Your Vercel frontend URL
-      - key: ADMIN_EMAILS
+        value: https://gitstack.pro
+      - key: EMAIL_TOKEN_SECRET
         sync: false
-      - key: CACHE_TTL_SOLUTIONS
-        value: 600
-      - key: SCRAPER_CONCURRENCY
-        value: 25
-    healthCheckPath: /health
-    autoDeploy: true
+
+  # ── Cron: Onboarding Drip ───────────────────────────────────────
+  - type: cron
+    name: gitstack-onboarding-drip
+    runtime: python
+    rootDir: backend
+    schedule: "0 */6 * * *"    # Every 6 hours
+    buildCommand: pip install -r requirements.txt
+    startCommand: python onboarding_drip.py
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: gitstack
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: resend
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_TLS
+        value: "true"
+      - key: FRONTEND_URL
+        value: https://gitstack.pro
+      - key: EMAIL_TOKEN_SECRET
+        sync: false
+
+  # ── Frontend (React static site) ──────────────────────────────
+  - type: web
+    name: gitstack-app
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    customDomains:
+      - gitstack.pro
+      - www.gitstack.pro
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: REACT_APP_BACKEND_URL
+        sync: false          # set to your backend URL after it deploys, e.g. https://gitstack-api.onrender.com
