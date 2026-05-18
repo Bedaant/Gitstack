@@ -96,8 +96,14 @@ CATEGORIES = [
     "best-practices", "cheatsheet", "starter", "cookbook",
     "examples", "tutorials", "guide", "learning",
 
+    # === Voice AI & Telephony ===
+    "voice-agent", "ai-calling", "phone-agent", "sales-dialer",
+    "outbound-calling", "inbound-calling", "twilio-alternative", "webrtc-server",
+    "ivr", "call-center", "ai-phone", "voicebot", "sip-trunk", "pbx",
+    "telephony", "voip", "realtime-voice", "speech-to-text", "text-to-speech",
+
     # === Deep Tooling Categories (Strictly Open Source / Alternatives) ===
-    "text-to-speech", "speech-to-text", "voice-cloning", "elevenlabs-alternative",
+    "voice-cloning", "elevenlabs-alternative",
     "static-analysis", "code-review", "sonarqube-alternative", "code-quality",
     "stable-diffusion", "comfyui", "midjourney-alternative", "dalle-alternative",
     "rag", "vector-database", "pinecone-alternative", "semantic-search",

@@ -1668,6 +1668,32 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
                     solutions.append(r)
                     seen_names.add(r["full_name"])
 
+    # --- Layer 1b: Building blocks fallback (if still weak results) ---
+    # Some niches (voice AI, infra) have more building blocks than complete solutions
+    best_score = max((s.get("relevance_score", 0) for s in solutions), default=0)
+    if len(solutions) < 3 or best_score < 4:
+        building_block_query = {
+            "repo_type": "building_block",
+            "stars": {"$gte": 500},
+            "$or": [
+                {"name": {"$regex": text_regex, "$options": "i"}},
+                {"use_cases": {"$regex": text_regex, "$options": "i"}},
+                {"description": {"$regex": text_regex, "$options": "i"}},
+                {"topics": {"$in": keywords}},
+            ]
+        }
+        building_blocks = await db.github_repos.find(
+            building_block_query, {"_id": 0}
+        ).sort("stars", -1).limit(req.limit * 3).to_list(req.limit * 3)
+        for r in building_blocks:
+            if r["full_name"] not in seen_names:
+                score = _score_repo(r, keywords)
+                if score >= 4:
+                    r["match_source"] = "local_db"
+                    r["relevance_score"] = score
+                    solutions.append(r)
+                    seen_names.add(r["full_name"])
+
     # --- Layer 2: Live GitHub API search (if < 3 GOOD results) ---
     # Trigger Layer 2 if we have fewer than 3 results OR best result has low relevance
     best_score = max((s.get("relevance_score", 0) for s in solutions), default=0)
