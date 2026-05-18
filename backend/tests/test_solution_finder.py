@@ -97,7 +97,7 @@ def test_local_db_hit_only():
 
     with patch("server.db.github_repos.find", return_value=_make_async_cursor(docs)):
         with patch("server.call_gemini") as mock_gemini:
-            mock_gemini.return_value = '{"keywords": ["crm"], "github_query": "crm open source"}'
+            mock_gemini.return_value = '{"keywords": ["crm"], "github_query": "crm open source", "intent_summary": "CRM tool for managing customer relationships"}'
             response = client.post("/api/ai/solution-finder", json={"query": "crm local", "limit": 3})
 
     assert response.status_code == 200
@@ -105,6 +105,7 @@ def test_local_db_hit_only():
     assert data["layer_used"] == "local_db"
     assert len(data["solutions"]) == 3
     assert all(s["match_source"] == "local_db" for s in data["solutions"])
+    assert data["intent_source"] in ("gemini", "gemini_cached")
 
 
 def test_layer_2_fallback():
@@ -147,7 +148,7 @@ def test_layer_2_fallback():
         _make_async_cursor([]),           # unclassified_query
     ]):
         with patch("server.call_gemini") as mock_gemini:
-            mock_gemini.return_value = '{"keywords": ["crm"], "github_query": "crm open source"}'
+            mock_gemini.return_value = '{"keywords": ["crm"], "github_query": "crm open source", "intent_summary": "CRM tool for managing customer relationships"}'
 
             with patch("server._get_httpx_client") as mock_get_client:
                 mock_client = AsyncMock()
@@ -187,7 +188,7 @@ def test_layer_3_fallback():
     ]):
         with patch("server.call_gemini") as mock_gemini:
             mock_gemini.side_effect = [
-                '{"keywords": ["crm"], "github_query": "crm open source"}',  # keyword extraction
+                '{"keywords": ["crm"], "github_query": "crm open source", "intent_summary": "CRM tool for managing customer relationships"}',  # intent parsing
                 fake_gemini_discover,  # discovery
             ]
 
@@ -214,7 +215,7 @@ def test_empty_all_layers():
     with patch("server.db.github_repos.find", return_value=_make_async_cursor([])):
         with patch("server.call_gemini") as mock_gemini:
             mock_gemini.side_effect = [
-                '{"keywords": ["xyz123"], "github_query": "xyz123"}',
+                '{"keywords": ["xyz123"], "github_query": "xyz123", "intent_summary": "Unknown tool"}',
                 '[]',
             ]
 
@@ -229,6 +230,35 @@ def test_empty_all_layers():
     data = response.json()
     assert data["solutions"] == []
     assert data["total"] == 0
+
+
+def test_gemini_intent_fallback():
+    """When Gemini intent parsing fails, the endpoint falls back to raw keywords."""
+    docs = [
+        {
+            "full_name": f"owner/repo-{i}",
+            "name": f"repo-{i}",
+            "description": f"A CRM tool number {i}",
+            "stars": 500 + i * 100,
+            "repo_type": "complete_solution",
+            "use_cases": ["crm", "email-marketing"],
+            "topics": ["crm", "saas"],
+            "health_score": 80,
+            "has_docker": True,
+        }
+        for i in range(5)
+    ]
+
+    with patch("server.db.github_repos.find", return_value=_make_async_cursor(docs)):
+        with patch("server.call_gemini") as mock_gemini:
+            mock_gemini.side_effect = Exception("Gemini is down")
+            response = client.post("/api/ai/solution-finder", json={"query": "crm fallback", "limit": 3})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["layer_used"] == "local_db"
+    assert len(data["solutions"]) == 3
+    assert data["intent_source"] == "raw_fallback"
 
 
 def test_upvote_requires_auth():

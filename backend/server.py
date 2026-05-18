@@ -1542,31 +1542,83 @@ async def solution_finder(request: Request, req: SolutionFinderRequest):
     seen_names = set()
     source_info = {"layer_used": "local_db"}
 
-    # --- Step 1: Extract keywords from natural language query ---
-    # Keep original words + let Gemini extract better ones
-    raw_words = [w.strip() for w in query.lower().split() if len(w.strip()) > 2]
-    keywords = raw_words[:5]
+    # --- Step 0: Gemini Intent Parsing (NEW) ---
+    # Call Gemini FIRST to understand what the user actually wants,
+    # then use its precise keywords for Layer 1 DB search.
+    intent_cache_key = f"solution_finder_intent:{hashlib.md5(query.lower().encode()).hexdigest()}"
+    gemini_keywords = []
+    github_query = query
+    intent_summary = ""
+    intent_source = "raw_fallback"
+
+    # Try intent cache first
     try:
-        kw_prompt = f"""Extract 3-5 search keywords from this query for finding open-source GitHub repos.
-Also create an optimized GitHub search query.
-
-Query: "{query}"
-
-Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "optimized GitHub search query"}}"""
-        kw_result = await call_gemini(kw_prompt, json_response=True)
-        cleaned = kw_result.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
-        parsed = _json.loads(cleaned)
-        gemini_keywords = parsed.get("keywords", [])
-        github_query = parsed.get("github_query", query)
-        # Merge Gemini keywords with raw words (deduplicated, prefer longer compound terms)
-        merged = list(dict.fromkeys([k.lower() for k in gemini_keywords] + keywords))
-        keywords = merged[:6]
+        backend = FastAPICache.get_backend()
+        cached_intent = await backend.get(intent_cache_key)
+        if cached_intent:
+            parsed_intent = _json.loads(cached_intent)
+            gemini_keywords = parsed_intent.get("keywords", [])
+            github_query = parsed_intent.get("github_query", query)
+            intent_summary = parsed_intent.get("intent_summary", "")
+            intent_source = "gemini_cached"
     except Exception:
-        github_query = query
+        pass
+
+    # If no cached intent, call Gemini
+    if not gemini_keywords:
+        try:
+            intent_prompt = f"""You are a search intent analyzer for an open-source tool discovery platform.
+
+User query: "{query}"
+
+Analyze what the user actually wants and return a JSON object with:
+1. "keywords": 3-6 precise search terms that will find relevant GitHub repos.
+   - Focus on SPECIFIC intent words, not generic ones like "agent", "ai", "tool", "app", "framework", "library", "api", "bot", "assistant", "automation"
+   - Include synonyms and related terms the user didn't explicitly say
+   - Example: "marketing agent" → ["marketing", "outreach", "content-generation", "lead-generation", "email-campaign", "social-media"]
+   - Example: "voice calling" → ["voice", "calling", "telephony", "sip", "webrtc", "phone", "ivr"]
+
+2. "github_query": An optimized GitHub search query string
+
+3. "intent_summary": One sentence describing what the user wants
+
+Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": "..."}}"""
+            intent_result = await call_gemini(intent_prompt, json_response=True)
+            cleaned = intent_result.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+            parsed = _json.loads(cleaned)
+            gemini_keywords = [k.lower() for k in parsed.get("keywords", [])]
+            github_query = parsed.get("github_query", query)
+            intent_summary = parsed.get("intent_summary", "")
+            intent_source = "gemini"
+
+            # Cache the intent result (5 min TTL)
+            try:
+                backend = FastAPICache.get_backend()
+                await backend.set(
+                    intent_cache_key,
+                    _json.dumps({"keywords": gemini_keywords, "github_query": github_query, "intent_summary": intent_summary}),
+                    expire=300,
+                )
+            except Exception:
+                pass
+        except Exception as e:
+            logger.warning(f"Gemini intent parsing failed, using raw keywords: {e}")
+
+    # --- Step 1: Raw keyword extraction (fallback) ---
+    raw_words = [w.strip() for w in query.lower().split() if len(w.strip()) > 2]
+
+    # Use Gemini keywords if available, else raw words
+    if gemini_keywords:
+        keywords = gemini_keywords[:6]
+    else:
+        keywords = raw_words[:5]
 
     # --- Helper: score a repo's relevance to keywords ---
+    # Generic keywords match too many repos and dilute results
+    GENERIC_KEYWORDS = {"agent", "ai", "tool", "app", "framework", "library", "api", "bot", "assistant", "automation", "open", "source", "free", "github", "self-hosted"}
+
     def _score_repo(repo: dict, kw_list: list) -> int:
         score = 0
         name = (repo.get("name") or "").lower()
@@ -1600,12 +1652,27 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
                 score += 1
                 matched_keywords.add(k_lower)
 
-        # Bonus: if ALL keywords matched somewhere, this is highly relevant
-        if len(matched_keywords) == len(kw_list) and len(kw_list) > 1:
-            score += 5
-        # Bonus: if more than half matched
-        elif len(matched_keywords) >= len(kw_list) / 2 and len(kw_list) > 2:
-            score += 2
+        # --- Critical: penalize repos that only match generic keywords ---
+        # If user asks "marketing agent", repos matching only "agent" are not relevant
+        query_has_specific = any(k.lower() not in GENERIC_KEYWORDS for k in kw_list)
+        specific_matched = {k for k in matched_keywords if k not in GENERIC_KEYWORDS}
+        if query_has_specific and not specific_matched:
+            # Repo only matched generic terms — divide score heavily
+            score = score // 5
+
+        # --- Match ratio bonus/penalty ---
+        if kw_list:
+            match_ratio = len(matched_keywords) / len(kw_list)
+            if match_ratio == 1.0 and len(kw_list) > 1:
+                # All keywords matched — highly relevant
+                score += 8
+            elif match_ratio >= 0.75:
+                score += 4
+            elif match_ratio >= 0.5:
+                score += 1
+            elif match_ratio < 0.5:
+                # Less than half matched — big penalty
+                score = score // 3
 
         return score
 
@@ -1638,11 +1705,12 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
 
     # Sort by relevance score desc, then stars desc
     scored_local.sort(key=lambda x: (-x["relevance_score"], -x.get("stars", 0)))
-    # Only keep results with decent relevance (score >= 3 or if we have very few)
-    good_local = [r for r in scored_local if r["relevance_score"] >= 3]
+    # Only keep results with decent relevance (score >= 4 for quality cutoff)
+    good_local = [r for r in scored_local if r["relevance_score"] >= 4]
     if len(good_local) < 3:
-        # Include lower-scored ones if we don't have enough
-        good_local = scored_local
+        # Include lower-scored ones if we don't have enough, but cap at score >= 1
+        fallback = [r for r in scored_local if r["relevance_score"] >= 1]
+        good_local = fallback if len(fallback) >= len(good_local) else good_local
     solutions.extend(good_local[:req.limit])
 
     # --- Layer 2: Live GitHub API search (if < 3 GOOD results) ---
@@ -1701,8 +1769,9 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
     if len(solutions) < 3 or best_score_after_layer2 < 4:
         source_info["layer_used"] = "ai_discovered"
         try:
+            user_intent = intent_summary if intent_summary else query
             discover_prompt = f"""Name 5-8 real, actively maintained open-source GitHub repositories that solve this problem:
-"{query}"
+"{user_intent}"
 
 Only include repos that:
 - Actually exist on GitHub
@@ -1774,6 +1843,7 @@ Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence wh
         "solutions": solutions[:req.limit],
         "query_keywords": keywords,
         "total": len(solutions),
+        "intent_source": intent_source,
         **source_info,
     }
 
