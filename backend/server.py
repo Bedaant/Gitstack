@@ -17,6 +17,7 @@ import uuid
 import httpx
 import asyncio
 import re
+import urllib.parse
 from pathlib import Path
 from xml.sax.saxutils import escape as xml_escape
 from pydantic import BaseModel, Field
@@ -78,6 +79,9 @@ logger.add(sys.stderr, format="{time:YYYY-MM-DD at HH:mm:ss!UTC} | {level} | {me
 mongo_url = os.environ.get('MONGO_URL')
 db_name = os.environ.get('DB_NAME', 'gitstack')
 gemini_key = os.environ.get("GEMINI_API_KEY")
+# Cached Gemini client (singleton)
+_gemini_client = None
+
 clerk_jwks_url = os.environ.get('CLERK_JWKS_URL')
 cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000')
 
@@ -121,14 +125,19 @@ GITHUB_HEADERS = {
 
 # Shared async HTTP client for backend routes (connection pooling)
 _shared_httpx_client: httpx.AsyncClient = None
+_httpx_client_lock = asyncio.Lock()
 
-def _get_httpx_client() -> httpx.AsyncClient:
+
+async def _get_httpx_client() -> httpx.AsyncClient:
     global _shared_httpx_client
     if _shared_httpx_client is None or _shared_httpx_client.is_closed:
-        _shared_httpx_client = httpx.AsyncClient(
-            limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
-            timeout=httpx.Timeout(30.0),
-        )
+        async with _httpx_client_lock:
+            # Double-check after acquiring lock
+            if _shared_httpx_client is None or _shared_httpx_client.is_closed:
+                _shared_httpx_client = httpx.AsyncClient(
+                    limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
+                    timeout=httpx.Timeout(30.0),
+                )
     return _shared_httpx_client
 
 
@@ -460,18 +469,21 @@ async def require_admin(request: Request) -> UserModel:
 # ==================== AI HELPERS ====================
 
 async def call_gemini(prompt: str, json_response: bool = False) -> str:
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=gemini_key)
+
     # Try multiple variants for better compatibility
     model_variants = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash", "gemini-pro"]
 
     last_error = None
     for model_name in model_variants:
         try:
-            client = genai.Client(api_key=gemini_key)
             config = types.GenerateContentConfig(
                 system_instruction="You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools.",
                 response_mime_type="application/json" if json_response else "text/plain",
             )
-            response = await client.aio.models.generate_content(
+            response = await _gemini_client.aio.models.generate_content(
                 model=model_name,
                 contents=prompt,
                 config=config
@@ -488,6 +500,7 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/sync")
+@limiter.limit("20/minute")
 async def sync_user(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -524,7 +537,8 @@ async def get_me(user: UserModel = Depends(require_auth)):
     return user.model_dump()
 
 @api_router.post("/auth/logout")
-async def logout():
+@limiter.limit("30/minute")
+async def logout(request: Request):
     return {"message": "Logged out"}
 
 # ==================== TOOLS ROUTES ====================
@@ -536,16 +550,18 @@ async def get_tools(category: Optional[str] = None, topic: Optional[str] = None,
         query["category"] = category
     if topic:
         # Search in category or tags
+        safe_topic = re.escape(topic)
         query["$or"] = [
-            {"category": {"$regex": topic, "$options": "i"}},
-            {"tags": {"$regex": topic, "$options": "i"}}
+            {"category": {"$regex": safe_topic, "$options": "i"}},
+            {"tags": {"$regex": safe_topic, "$options": "i"}}
         ]
     if search:
+        safe_search = re.escape(search)
         search_query = {
             "$or": [
-                {"name": {"$regex": search, "$options": "i"}},
-                {"description": {"$regex": search, "$options": "i"}},
-                {"tags": {"$regex": search, "$options": "i"}}
+                {"name": {"$regex": safe_search, "$options": "i"}},
+                {"description": {"$regex": safe_search, "$options": "i"}},
+                {"tags": {"$regex": safe_search, "$options": "i"}}
             ]
         }
         if query:
@@ -674,7 +690,7 @@ async def get_trending_tools(tab: str = "top_week", language: str = ""):
     repos = []
     try:
         url = f"https://github.com/trending/{language}?since={since}"
-        client = _get_httpx_client()
+        client = await _get_httpx_client()
         response = await client.get(url, headers={"User-Agent": "GitStack"}, timeout=30)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -1526,8 +1542,8 @@ async def solution_finder(request: Request, req: SolutionFinderRequest):
     """
     import json as _json
 
-    query = req.query.strip()
-    cache_key = f"solution_finder:{hashlib.md5(query.lower().encode()).hexdigest()}"
+    query = " ".join(req.query.strip().lower().split())
+    cache_key = f"solution_finder:{hashlib.md5(query.encode(), usedforsecurity=False).hexdigest()}"
 
     # Try cache first (FastAPICache backend: Redis or in-memory)
     try:
@@ -1539,13 +1555,13 @@ async def solution_finder(request: Request, req: SolutionFinderRequest):
         pass
 
     solutions = []
-    seen_names = set()
+    seen_names = set()  # Stores lowercase full_name for case-insensitive dedupe
     source_info = {"layer_used": "local_db"}
 
     # --- Step 0: Gemini Intent Parsing (NEW) ---
     # Call Gemini FIRST to understand what the user actually wants,
     # then use its precise keywords for Layer 1 DB search.
-    intent_cache_key = f"solution_finder_intent:{hashlib.md5(query.lower().encode()).hexdigest()}"
+    intent_cache_key = f"solution_finder_intent:{hashlib.md5(query.encode(), usedforsecurity=False).hexdigest()}"
     gemini_keywords = []
     github_query = query
     intent_summary = ""
@@ -1623,16 +1639,17 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
         score = 0
         name = (repo.get("name") or "").lower()
         desc = (repo.get("description") or "").lower()
-        use_cases = " ".join(repo.get("use_cases", [])).lower()
-        replaces = " ".join(repo.get("replaces_saas", [])).lower()
-        topics = [t.lower() for t in repo.get("topics", [])]
+        use_cases = " ".join(repo.get("use_cases") or []).lower()
+        replaces = " ".join(repo.get("replaces_saas") or []).lower()
+        topics = [t.lower() for t in (repo.get("topics") or [])]
         full_name = (repo.get("full_name") or "").lower()
 
         matched_keywords = set()
         for k in kw_list:
             k_lower = k.lower()
             # Name match (highest weight — repo name is strongest signal)
-            if k_lower in name or k_lower in full_name:
+            # Match only the repo name, not owner prefix, to avoid false positives
+            if k_lower in name:
                 score += 4
                 matched_keywords.add(k_lower)
             # Use cases match
@@ -1701,7 +1718,7 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
             r["match_source"] = "local_db"
             r["relevance_score"] = score
             scored_local.append(r)
-            seen_names.add(r["full_name"])
+            seen_names.add(r["full_name"].lower())
 
     # Sort by relevance score desc, then stars desc
     scored_local.sort(key=lambda x: (-x["relevance_score"], -x.get("stars", 0)))
@@ -1719,7 +1736,7 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
     if len(solutions) < 3 or best_score < 5:
         source_info["layer_used"] = "github_live"
         try:
-            client = _get_httpx_client()
+            client = await _get_httpx_client()
             response = await client.get(
                 "https://api.github.com/search/repositories",
                 params={
@@ -1735,7 +1752,7 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
                 data = response.json()
                 for item in data.get("items", []):
                     fn = item["full_name"]
-                    if fn in seen_names:
+                    if fn.lower() in seen_names:
                         continue
                     if item.get("archived"):
                         continue
@@ -1758,7 +1775,7 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
                     # Score GitHub results too so they compete fairly with local
                     repo_data["relevance_score"] = _score_repo(repo_data, keywords)
                     solutions.append(repo_data)
-                    seen_names.add(fn)
+                    seen_names.add(fn.lower())
                     # Fire-and-forget: cache and classify
                     asyncio.create_task(_cache_and_classify_repo(repo_data))
         except Exception as e:
@@ -1785,23 +1802,35 @@ Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence wh
                 cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
             suggestions = _json.loads(cleaned)
 
-            # Validate each suggestion exists on GitHub
-            client = _get_httpx_client()
-            for suggestion in suggestions[:8]:
+            # Validate Gemini returned a list, not an object
+            if not isinstance(suggestions, list):
+                logger.error(f"Gemini discovery returned non-list: {type(suggestions)}")
+                suggestions = []
+
+            # Validate each suggestion exists on GitHub — parallelized with semaphore
+            client = await _get_httpx_client()
+            _gh_validate_semaphore = asyncio.Semaphore(3)
+
+            async def _validate_one(suggestion):
                 fn = suggestion.get("full_name", "")
-                if not fn or fn in seen_names:
-                    continue
+                if not fn:
+                    return None
+                fn_lower = fn.lower()
+                if fn_lower in seen_names:
+                    return None
                 try:
-                    gh_resp = await client.get(
-                        f"https://api.github.com/repos/{fn}",
-                        headers=GITHUB_HEADERS,
-                        timeout=10
-                    )
+                    async with _gh_validate_semaphore:
+                        encoded_fn = urllib.parse.quote(fn, safe="")
+                        gh_resp = await client.get(
+                            f"https://api.github.com/repos/{encoded_fn}",
+                            headers=GITHUB_HEADERS,
+                            timeout=10
+                        )
                     if gh_resp.status_code == 200:
                         item = gh_resp.json()
                         if item.get("archived") or item.get("stargazers_count", 0) < 50:
-                            continue
-                        repo_data = {
+                            return None
+                        return {
                             "full_name": item["full_name"],
                             "name": item["name"],
                             "owner": item["owner"]["login"],
@@ -1818,12 +1847,17 @@ Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence wh
                             "match_source": "ai_discovered",
                             "match_reason": suggestion.get("reason", ""),
                         }
-                        repo_data["relevance_score"] = _score_repo(repo_data, keywords)
-                        solutions.append(repo_data)
-                        seen_names.add(fn)
-                        asyncio.create_task(_cache_and_classify_repo(repo_data))
                 except Exception:
-                    continue
+                    return None
+                return None
+
+            validated = await asyncio.gather(*[_validate_one(s) for s in suggestions[:8]])
+            for repo_data in validated:
+                if repo_data:
+                    repo_data["relevance_score"] = _score_repo(repo_data, keywords)
+                    solutions.append(repo_data)
+                    seen_names.add(repo_data["full_name"].lower())
+                    asyncio.create_task(_cache_and_classify_repo(repo_data))
         except Exception as e:
             logger.error(f"Solution Finder Layer 3 error: {e}")
 
@@ -2977,7 +3011,8 @@ Return ONLY JSON (no markdown):
 # ==================== GITHUB SCRAPER ====================
 
 @api_router.post("/scraper/run")
-async def trigger_scraper(background_tasks: BackgroundTasks):
+@limiter.limit("5/minute")
+async def trigger_scraper(request: Request, background_tasks: BackgroundTasks, admin: UserModel = Depends(require_admin)):
     """Manually trigger GitHub scraper (admin only)"""
     from github_scraper import GitHubScraper
 
@@ -3018,25 +3053,27 @@ async def scraper_status():
 # ==================== DAILY DROP (Admin Trigger) ====================
 
 @api_router.post("/admin/email/daily-drop")
-async def trigger_daily_drop(test_email: str = None):
+@limiter.limit("5/minute")
+async def trigger_daily_drop(request: Request, test_email: str = None, admin: UserModel = Depends(require_admin)):
     """Manually trigger the Daily Drop. Pass ?test_email=... to send to one address only."""
     try:
         await send_daily_drop(db, test_email=test_email)
         return {"message": "Daily Drop sent", "test_email": test_email}
     except Exception as e:
         logger.error(f"Daily Drop trigger failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @api_router.post("/admin/email/onboarding-drip")
-async def trigger_onboarding_drip(user_id: str = None):
+@limiter.limit("5/minute")
+async def trigger_onboarding_drip(request: Request, user_id: str = None, admin: UserModel = Depends(require_admin)):
     """Manually trigger the onboarding drip. Pass ?user_id=... to test one user."""
     try:
         await run_onboarding_drip(db, test_user_id=user_id)
         return {"message": "Onboarding drip processed", "user_id": user_id}
     except Exception as e:
         logger.error(f"Onboarding drip trigger failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     # BUG-01 FIX: function was missing its return statement, causing FastAPI to return null.
     return result
@@ -4815,6 +4852,7 @@ def verify_razorpay_webhook_signature(body: bytes, signature: str) -> bool:
 # ---- Seller Onboarding (Task 7) ----
 
 @api_router.post("/marketplace/seller/onboard")
+@limiter.limit("10/minute")
 async def seller_onboard(data: SellerOnboardRequest, request: Request):
     user = await get_current_user(request)
     if not user:
@@ -4851,6 +4889,7 @@ async def seller_onboard(data: SellerOnboardRequest, request: Request):
 # ---- Product CRUD (Task 8) ----
 
 @api_router.post("/marketplace/products")
+@limiter.limit("10/minute")
 async def create_product(data: MarketplaceProductCreate, request: Request):
     user = await get_current_user(request)
     if not user:
@@ -5165,6 +5204,7 @@ async def update_affiliate(data: AffiliateUpdateRequest, user: UserModel = Depen
 # ---- Razorpay Checkout (Tasks 12, 13, 14) ----
 
 @api_router.post("/marketplace/checkout/create-order")
+@limiter.limit("10/minute")
 async def create_order(data: CreateOrderRequest, request: Request):
     user = await get_current_user(request)
     if not user:
@@ -5292,6 +5332,7 @@ async def _complete_purchase(purchase: dict, payment_id: str):
             pass
 
 @api_router.post("/marketplace/checkout/verify-payment")
+@limiter.limit("10/minute")
 async def verify_payment(data: VerifyPaymentRequest, request: Request):
     user = await get_current_user(request)
     if not user:
@@ -5305,6 +5346,7 @@ async def verify_payment(data: VerifyPaymentRequest, request: Request):
     return {"ok": True, "purchase_id": purchase["purchase_id"]}
 
 @api_router.post("/marketplace/webhook/razorpay")
+@limiter.limit("100/minute")
 async def razorpay_webhook(request: Request):
     body = await request.body()
     sig = request.headers.get("x-razorpay-signature", "")
@@ -6049,14 +6091,14 @@ app.include_router(api_router)
 app.include_router(og_router)
 
 # CORS — reads CORS_ORIGINS from env; defaults to * for local dev
-_cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")
-_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()] if _cors_origins_raw != "*" else ["*"]
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "https://gitstack.pro,https://www.gitstack.pro,http://localhost:5173,http://localhost:3000")
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=_cors_origins,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
