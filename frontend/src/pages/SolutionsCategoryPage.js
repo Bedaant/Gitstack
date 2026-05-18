@@ -105,7 +105,7 @@ export default function SolutionsCategoryPage() {
               <div key={i} className="neo-card flex flex-col p-5 bg-card">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <h3 className="font-bold text-lg leading-tight truncate max-w-[280px]">
+                    <h3 className="font-bold text-lg leading-tight truncate max-w-full sm:max-w-[280px]">
                       {sol.name || sol.full_name?.split('/')[1]}
                     </h3>
                     <p className="text-xs text-muted-foreground truncate">{sol.full_name}</p>

@@ -1543,40 +1543,107 @@ async def solution_finder(request: Request, req: SolutionFinderRequest):
     source_info = {"layer_used": "local_db"}
 
     # --- Step 1: Extract keywords from natural language query ---
-    keywords = query.lower().split()[:5]
+    # Keep original words + let Gemini extract better ones
+    raw_words = [w.strip() for w in query.lower().split() if len(w.strip()) > 2]
+    keywords = raw_words[:5]
     try:
-        kw_prompt = f"""Extract 3-5 search keywords from this query for finding open-source GitHub repos:
-"{query}"
+        kw_prompt = f"""Extract 3-5 search keywords from this query for finding open-source GitHub repos.
+Also create an optimized GitHub search query.
+
+Query: "{query}"
+
 Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "optimized GitHub search query"}}"""
         kw_result = await call_gemini(kw_prompt, json_response=True)
         cleaned = kw_result.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
         parsed = _json.loads(cleaned)
-        keywords = parsed.get("keywords", keywords)
+        gemini_keywords = parsed.get("keywords", [])
         github_query = parsed.get("github_query", query)
+        # Merge Gemini keywords with raw words (deduplicated, prefer longer compound terms)
+        merged = list(dict.fromkeys([k.lower() for k in gemini_keywords] + keywords))
+        keywords = merged[:6]
     except Exception:
         github_query = query
 
+    # --- Helper: score a repo's relevance to keywords ---
+    def _score_repo(repo: dict, kw_list: list) -> int:
+        score = 0
+        name = (repo.get("name") or "").lower()
+        desc = (repo.get("description") or "").lower()
+        use_cases = " ".join(repo.get("use_cases", [])).lower()
+        replaces = " ".join(repo.get("replaces_saas", [])).lower()
+        topics = [t.lower() for t in repo.get("topics", [])]
+        full_name = (repo.get("full_name") or "").lower()
+
+        matched_keywords = set()
+        for k in kw_list:
+            k_lower = k.lower()
+            # Name match (highest weight — repo name is strongest signal)
+            if k_lower in name or k_lower in full_name:
+                score += 4
+                matched_keywords.add(k_lower)
+            # Use cases match
+            if k_lower in use_cases:
+                score += 3
+                matched_keywords.add(k_lower)
+            # Topics exact match
+            if k_lower in topics:
+                score += 3
+                matched_keywords.add(k_lower)
+            # Replaces SaaS match
+            if k_lower in replaces:
+                score += 2
+                matched_keywords.add(k_lower)
+            # Description match
+            if k_lower in desc:
+                score += 1
+                matched_keywords.add(k_lower)
+
+        # Bonus: if ALL keywords matched somewhere, this is highly relevant
+        if len(matched_keywords) == len(kw_list) and len(kw_list) > 1:
+            score += 5
+        # Bonus: if more than half matched
+        elif len(matched_keywords) >= len(kw_list) / 2 and len(kw_list) > 2:
+            score += 2
+
+        return score
+
     # --- Layer 1: Local DB search (instant) ---
-    text_regex = "|".join(re.escape(k) for k in keywords[:5])
+    # Wider OR net to catch candidates, then score + filter
+    text_regex = "|".join(re.escape(k) for k in keywords[:6])
     local_query = {
         "repo_type": "complete_solution",
         "$or": [
+            {"name": {"$regex": text_regex, "$options": "i"}},
             {"use_cases": {"$regex": text_regex, "$options": "i"}},
             {"description": {"$regex": text_regex, "$options": "i"}},
             {"replaces_saas": {"$regex": text_regex, "$options": "i"}},
             {"topics": {"$in": keywords}},
         ]
     }
-    local_results = await db.github_repos.find(
+    # Fetch more than needed so we can score and pick the best
+    local_candidates = await db.github_repos.find(
         local_query, {"_id": 0}
-    ).sort("stars", -1).limit(req.limit).to_list(req.limit)
+    ).sort("stars", -1).limit(req.limit * 4).to_list(req.limit * 4)
 
-    for r in local_results:
-        r["match_source"] = "local_db"
-        solutions.append(r)
-        seen_names.add(r["full_name"])
+    scored_local = []
+    for r in local_candidates:
+        score = _score_repo(r, keywords)
+        if score > 0:
+            r["match_source"] = "local_db"
+            r["relevance_score"] = score
+            scored_local.append(r)
+            seen_names.add(r["full_name"])
+
+    # Sort by relevance score desc, then stars desc
+    scored_local.sort(key=lambda x: (-x["relevance_score"], -x.get("stars", 0)))
+    # Only keep results with decent relevance (score >= 3 or if we have very few)
+    good_local = [r for r in scored_local if r["relevance_score"] >= 3]
+    if len(good_local) < 3:
+        # Include lower-scored ones if we don't have enough
+        good_local = scored_local
+    solutions.extend(good_local[:req.limit])
 
     # Also search unclassified repos that match well
     if len(solutions) < req.limit:
@@ -1584,21 +1651,27 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
             "repo_type": None,
             "stars": {"$gte": 200},
             "$or": [
+                {"name": {"$regex": text_regex, "$options": "i"}},
                 {"description": {"$regex": text_regex, "$options": "i"}},
                 {"topics": {"$in": keywords}},
             ]
         }
         unclassified = await db.github_repos.find(
             unclassified_query, {"_id": 0}
-        ).sort("stars", -1).limit(req.limit - len(solutions)).to_list(req.limit - len(solutions))
+        ).sort("stars", -1).limit(req.limit * 3).to_list(req.limit * 3)
         for r in unclassified:
             if r["full_name"] not in seen_names:
-                r["match_source"] = "local_db"
-                solutions.append(r)
-                seen_names.add(r["full_name"])
+                score = _score_repo(r, keywords)
+                if score >= 2:
+                    r["match_source"] = "local_db"
+                    r["relevance_score"] = score
+                    solutions.append(r)
+                    seen_names.add(r["full_name"])
 
-    # --- Layer 2: Live GitHub API search (if < 3 results) ---
-    if len(solutions) < 3:
+    # --- Layer 2: Live GitHub API search (if < 3 GOOD results) ---
+    # Trigger Layer 2 if we have fewer than 3 results OR best result has low relevance
+    best_score = max((s.get("relevance_score", 0) for s in solutions), default=0)
+    if len(solutions) < 3 or best_score < 5:
         source_info["layer_used"] = "github_live"
         try:
             client = _get_httpx_client()
@@ -1608,7 +1681,7 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
                     "q": f"{github_query} stars:>100",
                     "sort": "stars",
                     "order": "desc",
-                    "per_page": 10
+                    "per_page": 15
                 },
                 headers=GITHUB_HEADERS,
                 timeout=15
@@ -1637,6 +1710,8 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
                         "source": "user_search",
                         "match_source": "github_live",
                     }
+                    # Score GitHub results too so they compete fairly with local
+                    repo_data["relevance_score"] = _score_repo(repo_data, keywords)
                     solutions.append(repo_data)
                     seen_names.add(fn)
                     # Fire-and-forget: cache and classify
@@ -1644,8 +1719,9 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
         except Exception as e:
             logger.error(f"Solution Finder Layer 2 error: {e}")
 
-    # --- Layer 3: Gemini-assisted discovery (if still < 3 results) ---
-    if len(solutions) < 3:
+    # --- Layer 3: Gemini-assisted discovery (if still < 3 good results) ---
+    best_score_after_layer2 = max((s.get("relevance_score", 0) for s in solutions), default=0)
+    if len(solutions) < 3 or best_score_after_layer2 < 4:
         source_info["layer_used"] = "ai_discovered"
         try:
             discover_prompt = f"""Name 5-8 real, actively maintained open-source GitHub repositories that solve this problem:
@@ -1696,6 +1772,7 @@ Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence wh
                             "match_source": "ai_discovered",
                             "match_reason": suggestion.get("reason", ""),
                         }
+                        repo_data["relevance_score"] = _score_repo(repo_data, keywords)
                         solutions.append(repo_data)
                         seen_names.add(fn)
                         asyncio.create_task(_cache_and_classify_repo(repo_data))
@@ -1703,6 +1780,9 @@ Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence wh
                     continue
         except Exception as e:
             logger.error(f"Solution Finder Layer 3 error: {e}")
+
+    # Final sort: relevance score first, then stars
+    solutions.sort(key=lambda x: (-x.get("relevance_score", 0), -x.get("stars", 0)))
 
     # --- Calculate health scores for results that don't have one ---
     from github_scraper import GitHubScraper
@@ -1759,6 +1839,13 @@ async def upvote_repo_use_case(request: Request, req: RepoUpvoteRequest, user: U
     )
 
     return {"message": "Upvoted!", "upvoted": True}
+
+@api_router.get("/repos/{owner}/{repo}/upvotes")
+async def get_repo_upvotes(owner: str, repo: str):
+    """Get total upvote count for a repo."""
+    full_name = f"{owner}/{repo}"
+    repo_doc = await db.github_repos.find_one({"full_name": full_name}, {"upvotes": 1})
+    return {"upvotes": repo_doc.get("upvotes", 0) if repo_doc else 0}
 
 @api_router.post("/ai/repo-translator")
 @limiter.limit("10/minute")

@@ -3,7 +3,7 @@ import { useParams, useLocation } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import axios from "axios";
 import { toast } from "sonner";
-import { Star, Clock, Sparkles, Github, Share2, Network, BookOpen, ExternalLink } from "lucide-react";
+import { Star, Clock, Sparkles, Github, Share2, Network, BookOpen, ExternalLink, ThumbsUp } from "lucide-react";
 import { MarketplaceTeaser } from "../components/marketplace/MarketplaceTeaser";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
@@ -24,6 +24,7 @@ export default function GitHubRepoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(initialTab); // "summary" | "xray"
+  const [upvotes, setUpvotes] = useState(0);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -38,6 +39,18 @@ export default function GitHubRepoPage() {
       setLoading(false);
     };
     fetchTranslation();
+  }, [owner, repo]);
+
+  useEffect(() => {
+    const fetchUpvotes = async () => {
+      try {
+        const res = await axios.get(`${API}/repos/${owner}/${repo}/upvotes`);
+        setUpvotes(res.data.upvotes || 0);
+      } catch {
+        // silently fail — upvotes are nice-to-have
+      }
+    };
+    fetchUpvotes();
   }, [owner, repo]);
 
   // Track activity for recommendations (fire and forget)
@@ -132,6 +145,11 @@ export default function GitHubRepoPage() {
                   )}
                   {data.forks > 0 && (
                     <span className="text-sm text-muted-foreground">{data.forks?.toLocaleString()} forks</span>
+                  )}
+                  {upvotes > 0 && (
+                    <span className="flex items-center gap-1 text-sm font-semibold text-primary">
+                      <ThumbsUp className="w-4 h-4" /> {upvotes} upvote{upvotes !== 1 ? 's' : ''}
+                    </span>
                   )}
                 </div>
               </div>

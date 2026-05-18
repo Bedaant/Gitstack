@@ -95,12 +95,12 @@ function SolutionCard({ sol, onUpvote }) {
       )}
 
       {/* Header */}
-      <div className="flex items-start gap-3 mb-3 pr-28">
+      <div className="flex items-start gap-3 mb-3 pr-16 sm:pr-28">
         <div className="w-10 h-10 rounded-lg bg-foreground text-background flex items-center justify-center font-black text-lg flex-shrink-0">
           {(sol.name || "?")[0].toUpperCase()}
         </div>
-        <div className="min-w-0">
-          <h3 className="text-lg font-black truncate">{sol.name}</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base sm:text-lg font-black truncate">{sol.name}</h3>
           <p className="text-xs text-muted-foreground truncate">{sol.full_name}</p>
         </div>
       </div>
@@ -243,11 +243,11 @@ function SolutionCard({ sol, onUpvote }) {
             setLocalUpvotes(u => u + 1);
           }}
           disabled={localUpvoted}
-          className={`p-1.5 rounded transition-colors ${localUpvoted ? "text-primary bg-primary/10" : "hover:bg-muted"}`}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-colors border-2 border-black ${localUpvoted ? "text-primary bg-primary/10" : "hover:bg-muted bg-background"}`}
           title="Upvote this solution"
         >
           <ThumbsUp className={`w-4 h-4 ${localUpvoted ? "fill-current" : ""}`} />
-          {localUpvotes > 0 && <span className="text-[10px] ml-1">{localUpvotes}</span>}
+          <span>{localUpvotes}</span>
         </button>
       </div>
     </motion.div>

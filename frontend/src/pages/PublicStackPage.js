@@ -107,6 +107,9 @@ export default function PublicStackPage() {
             <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight mb-3">{idea}</h1>
             <p className="text-muted-foreground text-sm">
               {tools.length} tools · Built with GitStack
+              {stack?.copy_count > 0 && (
+                <span className="text-primary font-semibold"> · {stack.copy_count} founder{stack.copy_count !== 1 ? 's' : ''} saved this</span>
+              )}
             </p>
           </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import { Star, ExternalLink, Globe } from "lucide-react";
+import { Star, ExternalLink, Globe, Users } from "lucide-react";
 import { API } from "../../utils/api";
 
 export const CommunityStacks = () => {
@@ -70,7 +70,12 @@ export const CommunityStacks = () => {
                     </div>
                     <div className="min-w-0">
                       <h3 className="font-black text-sm leading-snug line-clamp-2">{stack.idea || "Untitled Stack"}</h3>
-                      <p className="text-xs text-muted-foreground font-mono mt-0.5">{stack.tools?.length || 0} tools</p>
+                      <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                        {stack.tools?.length || 0} tools
+                        {stack.copy_count > 0 && (
+                          <span className="ml-2 text-primary">· {stack.copy_count} saved</span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1">
