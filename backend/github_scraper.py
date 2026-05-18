@@ -875,16 +875,20 @@ Only return clusters that are genuinely distinct trends with clear evidence in t
                     f"[language: {r.get('language', 'Unknown')}]"
                 )
 
-            prompt = f"""Classify each GitHub repository below.
+            prompt = f"""Classify each GitHub repository below for a non-technical founder who wants to clone and run it.
 
 For EACH repo, determine:
-1. repo_type: "complete_solution" (a full, ready-to-deploy product/app) or "building_block" (a library, SDK, framework, or tool you integrate into your own project)
-2. use_cases: 2-5 business use cases it solves (e.g. "email outreach", "invoice management", "CRM", "project management")
-3. replaces_saas: 1-3 paid SaaS products it can replace (e.g. "Apollo.io", "HubSpot"). Use empty array if none.
-4. has_docker: true/false — does it likely support Docker deployment?
-5. has_api: true/false — does it expose an API?
-6. has_ui: true/false — does it have a web UI?
-7. complementary_tools: 1-3 types of tools that would complement this (e.g. "analytics", "database", "auth")
+1. repo_type: 
+   - "complete_solution" = the founder can git clone, follow a README, and have a working product WITHOUT writing integration code. This includes: full apps, SaaS templates, boilerplates with backend+frontend, agent frameworks with built-in UI, voice bot templates, CRM apps, dashboard starters, anything with `docker-compose up` or `npm start` that just works.
+   - "building_block" = a library, SDK, or low-level tool that requires the founder to write code to use it (e.g. a Python package, a React component library, a WebRTC server without a UI).
+   BE GENEROUS with complete_solution. If it has a UI, a backend, or clear setup scripts, it's a complete_solution even if it calls itself a "toolkit" or "framework".
+
+2. use_cases: 2-5 specific business use cases (e.g. "AI voice calling", "SEO content generation", "LinkedIn outreach", "invoice management", "CRM", "sales dialer")
+3. replaces_saas: 1-3 paid SaaS products it replaces (e.g. "Apollo.io", "HubSpot", "Twilio", "Vapi"). Use empty array if none.
+4. has_docker: true/false — does it mention Docker, docker-compose, or containerization?
+5. has_api: true/false — does it expose REST/GraphQL/WebSocket APIs?
+6. has_ui: true/false — does it have a web dashboard, admin panel, or user interface?
+7. complementary_tools: 1-3 types of tools that complement this (e.g. "analytics", "database", "auth", "email", "payments")
 
 Repos to classify:
 {chr(10).join(batch_summaries)}

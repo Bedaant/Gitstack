@@ -1610,10 +1610,10 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
         return score
 
     # --- Layer 1: Local DB search (instant) ---
-    # Wider OR net to catch candidates, then score + filter
+    # Search ALL repos — complete_solution, building_block, unclassified.
+    # The classifier is often wrong. Relevance scoring handles ranking.
     text_regex = "|".join(re.escape(k) for k in keywords[:6])
     local_query = {
-        "repo_type": "complete_solution",
         "$or": [
             {"name": {"$regex": text_regex, "$options": "i"}},
             {"use_cases": {"$regex": text_regex, "$options": "i"}},
@@ -1625,7 +1625,7 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
     # Fetch more than needed so we can score and pick the best
     local_candidates = await db.github_repos.find(
         local_query, {"_id": 0}
-    ).sort("stars", -1).limit(req.limit * 4).to_list(req.limit * 4)
+    ).sort("stars", -1).limit(req.limit * 6).to_list(req.limit * 6)
 
     scored_local = []
     for r in local_candidates:
@@ -1644,55 +1644,6 @@ Return ONLY a JSON object: {{"keywords": ["word1", "word2"], "github_query": "op
         # Include lower-scored ones if we don't have enough
         good_local = scored_local
     solutions.extend(good_local[:req.limit])
-
-    # Also search unclassified repos that match well
-    if len(solutions) < req.limit:
-        unclassified_query = {
-            "repo_type": None,
-            "stars": {"$gte": 200},
-            "$or": [
-                {"name": {"$regex": text_regex, "$options": "i"}},
-                {"description": {"$regex": text_regex, "$options": "i"}},
-                {"topics": {"$in": keywords}},
-            ]
-        }
-        unclassified = await db.github_repos.find(
-            unclassified_query, {"_id": 0}
-        ).sort("stars", -1).limit(req.limit * 3).to_list(req.limit * 3)
-        for r in unclassified:
-            if r["full_name"] not in seen_names:
-                score = _score_repo(r, keywords)
-                if score >= 2:
-                    r["match_source"] = "local_db"
-                    r["relevance_score"] = score
-                    solutions.append(r)
-                    seen_names.add(r["full_name"])
-
-    # --- Layer 1b: Building blocks fallback (if still weak results) ---
-    # Some niches (voice AI, infra) have more building blocks than complete solutions
-    best_score = max((s.get("relevance_score", 0) for s in solutions), default=0)
-    if len(solutions) < 3 or best_score < 4:
-        building_block_query = {
-            "repo_type": "building_block",
-            "stars": {"$gte": 500},
-            "$or": [
-                {"name": {"$regex": text_regex, "$options": "i"}},
-                {"use_cases": {"$regex": text_regex, "$options": "i"}},
-                {"description": {"$regex": text_regex, "$options": "i"}},
-                {"topics": {"$in": keywords}},
-            ]
-        }
-        building_blocks = await db.github_repos.find(
-            building_block_query, {"_id": 0}
-        ).sort("stars", -1).limit(req.limit * 3).to_list(req.limit * 3)
-        for r in building_blocks:
-            if r["full_name"] not in seen_names:
-                score = _score_repo(r, keywords)
-                if score >= 4:
-                    r["match_source"] = "local_db"
-                    r["relevance_score"] = score
-                    solutions.append(r)
-                    seen_names.add(r["full_name"])
 
     # --- Layer 2: Live GitHub API search (if < 3 GOOD results) ---
     # Trigger Layer 2 if we have fewer than 3 results OR best result has low relevance
