@@ -461,7 +461,7 @@ async def require_admin(request: Request) -> UserModel:
 
 async def call_gemini(prompt: str, json_response: bool = False) -> str:
     # Try multiple variants for better compatibility
-    model_variants = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash", "gemini-pro"]
+    model_variants = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash", "gemini-pro"]
 
     last_error = None
     for model_name in model_variants:
