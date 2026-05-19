@@ -1196,7 +1196,12 @@ Return ONLY a valid JSON array (no markdown):
 ]
 
 Put tools in the order they should be set up. Use real GitHub repositories."""
-    result = await call_gemini(prompt, json_response=True)
+    try:
+        result = await call_gemini(prompt, json_response=True)
+    except Exception as e:
+        logger.error(f"Stack Gen Gemini Error: {e}")
+        return {"stack": [], "error": "AI service temporarily unavailable. Please try again."}
+
     try:
         import json, re, httpx
         cleaned = result.strip()
@@ -1207,43 +1212,43 @@ Put tools in the order they should be set up. Use real GitHub repositories."""
 
         # Hallucination Defense: Validate & Auto-correct GitHub URLs
         valid_stack = []
-        async with httpx.AsyncClient() as client:
-            for tool in data:
-                gh_url = tool.get("githubUrl", "")
-                is_valid = False
-                
-                if gh_url and "github.com/" in gh_url:
-                    match = re.search(r'github\.com/([^/]+/[^/]+)', gh_url)
-                    if match:
-                        full_name = match.group(1).split('#')[0].split('?')[0].strip('/')
-                        # 1. Ping the repo directly
-                        resp = await client.head(f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS, follow_redirects=True, timeout=5)
-                        if resp.status_code == 200:
-                            tool["githubUrl"] = f"https://github.com/{full_name}"
+        client = await _get_httpx_client()
+        for tool in data:
+            gh_url = tool.get("githubUrl", "")
+            is_valid = False
+            
+            if gh_url and "github.com/" in gh_url:
+                match = re.search(r'github\.com/([^/]+/[^/]+)', gh_url)
+                if match:
+                    full_name = match.group(1).split('#')[0].split('?')[0].strip('/')
+                    # 1. Ping the repo directly
+                    resp = await client.head(f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS, follow_redirects=True, timeout=5)
+                    if resp.status_code == 200:
+                        tool["githubUrl"] = f"https://github.com/{full_name}"
+                        is_valid = True
+            
+            # 2. If 404 Hallucination or bad URL, auto-correct by searching live GitHub
+            if not is_valid:
+                search_q = tool.get("name", "").replace(" ", "+")
+                try:
+                    search_resp = await client.get(
+                        f"https://api.github.com/search/repositories?q={search_q}&per_page=1", 
+                        headers=GITHUB_HEADERS, 
+                        timeout=5
+                    )
+                    if search_resp.status_code == 200:
+                        items = search_resp.json().get("items", [])
+                        if items:
+                            real_repo = items[0]["full_name"]
+                            tool["githubUrl"] = f"https://github.com/{real_repo}"
                             is_valid = True
-                
-                # 2. If 404 Hallucination or bad URL, auto-correct by searching live GitHub
-                if not is_valid:
-                    search_q = tool.get("name", "").replace(" ", "+")
-                    try:
-                        search_resp = await client.get(
-                            f"https://api.github.com/search/repositories?q={search_q}&per_page=1", 
-                            headers=GITHUB_HEADERS, 
-                            timeout=5
-                        )
-                        if search_resp.status_code == 200:
-                            items = search_resp.json().get("items", [])
-                            if items:
-                                real_repo = items[0]["full_name"]
-                                tool["githubUrl"] = f"https://github.com/{real_repo}"
-                                is_valid = True
-                            else:
-                                tool["githubUrl"] = "" # Nullify fake URL so clone script doesn't break
-                    except:
-                        tool["githubUrl"] = ""
-                
-                valid_stack.append(tool)
-                                
+                        else:
+                            tool["githubUrl"] = "" # Nullify fake URL so clone script doesn't break
+                except:
+                    tool["githubUrl"] = ""
+            
+            valid_stack.append(tool)
+                            
         return {"stack": valid_stack}
     except Exception as e:
         logger.error(f"Stack Gen Parse Error: {e}")
