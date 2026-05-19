@@ -6090,13 +6090,19 @@ async def activation_metrics(user: UserModel = Depends(require_auth)):  # SEC-08
 app.include_router(api_router)
 app.include_router(og_router)
 
-# CORS — reads CORS_ORIGINS from env; defaults to * for local dev
-_cors_origins_raw = os.environ.get("CORS_ORIGINS", "https://gitstack.pro,https://www.gitstack.pro,http://localhost:5173,http://localhost:3000")
-_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+# CORS — reads CORS_ORIGINS from env; defaults to permissive for API access
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "")
+if _cors_origins_raw and _cors_origins_raw != "*":
+    _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+    _cors_credentials = True
+else:
+    # Fallback: allow all origins (safe because auth uses JWT headers, not cookies)
+    _cors_origins = ["*"]
+    _cors_credentials = False
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=_cors_credentials,
     allow_origins=_cors_origins,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
