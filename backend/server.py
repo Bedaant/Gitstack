@@ -474,7 +474,16 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
         _gemini_client = genai.Client(api_key=gemini_key)
 
     # Try multiple variants for better compatibility
-    model_variants = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash", "gemini-pro"]
+    # Use stable model names that work with google-genai SDK
+    # gemini-2.5-flash is preview; fall back to proven stable models
+    model_variants = [
+        "gemini-2.5-flash-preview-05-20",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-pro",
+    ]
 
     last_error = None
     for model_name in model_variants:
@@ -501,7 +510,11 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
             continue
 
     logger.error(f"All Gemini models failed. Last error: {last_error}")
-    raise HTTPException(status_code=500, detail="AI service temporarily unavailable. Please try again.")
+    # Include more detail in the error for debugging
+    error_detail = f"AI service unavailable"
+    if last_error:
+        error_detail += f" ({type(last_error).__name__})"
+    raise HTTPException(status_code=503, detail=error_detail)
 
 # ==================== AUTH ROUTES ====================
 
