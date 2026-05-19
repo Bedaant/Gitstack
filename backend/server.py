@@ -483,12 +483,18 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
                 system_instruction="You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools.",
                 response_mime_type="application/json" if json_response else "text/plain",
             )
-            response = await _gemini_client.aio.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=config
+            response = await asyncio.wait_for(
+                _gemini_client.aio.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=config
+                ),
+                timeout=15  # 15 second timeout per model attempt
             )
             return response.text
+        except asyncio.TimeoutError:
+            logger.warning(f"Gemini model {model_name} timed out")
+            last_error = asyncio.TimeoutError("Gemini API timeout")
         except Exception as e:
             last_error = e
             logger.warning(f"Gemini model {model_name} failed: {e}")
@@ -2035,9 +2041,12 @@ async def translate_github_repo(owner: str, repo: str):
     # Check cache first (7 day TTL)
     cached = await db.repo_translations.find_one({"full_name": full_name}, {"_id": 0})
     if cached:
-        cached_time = datetime.fromisoformat(cached.get("translated_at", "2000-01-01"))
-        if datetime.now(timezone.utc) - cached_time < timedelta(days=7):
-            return cached
+        try:
+            cached_time = datetime.fromisoformat(cached.get("translated_at", "2000-01-01"))
+            if datetime.now(timezone.utc) - cached_time < timedelta(days=7):
+                return cached
+        except (ValueError, TypeError):
+            pass  # Invalid date format, proceed to re-translate
 
     # Fetch repo info from GitHub
     try:
