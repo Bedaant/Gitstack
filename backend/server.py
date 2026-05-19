@@ -474,13 +474,14 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
         _gemini_client = genai.Client(api_key=gemini_key)
 
     # Try multiple variants for better compatibility
-    # Exact model names for google-genai SDK v1beta
-    # Use 'latest' aliases which always point to the current stable version
+    # Model names for google-genai SDK
+    # New users don't have access to -latest aliases or deprecated models
+    # Use stable versioned names that work for all accounts
     model_variants = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro-latest",
+        "gemini-2.5-flash",           # Preview model (fastest)
+        "gemini-1.5-flash",           # Stable flash model
+        "gemini-1.5-pro",             # Stable pro model
+        "gemini-1.5-flash-8b",        # Lightweight fallback
     ]
 
     last_error = None
