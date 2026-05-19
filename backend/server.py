@@ -119,10 +119,17 @@ except Exception as e:
 _gh_token = os.environ.get("GITHUB_TOKEN", "")
 if not _gh_token:
     logger.warning("GITHUB_TOKEN not set! GitHub API limited to 60 req/hr. Set GITHUB_TOKEN env var for 5000 req/hr.")
+
+# Fine-grained PATs use 'Bearer' prefix, classic tokens use 'token' prefix
+if _gh_token.startswith("github_pat_"):
+    _gh_auth = f"Bearer {_gh_token}"
+else:
+    _gh_auth = f"token {_gh_token}"
+
 GITHUB_HEADERS = {
     "Accept": "application/vnd.github.v3+json",
     "User-Agent": "GitStack",
-    **({"Authorization": f"token {_gh_token}"} if _gh_token else {}),
+    **({"Authorization": _gh_auth} if _gh_token else {}),
 }
 
 # Shared async HTTP client for backend routes (connection pooling)
