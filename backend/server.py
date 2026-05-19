@@ -117,6 +117,8 @@ except Exception as e:
 
 # GitHub API headers — token raises rate limit from 60 to 5000 req/hr
 _gh_token = os.environ.get("GITHUB_TOKEN", "")
+if not _gh_token:
+    logger.warning("GITHUB_TOKEN not set! GitHub API limited to 60 req/hr. Set GITHUB_TOKEN env var for 5000 req/hr.")
 GITHUB_HEADERS = {
     "Accept": "application/vnd.github.v3+json",
     "User-Agent": "GitStack",
