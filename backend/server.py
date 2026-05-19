@@ -497,7 +497,7 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
                     contents=prompt,
                     config=config
                 ),
-                timeout=15  # 15 second timeout per model attempt
+                timeout=30  # 30 second timeout per model attempt
             )
             return response.text
         except asyncio.TimeoutError:
