@@ -520,7 +520,6 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/sync")
-@limiter.limit("20/minute")
 async def sync_user(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
