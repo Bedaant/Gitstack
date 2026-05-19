@@ -6105,19 +6105,12 @@ app.include_router(api_router)
 app.include_router(og_router)
 
 # CORS — allow all origins (safe: auth uses JWT headers, not cookies)
-# The CORS_ORIGINS env var can be used to restrict in production if needed
-_cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")
-if _cors_origins_raw == "*":
-    _cors_origins = ["*"]
-    _cors_credentials = False
-else:
-    _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
-    _cors_credentials = True
-
+# NOTE: We always allow * because the frontend is on Vercel (gitstack.pro)
+# and may have preview deployments. Auth uses JWT in headers, not cookies.
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=_cors_credentials,
-    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_origins=["*"],
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
