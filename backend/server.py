@@ -474,15 +474,13 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
         _gemini_client = genai.Client(api_key=gemini_key)
 
     # Try multiple variants for better compatibility
-    # Use stable model names that work with google-genai SDK
-    # gemini-2.5-flash is preview; fall back to proven stable models
+    # Exact model names for google-genai SDK v1beta
+    # Use 'latest' aliases which always point to the current stable version
     model_variants = [
-        "gemini-2.5-flash-preview-05-20",
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-pro",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro-latest",
     ]
 
     last_error = None
@@ -510,11 +508,14 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
             continue
 
     logger.error(f"All Gemini models failed. Last error: {last_error}")
-    # Include more detail in the error for debugging
-    error_detail = f"AI service unavailable"
-    if last_error:
-        error_detail += f" ({type(last_error).__name__})"
-    raise HTTPException(status_code=503, detail=error_detail)
+    # Check if it's a spending cap issue
+    error_str = str(last_error) if last_error else ""
+    if "exceeded its monthly spending cap" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+        raise HTTPException(
+            status_code=429,
+            detail="Gemini API spending cap reached. Please increase your cap at https://ai.studio/spend or try again later."
+        )
+    raise HTTPException(status_code=503, detail="AI service temporarily unavailable. Please try again.")
 
 # ==================== AUTH ROUTES ====================
 
