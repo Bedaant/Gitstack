@@ -6104,15 +6104,15 @@ async def activation_metrics(user: UserModel = Depends(require_auth)):  # SEC-08
 app.include_router(api_router)
 app.include_router(og_router)
 
-# CORS — reads CORS_ORIGINS from env; defaults to permissive for API access
-_cors_origins_raw = os.environ.get("CORS_ORIGINS", "")
-if _cors_origins_raw and _cors_origins_raw != "*":
-    _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
-    _cors_credentials = True
-else:
-    # Fallback: allow all origins (safe because auth uses JWT headers, not cookies)
+# CORS — allow all origins (safe: auth uses JWT headers, not cookies)
+# The CORS_ORIGINS env var can be used to restrict in production if needed
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")
+if _cors_origins_raw == "*":
     _cors_origins = ["*"]
     _cors_credentials = False
+else:
+    _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+    _cors_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
