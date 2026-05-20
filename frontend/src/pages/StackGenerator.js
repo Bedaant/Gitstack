@@ -440,6 +440,40 @@ export default function StackGenerator() {
         title="Stack Generator — Find Free Tools for Your Idea"
         description="Tell us what you want to build and we'll generate a complete free open-source tech stack for you. No coding required. Used by 1,000+ founders."
         path="/stack-generator"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          "name": "How to Generate a Free Tech Stack for Your Startup",
+          "description": "Use GitStack's AI Stack Generator to build a complete open-source tech stack for your startup idea in under 5 minutes.",
+          "totalTime": "PT5M",
+          "tool": [{ "@type": "HowToTool", "name": "GitStack Stack Generator" }],
+          "step": [
+            {
+              "@type": "HowToStep",
+              "name": "Describe your startup idea",
+              "text": "Enter your business idea in plain English. Example: 'I want to build a marketplace for freelance designers.'",
+              "url": "https://www.gitstack.pro/stack-generator"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Set your budget and team size",
+              "text": "Choose your monthly budget ($0, $50, $200, or $500+) and whether you're solo or have a team.",
+              "url": "https://www.gitstack.pro/stack-generator"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Get AI-generated stack recommendations",
+              "text": "GitStack's AI analyzes your idea and recommends the best open-source tools for frontend, backend, database, authentication, payments, and hosting.",
+              "url": "https://www.gitstack.pro/stack-generator"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Review and export your stack",
+              "text": "Browse detailed explanations for each tool, compare alternatives, and export your stack with one-click clone commands.",
+              "url": "https://www.gitstack.pro/stack-generator"
+            }
+          ]
+        }}
       />
       <Header />
       <main className="py-12 px-4">

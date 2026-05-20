@@ -50,6 +50,6 @@ Disallow: /u/me
 Disallow: /preferences
 Disallow: /unsubscribe
 
-Host: https://gitstack.pro
+Host: https://www.gitstack.pro
 
-Sitemap: https://gitstack.pro/sitemap.xml
+Sitemap: https://www.gitstack.pro/sitemap.xml

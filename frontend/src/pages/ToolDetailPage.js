@@ -199,6 +199,99 @@ export default function ToolDetailPage() {
 
             <p className="text-xl text-muted-foreground mb-8 leading-relaxed">{tool.description}</p>
 
+            {/* GEO-Optimized Key Facts Table — AI engines cite structured data */}
+            <div className="mb-8 border-2 border-border bg-muted/30 p-6">
+              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" /> {tool.name} at a Glance
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground block text-xs uppercase tracking-wider">Type</span>
+                  <span className="font-semibold">{tool.category || "Open Source Tool"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs uppercase tracking-wider">License</span>
+                  <span className="font-semibold">Open Source</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs uppercase tracking-wider">GitHub Stars</span>
+                  <span className="font-semibold">{tool.stars}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs uppercase tracking-wider">Difficulty</span>
+                  <span className="font-semibold">{tool.difficulty || "Varies"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs uppercase tracking-wider">Setup Time</span>
+                  <span className="font-semibold">{tool.setup_time || "Self-paced"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs uppercase tracking-wider">Self-Hostable</span>
+                  <span className="font-semibold">Yes</span>
+                </div>
+                {tool.paid_alternative && (
+                  <div className="col-span-2 md:col-span-3">
+                    <span className="text-muted-foreground block text-xs uppercase tracking-wider">Replaces</span>
+                    <span className="font-semibold">{tool.paid_alternative} {tool.monthly_cost ? `(${tool.monthly_cost})` : ""}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* GEO-Optimized Definition Paragraph — AI engines extract definitions */}
+            <div className="mb-8">
+              <h2 className="text-xl font-bold mb-3">What is {tool.name}?</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                {tool.name} is {tool.description?.toLowerCase()?.startsWith("a ") || tool.description?.toLowerCase()?.startsWith("an ") ? "" : "a "}{tool.description} It is an open-source tool that you can self-host for free, making it a popular alternative to expensive SaaS products.
+                {tool.who_its_for ? ` ${tool.name} is particularly useful for ${tool.who_its_for.toLowerCase()}.` : ""}
+              </p>
+            </div>
+
+            {/* Comparison Table — High GEO value, AI engines cite these */}
+            {tool.paid_alternative && (
+              <div className="mb-8 border-2 border-border overflow-hidden">
+                <h2 className="text-xl font-bold p-4 bg-muted/30 border-b-2 border-border">
+                  {tool.name} vs {tool.paid_alternative}
+                </h2>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-border bg-muted/20">
+                      <th className="text-left p-3 font-bold">Feature</th>
+                      <th className="text-left p-3 font-bold text-primary">{tool.name}</th>
+                      <th className="text-left p-3 font-bold">{tool.paid_alternative}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-border">
+                      <td className="p-3 font-medium">Price</td>
+                      <td className="p-3 text-green-600 font-semibold">Free (self-hosted)</td>
+                      <td className="p-3">{tool.monthly_cost || "Paid"}</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-3 font-medium">Open Source</td>
+                      <td className="p-3 text-green-600 font-semibold">Yes</td>
+                      <td className="p-3">No</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-3 font-medium">Self-Hostable</td>
+                      <td className="p-3 text-green-600 font-semibold">Yes</td>
+                      <td className="p-3">No</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-3 font-medium">Setup Difficulty</td>
+                      <td className="p-3">{tool.difficulty || "Varies"}</td>
+                      <td className="p-3">None (managed)</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-medium">Data Ownership</td>
+                      <td className="p-3 text-green-600 font-semibold">Full control</td>
+                      <td className="p-3">Vendor controlled</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             <div className="mb-8">
               <h2 className="text-xl font-bold mb-3">Who it's for</h2>
               <p className="text-muted-foreground">{tool.who_its_for}</p>

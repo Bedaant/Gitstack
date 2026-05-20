@@ -103,6 +103,34 @@ export default function RepoTranslator() {
         title="Repo Translator — Understand Any GitHub Repo in Plain English"
         description="Paste any GitHub URL and get a plain-English explanation of what it does, who it's for, and how to use it. No technical knowledge needed."
         path="/repo-translator"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          "name": "How to Understand Any GitHub Repository in Plain English",
+          "description": "Use GitStack's Repo Translator to decode any GitHub README into founder-friendly language in 10 seconds.",
+          "totalTime": "PT10S",
+          "tool": [{ "@type": "HowToTool", "name": "GitStack Repo Translator" }],
+          "step": [
+            {
+              "@type": "HowToStep",
+              "name": "Copy the GitHub URL",
+              "text": "Find the GitHub repository you want to understand and copy its URL from the browser address bar.",
+              "url": "https://www.gitstack.pro/repo-translator"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Paste into Repo Translator",
+              "text": "Paste the GitHub URL into GitStack's Repo Translator input field and click translate.",
+              "url": "https://www.gitstack.pro/repo-translator"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Read the plain-English explanation",
+              "text": "Get a founder-friendly breakdown of what the project does, who it's for, setup difficulty, and key features.",
+              "url": "https://www.gitstack.pro/repo-translator"
+            }
+          ]
+        }}
       />
       <Header />
       <main className="py-12 px-4">

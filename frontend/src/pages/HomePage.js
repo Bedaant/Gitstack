@@ -55,8 +55,11 @@ const JSON_LD = {
       "url": "https://gitstack.pro",
       "logo": "https://gitstack.pro/logo.png",
       "sameAs": [
-        "https://github.com/gitstack",
-        "https://twitter.com/gitstackdev"
+        "https://github.com/Bedaant/Gitstack",
+        "https://twitter.com/gitstackdev",
+        "https://www.producthunt.com/products/gitstack",
+        "https://www.indiehackers.com/product/gitstack",
+        "https://gitstack.substack.com"
       ],
       "description": "Curated open-source tool discovery platform for non-technical founders."
     },

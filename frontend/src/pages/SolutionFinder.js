@@ -404,6 +404,34 @@ export default function SolutionFinder() {
         title="Solution Finder — Find Ready-to-Deploy Open Source Projects | GitStack"
         description="Describe your business problem and instantly find complete, ready-to-deploy open-source solutions. No assembly required."
         path="/solution-finder"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          "name": "How to Find Ready-to-Deploy Open Source Solutions",
+          "description": "Describe your business need and GitStack's AI finds complete open-source projects you can deploy today.",
+          "totalTime": "PT1M",
+          "tool": [{ "@type": "HowToTool", "name": "GitStack Solution Finder" }],
+          "step": [
+            {
+              "@type": "HowToStep",
+              "name": "Describe your business need",
+              "text": "Enter what you're trying to accomplish in plain English. Example: 'I need a self-hosted CRM for my sales team.'",
+              "url": "https://www.gitstack.pro/solution-finder"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Review AI-matched solutions",
+              "text": "GitStack searches 15,000+ repos and uses AI to find the best complete solutions for your exact use case.",
+              "url": "https://www.gitstack.pro/solution-finder"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Deploy your chosen solution",
+              "text": "Each result includes a direct GitHub link, setup difficulty rating, and plain-English explanation to get you running fast.",
+              "url": "https://www.gitstack.pro/solution-finder"
+            }
+          ]
+        }}
       />
       <Header />
 

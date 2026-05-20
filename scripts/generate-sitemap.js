@@ -17,7 +17,7 @@ const path = require("path");
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001/api";
 const PROD_API = "https://gitstack-backend.onrender.com/api";
-const SITE_URL = "https://gitstack.pro";
+const SITE_URL = "https://www.gitstack.pro";
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend", "public");
 const OUT_INDEX = path.join(PUBLIC_DIR, "sitemap.xml");
 const OUT_STATIC = path.join(PUBLIC_DIR, "sitemap-static.xml");

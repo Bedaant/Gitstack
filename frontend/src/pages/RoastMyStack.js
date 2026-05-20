@@ -63,6 +63,34 @@ export default function RoastMyStack() {
         title="Roast My Stack — Brutal Honest Feedback on Your SaaS Tools"
         description="Tell us what tools you're paying for and we'll roast your stack. Find out what's overpriced, redundant, and what a smarter founder would use instead."
         path="/roast-my-stack"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          "name": "How to Audit Your SaaS Stack for Cost Savings",
+          "description": "Get brutally honest feedback on your paid SaaS tools and discover free open-source alternatives.",
+          "totalTime": "PT3M",
+          "tool": [{ "@type": "HowToTool", "name": "GitStack Roast My Stack" }],
+          "step": [
+            {
+              "@type": "HowToStep",
+              "name": "List your current SaaS tools",
+              "text": "Enter the paid tools you use monthly. Include everything from hosting to analytics to email marketing.",
+              "url": "https://www.gitstack.pro/roast-my-stack"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Get your stack roasted",
+              "text": "GitStack's AI analyzes each tool for cost, redundancy, and open-source alternatives.",
+              "url": "https://www.gitstack.pro/roast-my-stack"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Implement the recommendations",
+              "text": "Replace overpriced tools with free alternatives and track your monthly savings.",
+              "url": "https://www.gitstack.pro/roast-my-stack"
+            }
+          ]
+        }}
       />
       <Header />
       <main className="py-12 px-4">

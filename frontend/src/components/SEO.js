@@ -1,7 +1,7 @@
 import React from "react";
 import { Helmet } from "react-helmet-async";
 
-const SITE_URL = process.env.REACT_APP_SITE_URL || "https://gitstack.pro";
+const SITE_URL = process.env.REACT_APP_SITE_URL || "https://www.gitstack.pro";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
 
 export const SEO = ({

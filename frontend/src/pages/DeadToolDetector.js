@@ -57,6 +57,34 @@ export default function DeadToolDetector() {
         title="Dead Tool Detector — Stop Overpaying for SaaS"
         description="Paste your paid SaaS subscriptions and discover free open-source alternatives. Founders save an average of $1,700/year. Free, instant, no signup."
         path="/dead-tool-detector"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "HowTo",
+          "name": "How to Find Free Open-Source Alternatives to Paid SaaS Tools",
+          "description": "Use GitStack's Dead Tool Detector to discover free, self-hosted alternatives to your expensive SaaS subscriptions.",
+          "totalTime": "PT2M",
+          "tool": [{ "@type": "HowToTool", "name": "GitStack Dead Tool Detector" }],
+          "step": [
+            {
+              "@type": "HowToStep",
+              "name": "List your paid SaaS tools",
+              "text": "Enter the names of the paid tools you're currently using, separated by commas. Example: Notion, Zapier, Mixpanel.",
+              "url": "https://www.gitstack.pro/dead-tool-detector"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Discover free alternatives",
+              "text": "GitStack matches each paid tool with the best open-source alternative and shows your potential yearly savings.",
+              "url": "https://www.gitstack.pro/dead-tool-detector"
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Compare and switch",
+              "text": "Review side-by-side comparisons of features, pricing, and setup difficulty. Click through to detailed tool pages with setup guides.",
+              "url": "https://www.gitstack.pro/dead-tool-detector"
+            }
+          ]
+        }}
       />
       <Header />
       <main className="py-12 px-4">
