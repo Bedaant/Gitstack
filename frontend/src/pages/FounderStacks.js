@@ -4,6 +4,7 @@ import axios from "axios";
 import { Star, ExternalLink, Users } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
 
 export default function FounderStacks() {
@@ -25,6 +26,11 @@ export default function FounderStacks() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Founder Stacks — Real Tech Stacks Behind Successful Projects"
+        description="Discover the real open-source tech stacks successful founders used to build their projects. Copy, fork, and build on proven combinations."
+        path="/founder-stacks"
+      />
       <Header />
       <main className="py-12 px-4 flex-1">
         <div className="max-w-5xl mx-auto">

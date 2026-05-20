@@ -9,6 +9,37 @@ Disallow: /preferences
 Disallow: /unsubscribe
 Disallow: /api/
 
+# AI Crawlers — Allow retrieval, block training where possible
+User-agent: GPTBot
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /dashboard/
+Disallow: /api/
+
 # Bing-specific (respects Crawl-delay)
 User-agent: Bingbot
 Crawl-delay: 1

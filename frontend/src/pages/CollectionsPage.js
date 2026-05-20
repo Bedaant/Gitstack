@@ -4,6 +4,7 @@ import axios from "axios";
 import { Clock } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { API } from "../utils/api";
 
 const bgColors = ['bg-pastel-mint', 'bg-pastel-yellow', 'bg-pastel-lavender', 'bg-pastel-pink', 'bg-pastel-lavender', 'bg-pastel-yellow'];
@@ -28,6 +29,11 @@ export default function CollectionsPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Collections — Curated Open-Source Tool Stacks"
+        description="Browse curated collections of open-source tools for specific goals. Self-hosted stacks for startups, automation, marketing, and more."
+        path="/collections"
+      />
       <Header />
       <main className="py-12 px-4 flex-1">
         <div className="max-w-5xl mx-auto">
