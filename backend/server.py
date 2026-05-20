@@ -246,6 +246,9 @@ async def lifespan(_app: FastAPI):
     _scraper_task = asyncio.create_task(_scraper_loop())
     logger.info("Background scraper scheduled (every 6 hours)")
 
+    # Discover available Gemini models (avoids 404s from hardcoded model names)
+    asyncio.create_task(_discover_gemini_models())
+
     # Seed only if DB is empty (fast boot)
     asyncio.create_task(_maybe_seed())
 
@@ -477,20 +480,74 @@ async def require_admin(request: Request) -> UserModel:
 
 # ==================== AI HELPERS ====================
 
+# Discovered at startup from Gemini API — avoids hardcoding models that return 404
+_available_gemini_models: list[str] = []
+
+async def _discover_gemini_models() -> list[str]:
+    """Query Gemini API for available models that support generateContent."""
+    global _available_gemini_models
+    if not gemini_key:
+        logger.warning("No GEMINI_API_KEY set — skipping model discovery")
+        return []
+    try:
+        client = genai.Client(api_key=gemini_key)
+        models = client.models.list()
+        available = []
+        for m in models:
+            name = m.name
+            # Model names come as "models/gemini-xxx" — strip prefix
+            if name.startswith("models/"):
+                name = name[7:]
+            methods = getattr(m, "supported_generation_methods", []) or []
+            if "generateContent" in methods and "gemini" in name.lower():
+                available.append(name)
+        # Prefer gemini-2.5-flash, then gemini-2.0-flash, then anything flash, then pro
+        def _sort_key(m: str) -> int:
+            if "2.5-flash" in m:
+                return 0
+            if "2.0-flash" in m:
+                return 1
+            if "flash" in m.lower():
+                return 2
+            if "pro" in m.lower():
+                return 3
+            return 4
+        available.sort(key=_sort_key)
+        _available_gemini_models = available
+        logger.info(f"Discovered {len(available)} Gemini models: {available}")
+        return available
+    except Exception as e:
+        logger.warning(f"Gemini model discovery failed: {e}")
+        return []
+
+
+def _is_model_not_found_error(e: Exception) -> bool:
+    """Check if exception is a 404 NOT_FOUND for the model."""
+    err = str(e)
+    return "NOT_FOUND" in err or "is not found for API version" in err or "'code': 404" in err
+
+
+def _is_rate_limit_error(e: Exception) -> bool:
+    """Check if exception is a 429 rate limit / spending cap."""
+    err = str(e)
+    return (
+        "RESOURCE_EXHAUSTED" in err
+        or "exceeded its monthly spending cap" in err
+        or "rate limit" in err.lower()
+        or "quota" in err.lower()
+    )
+
+
 async def call_gemini(prompt: str, json_response: bool = False) -> str:
     global _gemini_client
     if _gemini_client is None:
         _gemini_client = genai.Client(api_key=gemini_key)
 
-    # Try multiple variants for better compatibility
-    # Model names for google-genai SDK
-    # Try multiple variants since different accounts have different model access
-    # Only models confirmed available for this account
-    # Other models return 404 NOT_FOUND for v1beta API
-    model_variants = [
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-preview-04-21",
-    ]
+    # Use discovered models if available; otherwise fallback to known working model
+    if _available_gemini_models:
+        model_variants = _available_gemini_models.copy()
+    else:
+        model_variants = ["gemini-2.5-flash"]
 
     last_error = None
     for model_name in model_variants:
@@ -513,16 +570,21 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
             last_error = asyncio.TimeoutError("Gemini API timeout")
         except Exception as e:
             last_error = e
-            logger.warning(f"Gemini model {model_name} failed: {e}")
+            if _is_rate_limit_error(e):
+                logger.error(f"Gemini model {model_name} rate limited: {e}")
+                # Don't try other models for rate limits — they'll fail too
+                break
+            elif _is_model_not_found_error(e):
+                logger.warning(f"Gemini model {model_name} not found (404), skipping")
+            else:
+                logger.warning(f"Gemini model {model_name} failed: {e}")
             continue
 
     logger.error(f"All Gemini models failed. Last error: {last_error}")
-    # Check if it's a spending cap issue
-    error_str = str(last_error) if last_error else ""
-    if "exceeded its monthly spending cap" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+    if last_error and _is_rate_limit_error(last_error):
         raise HTTPException(
             status_code=429,
-            detail="Gemini API spending cap reached. Please increase your cap at https://ai.studio/spend or try again later."
+            detail="Gemini API rate limit reached. Please increase your spending cap at https://ai.studio/spend or try again later."
         )
     raise HTTPException(status_code=503, detail="AI service temporarily unavailable. Please try again.")
 
