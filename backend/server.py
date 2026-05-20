@@ -484,13 +484,15 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
 
     # Try multiple variants for better compatibility
     # Model names for google-genai SDK
-    # New users don't have access to -latest aliases or deprecated models
-    # Use stable versioned names that work for all accounts
+    # Try multiple variants since different accounts have different model access
     model_variants = [
-        "gemini-2.5-flash",           # Preview model (fastest)
-        "gemini-1.5-flash",           # Stable flash model
-        "gemini-1.5-pro",             # Stable pro model
-        "gemini-1.5-flash-8b",        # Lightweight fallback
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-preview-04-21",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-002",
     ]
 
     last_error = None
@@ -6127,13 +6129,23 @@ async def activation_metrics(user: UserModel = Depends(require_auth)):  # SEC-08
 app.include_router(api_router)
 app.include_router(og_router)
 
-# CORS — allow all origins (safe: auth uses JWT headers, not cookies)
-# NOTE: We always allow * because the frontend is on Vercel (gitstack.pro)
-# and may have preview deployments. Auth uses JWT in headers, not cookies.
+# CORS — allow specific origins with credentials support
+# The frontend sends credentials (cookies) for auth endpoints
+_cors_origins = [
+    "https://gitstack.pro",
+    "https://www.gitstack.pro",
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+# Also allow any vercel preview deployment
+_cors_origins_env = os.environ.get("CORS_ORIGINS", "")
+if _cors_origins_env:
+    _cors_origins.extend([o.strip() for o in _cors_origins_env.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=False,
-    allow_origins=["*"],
+    allow_credentials=True,
+    allow_origins=list(dict.fromkeys(_cors_origins)),
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
