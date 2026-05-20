@@ -485,14 +485,11 @@ async def call_gemini(prompt: str, json_response: bool = False) -> str:
     # Try multiple variants for better compatibility
     # Model names for google-genai SDK
     # Try multiple variants since different accounts have different model access
+    # Only models confirmed available for this account
+    # Other models return 404 NOT_FOUND for v1beta API
     model_variants = [
         "gemini-2.5-flash",
         "gemini-2.5-flash-preview-04-21",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-002",
-        "gemini-1.5-pro",
-        "gemini-1.5-pro-002",
     ]
 
     last_error = None
@@ -2959,7 +2956,7 @@ async def smart_search(req: SmartSearchRequest):
 Return ONLY JSON (no markdown):
 {{"keywords": ["word1", "word2"], "categories": ["ai", "saas"], "github_query": "optimized search for open source tools", "alternative_to": "paid tool name if possible"}}"""
         response = await client.aio.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction="Parse search queries for GitHub tools."
@@ -4572,7 +4569,7 @@ Pick exactly 6 tools from the numbered list above that the user would likely fin
 Return ONLY a JSON array of the EXACT tool names from the list (no extra text), e.g.: ["Exact Tool Name 1", "Exact Tool Name 2", ...]"""
 
     recommended_names = []
-    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]:
+    for model_name in ["gemini-2.5-flash"]:
         try:
             client = genai.Client(api_key=gemini_key)
             response = await client.aio.models.generate_content(
