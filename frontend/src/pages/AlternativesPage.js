@@ -38,7 +38,7 @@ export default function AlternativesPage() {
         path={`/alternatives/${tool}`}
       />
       <Header />
-      <main className="max-w-6xl mx-auto px-4 py-12">
+      <main id="main-content" className="max-w-6xl mx-auto px-4 py-12">
         <Breadcrumbs items={[
           { label: "Alternatives", href: "/tools" },
           { label: paidName || "…" },

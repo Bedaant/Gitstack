@@ -295,7 +295,12 @@ async def lifespan(_app: FastAPI):
 
 # limiter and app setup
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="GitStack API",
+    description="API for GitStack — curating open-source GitHub tools for non-technical founders",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
@@ -2462,255 +2467,6 @@ Make it exciting and accessible to non-technical people!"""
             "error": "Translation failed"
         }
 
-# ==================== NEWSLETTER ====================
-
-class NewsletterSubscribeRequest(BaseModel):
-    email: str
-    source: Optional[str] = None
-
-@api_router.post("/newsletter/subscribe")
-@limiter.limit("5/minute")  # SEC-04: prevent subscriber-list flooding / SMTP abuse
-async def subscribe_newsletter(request: Request, req: NewsletterSubscribeRequest):
-    """Subscribe to the GitStack daily digest"""
-    email = req.email.lower().strip()
-
-    # SEC-05: Proper email validation (reject garbage like a@b.c)
-    if not _EMAIL_RE.match(email):
-        raise HTTPException(status_code=400, detail="Invalid email address")
-
-    # Check if already subscribed
-    existing = await db.newsletter_subscribers.find_one({"email": email})
-    if existing:
-        return {"message": "Already subscribed", "status": "existing"}
-
-    # Save subscriber
-    await db.newsletter_subscribers.insert_one({
-        "email": email,
-        "source": req.source,
-        "subscribed_at": datetime.now(timezone.utc).isoformat(),
-        "status": "active"
-    })
-
-    # Send welcome email (fire-and-forget so API stays fast)
-    asyncio.create_task(_safe_send_welcome(email))
-
-    return {"message": "Successfully subscribed to GitStack daily digest!", "status": "new"}
-
-
-async def _safe_send_welcome(email: str):
-    try:
-        await send_welcome_email(email)
-    except Exception as e:
-        logger.warning(f"Failed to send welcome email to {email}: {e}")
-
-
-# ==================== EMAIL PREFERENCES & UNSUBSCRIBE ====================
-
-class PreferencesLinkRequest(BaseModel):
-    email: str
-
-class PreferencesUpdateRequest(BaseModel):
-    token: str
-    preferences: Dict[str, Any]
-
-@api_router.post("/newsletter/preferences-link")
-async def api_send_preferences_link(req: PreferencesLinkRequest):
-    """Send a magic link to manage email preferences."""
-    email = req.email.lower().strip()
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Valid email required")
-
-    token = _generate_email_token(email)
-
-    try:
-        await send_preferences_link(email, token)
-        return {"message": "Preferences link sent. Check your inbox."}
-    except Exception as e:
-        logger.error(f"Failed to send preferences link to {email}: {e}")
-        raise HTTPException(status_code=500, detail="Could not send email. Try again.")
-
-
-@api_router.get("/newsletter/preferences")
-async def get_preferences(token: str):
-    """Get current email preferences using a token."""
-    email = _verify_email_token(token)
-    subscriber = await db.newsletter_subscribers.find_one({"email": email})
-    if not subscriber:
-        raise HTTPException(status_code=404, detail="Subscriber not found")
-
-    return {
-        "email": email,
-        "status": subscriber.get("status", "active"),
-        "preferences": subscriber.get("preferences", {
-            "daily_drop": True,
-            "stack_reminders": True,
-            "product_updates": False,
-        }),
-    }
-
-
-@api_router.put("/newsletter/preferences")
-async def update_preferences(req: PreferencesUpdateRequest):
-    """Update email preferences using a token."""
-    email = _verify_email_token(req.token)
-    prefs = req.preferences
-
-    # Validate preferences shape
-    allowed_keys = {"daily_drop", "stack_reminders", "product_updates"}
-    cleaned = {k: bool(v) for k, v in prefs.items() if k in allowed_keys}
-
-    result = await db.newsletter_subscribers.update_one(
-        {"email": email},
-        {"$set": {"preferences": cleaned, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Subscriber not found")
-
-    return {"message": "Preferences updated", "preferences": cleaned}
-
-
-@api_router.post("/newsletter/unsubscribe")
-async def unsubscribe_post(token: str):
-    """Unsubscribe using a token (POST to prevent CSRF via embedded images)."""
-    email = _verify_email_token(token)
-    result = await db.newsletter_subscribers.update_one(
-        {"email": email},
-        {"$set": {
-            "status": "unsubscribed",
-            "unsubscribed_at": datetime.now(timezone.utc).isoformat(),
-        }}
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Subscriber not found")
-
-    return {"message": "Unsubscribed successfully", "email": email}
-
-
-# SEC-10: Keep GET for backward-compat email links, but return a confirmation page hint
-@api_router.get("/newsletter/unsubscribe")
-async def unsubscribe_get(token: str):
-    """GET handler for email links — validates token and returns confirmation prompt.
-    The frontend should show a 'Confirm Unsubscribe' button that POSTs."""
-    email = _verify_email_token(token)  # validate token is real
-    return {"email": email, "action": "confirm", "message": "Click confirm to unsubscribe."}
-
-@api_router.get("/newsletter/count")
-async def get_newsletter_count():
-    """Get subscriber count for social proof"""
-    count = await db.newsletter_subscribers.count_documents({"status": "active"})
-    return {"count": count}
-
-
-# ==================== ONBOARDING INTENT TRACKING ====================
-
-@api_router.get("/onboarding/intent")
-async def track_onboarding_intent(token: str, type: str):
-    """Track what the user is here for: stack-builder, buyer, seller, or tool-hunter.
-    
-    Called from tracked links in the welcome email. Records intent and redirects
-    to the appropriate page.
-    """
-    valid_types = ["stack-builder", "buyer", "seller", "tool-hunter"]
-    if type not in valid_types:
-        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(valid_types)}")
-    
-    try:
-        email = _verify_email_token(token)
-    except HTTPException:
-        # Invalid/expired token — still redirect, just don't track
-        redirect_map = {
-            "stack-builder": f"{FRONTEND_URL}/stack-generator",
-            "buyer": f"{FRONTEND_URL}/marketplace",
-            "seller": f"{FRONTEND_URL}/marketplace/sell",
-            "tool-hunter": f"{FRONTEND_URL}/repo-of-the-day",
-        }
-        return RedirectResponse(url=redirect_map[type])
-    
-    # Record intent in user profile
-    await db.users.update_one(
-        {"email": email.lower().strip()},
-        {
-            "$set": {
-                "onboarding_intent": type,
-                "onboarding_intent_set_at": datetime.now(timezone.utc),
-            }
-        },
-    )
-    
-    # Also record in newsletter subscribers if present
-    await db.newsletter_subscribers.update_one(
-        {"email": email.lower().strip()},
-        {
-            "$set": {
-                "onboarding_intent": type,
-                "onboarding_intent_set_at": datetime.now(timezone.utc),
-            }
-        },
-    )
-    
-    redirect_map = {
-        "stack-builder": f"{FRONTEND_URL}/stack-generator",
-        "buyer": f"{FRONTEND_URL}/marketplace",
-        "seller": f"{FRONTEND_URL}/marketplace/sell",
-        "tool-hunter": f"{FRONTEND_URL}/repo-of-the-day",
-    }
-    return RedirectResponse(url=redirect_map[type])
-
-
-@api_router.post("/onboarding/track-intent")
-async def track_onboarding_intent_from_frontend(request: Request):
-    """Track onboarding intent from the frontend (Clerk-authenticated).
-    
-    This is a fallback for users who don't click the tracked links in the
-    welcome email. The frontend detects the first meaningful page visit and
-    reports it here.
-    """
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    token = auth_header.split(" ")[1]
-    if not _jwks_client:
-        raise HTTPException(status_code=503, detail="Auth not configured")
-    
-    try:
-        body = await request.json()
-        intent_type = body.get("type")
-        valid_types = ["stack-builder", "buyer", "seller", "tool-hunter"]
-        if intent_type not in valid_types:
-            raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(valid_types)}")
-        
-        signing_key = _jwks_client.get_signing_key_from_jwt(token)
-        payload = jwt.decode(token, signing_key.key, algorithms=["RS256"], options={"verify_aud": False})
-        clerk_user_id = payload.get("sub")
-        if not clerk_user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        # Only set if not already set (email link takes precedence)
-        result = await db.users.update_one(
-            {"user_id": clerk_user_id, "onboarding_intent": {"$exists": False}},
-            {
-                "$set": {
-                    "onboarding_intent": intent_type,
-                    "onboarding_intent_set_at": datetime.now(timezone.utc),
-                    "onboarding_intent_source": "frontend",
-                }
-            },
-        )
-        
-        return {
-            "success": True,
-            "intent": intent_type,
-            "updated": result.modified_count > 0,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.warning(f"Onboarding intent error: {e}")
-        raise HTTPException(status_code=401, detail="Authentication failed")
-
-
 # ==================== SEARCH AUTOCOMPLETE ====================
 
 @api_router.get("/search/autocomplete")
@@ -2961,25 +2717,6 @@ async def _safe_send_stack(email: str, idea: str, tools: list):
         await send_stack_email(email, idea, tools)
     except Exception as e:
         logger.warning(f"Failed to send stack email to {email}: {e}")
-
-# ==================== STATS ====================
-
-@api_router.get("/stats")
-@cache(expire=300)
-async def get_stats():
-    """Live counters for social proof on homepage."""
-    stacks_count = await db.user_stacks.count_documents({})
-    translations_count = await db.repo_translations.count_documents({})
-    subscribers_count = await db.newsletter_subscribers.count_documents({"status": "active"})
-    # Rough savings: each dead-tool session saves avg $800/yr
-    email_stacks_count = await db.email_stacks.count_documents({})
-    estimated_savings = (stacks_count + email_stacks_count) * 800
-    return {
-        "stacks_generated": max(stacks_count, 847),   # seed floor so it never shows 0
-        "repos_translated": max(translations_count, 312),
-        "estimated_savings": max(estimated_savings, 124000),
-        "founders": max(subscribers_count + stacks_count, 1200),
-    }
 
 # ==================== SMART SEARCH ====================
 
@@ -5729,144 +5466,6 @@ async def get_public_seller(seller_id: str):
                        "picture": (user_doc or {}).get("picture")},
             "products": products}
 
-# ==================== SEO SOLUTIONS DIRECTORY ====================
-
-@api_router.get("/solutions")
-@cache(expire=3600)
-async def list_solutions_index():
-    """Returns top 50 use cases for programmatic SEO directory."""
-    pipeline = [
-        {"$match": {"repo_type": "complete_solution", "use_cases": {"$exists": True, "$not": {"$size": 0}}}},
-        {"$unwind": "$use_cases"},
-        {"$group": {"_id": "$use_cases", "count": {"$sum": 1}}},
-        {"$match": {"count": {"$gte": 1}}},
-        {"$sort": {"count": -1}},
-        {"$limit": 50}
-    ]
-    results = await db.github_repos.aggregate(pipeline).to_list(50)
-    return {
-        "use_cases": [
-            {
-                "name": r["_id"],
-                "slug": re.sub(r"[^a-z0-9]+", "-", r["_id"].lower()).strip("-"),
-                "repo_count": r["count"]
-            }
-            for r in results
-        ]
-    }
-
-@api_router.get("/solutions/{slug}")
-@cache(expire=600)
-async def get_solution_category(slug: str):
-    """Returns complete solutions matching a specific use case slug."""
-    human_name = slug.replace("-", " ")
-    query = {
-        "repo_type": "complete_solution",
-        "use_cases": {"$regex": human_name, "$options": "i"}
-    }
-    repos = await db.github_repos.find(query, {"_id": 0}).sort("score", -1).limit(20).to_list(20)
-    for r in repos:
-        product = await db.marketplace_products.find_one(
-            {"github_repo_url": {"$regex": re.escape(r["full_name"]), "$options": "i"}, "published": True},
-            {"_id": 0, "product_id": 1, "price_cents": 1, "seller_user_id": 1}
-        )
-        if product:
-            seller = await db.marketplace_sellers.find_one({"seller_user_id": product["seller_user_id"]})
-            r["marketplace_setup"] = {
-                "product_id": product["product_id"],
-                "price": product.get("price_cents", 0) / 100,
-                "seller_name": (seller or {}).get("display_name", "Developer")
-            }
-    return {
-        "use_case": human_name.title(),
-        "slug": slug,
-        "count": len(repos),
-        "repos": repos
-    }
-
-# ==================== ALTERNATIVES SEO PAGES ====================
-
-@api_router.get("/alternatives/{tool_slug}")
-@cache(expire=3600)  # 1 hour
-async def get_alternatives(tool_slug: str):
-    """
-    Programmatic SEO endpoint: returns open-source alternatives to a paid SaaS tool.
-    e.g. /api/alternatives/notion, /api/alternatives/typeform
-    """
-    # Normalize slug: "google-analytics" -> ["Google Analytics", "google analytics"]
-    pretty = tool_slug.replace("-", " ").title()
-    variants = [pretty, tool_slug.replace("-", " "), tool_slug]
-
-    # Match on paid_alternative field (case-insensitive)
-    regex_pattern = "|".join(re.escape(v) for v in variants)
-    curated = await db.tools.find(
-        {"paid_alternative": {"$regex": regex_pattern, "$options": "i"}},
-        {"_id": 0}
-    ).limit(20).to_list(20)
-
-    # Fallback: search by tag like "notion-alternative"
-    if len(curated) < 3:
-        tag_match = await db.tools.find(
-            {"tags": {"$regex": f"{tool_slug}-alternative", "$options": "i"}},
-            {"_id": 0}
-        ).limit(20).to_list(20)
-        seen = {t["tool_id"] for t in curated}
-        for t in tag_match:
-            if t["tool_id"] not in seen:
-                curated.append(t)
-
-    # Also search github_repos by topic
-    gh = await db.github_repos.find(
-        {"topics": {"$regex": f"{tool_slug}-alternative", "$options": "i"}},
-        {"_id": 0}
-    ).sort("stars", -1).limit(10).to_list(10)
-
-    # Search complete solutions that replace this SaaS (Phase 5 enrichment)
-    complete_solutions = await db.github_repos.find(
-        {
-            "repo_type": "complete_solution",
-            "replaces_saas": {"$regex": regex_pattern, "$options": "i"}
-        },
-        {"_id": 0}
-    ).sort("stars", -1).limit(5).to_list(5)
-    # Deduplicate against gh results
-    gh_names = {r.get("full_name") for r in gh}
-    complete_solutions = [s for s in complete_solutions if s.get("full_name") not in gh_names]
-
-    return {
-        "paid_tool": pretty,
-        "slug": tool_slug,
-        "alternatives": curated,
-        "github_repos": gh,
-        "complete_solutions": complete_solutions,
-        "count": len(curated) + len(gh) + len(complete_solutions),
-    }
-
-
-@api_router.get("/alternatives")
-@cache(expire=3600)
-async def list_alternatives_index():
-    """Lists all paid tools that have alternatives (for index page + sitemap)."""
-    pipeline = [
-        {"$match": {"paid_alternative": {"$nin": [None, ""]}}},
-        {"$group": {"_id": "$paid_alternative", "count": {"$sum": 1}}},
-        {"$match": {"count": {"$gte": 1}}},
-        {"$sort": {"count": -1}},
-        {"$limit": 100},
-    ]
-    results = await db.tools.aggregate(pipeline).to_list(100)
-    return {
-        "paid_tools": [
-            {
-                "name": r["_id"],
-                "slug": re.sub(r"[^a-z0-9]+", "-", r["_id"].lower()).strip("-"),
-                "alternatives_count": r["count"],
-            }
-            for r in results
-        ]
-    }
-
-
 # ---- Blog Posts ----
 
 @api_router.get("/blog/posts")
@@ -6159,6 +5758,21 @@ async def activation_metrics(user: UserModel = Depends(require_auth)):  # SEC-08
         "activation_rate": round(active_users / max(repo_views + tool_views, 1), 3),
     }
 
+
+# Modular routers (extracted from server.py)
+from routers.collections import router as collections_router
+from routers.stats import router as stats_router
+from routers.topics import router as topics_router
+from routers.seo import router as seo_router
+from routers.newsletter import router as newsletter_router
+from routers.onboarding import router as onboarding_router
+
+api_router.include_router(collections_router)
+api_router.include_router(stats_router)
+api_router.include_router(topics_router)
+api_router.include_router(seo_router)
+api_router.include_router(newsletter_router)
+api_router.include_router(onboarding_router)
 
 # Include router
 app.include_router(api_router)

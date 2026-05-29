@@ -117,7 +117,7 @@ export default function GitHubRepoPage() {
       </Helmet>
       
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="neo-card p-8 mb-8 bg-background" data-testid="github-repo-detail">
             <div className="flex flex-col sm:flex-row items-start justify-between mb-6 gap-4">

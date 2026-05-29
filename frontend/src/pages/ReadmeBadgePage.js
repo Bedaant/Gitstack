@@ -86,7 +86,7 @@ export default function ReadmeBadgePage() {
       </Helmet>
       <Header />
 
-      <main className="max-w-5xl mx-auto px-4 py-12">
+      <main id="main-content" className="max-w-5xl mx-auto px-4 py-12">
         {/* Hero */}
         <section className="text-center mb-12">
           <div className="inline-flex items-center gap-2 neo-card px-4 py-2 mb-6 bg-pastel-purple">

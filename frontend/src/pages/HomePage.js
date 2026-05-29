@@ -157,7 +157,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="min-h-screen">
+    <main id="main-content" className="min-h-screen">
       <SEO
         title="Free Tools for Founders — No Code Needed"
         description="Find free, open-source alternatives to any paid tool. Describe what you need — CRM, email automation, marketplace — and get your entire tech stack with plain-English explanations. No coding required."
@@ -202,6 +202,6 @@ export default function HomePage() {
       <TopicsGrid topics={topics} loading={loading} />
       <CommunityStacks />
       <Footer />
-    </div>
+    </main>
   );
 }

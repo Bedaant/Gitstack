@@ -57,7 +57,7 @@ export default function PublicStackPage() {
     return (
       <div className="min-h-screen">
         <Header />
-        <main className="py-24 px-4 text-center">
+        <main id="main-content" className="py-24 px-4 text-center">
           <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-red-500" />
           <h1 className="text-4xl font-black uppercase mb-4">Stack Not Found</h1>
           <p className="text-muted-foreground mb-8">This stack link may have expired or never existed.</p>
@@ -100,7 +100,7 @@ export default function PublicStackPage() {
         jsonLd={jsonLd}
       />
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-10">
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 font-black">Shared Stack</p>

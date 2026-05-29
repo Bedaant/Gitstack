@@ -13,7 +13,7 @@ export default function NotFound() {
         noindex={true}
       />
       <Header />
-      <main className="flex-1 flex items-center justify-center px-4">
+      <main id="main-content" className="flex-1 flex items-center justify-center px-4">
         <div className="text-center">
           <h1 className="text-8xl font-black mb-4">404</h1>
           <p className="text-2xl font-bold mb-2">Page not found</p>

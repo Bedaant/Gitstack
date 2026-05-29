@@ -222,7 +222,7 @@ export default function TopicToolsPage() {
         path={`/topics/${topicId}`}
       />
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-6xl mx-auto">
 
           {/* Back button */}

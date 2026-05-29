@@ -87,7 +87,7 @@ export default function DeadToolDetector() {
         }}
       />
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <motion.div 

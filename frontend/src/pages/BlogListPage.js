@@ -37,7 +37,7 @@ export default function BlogListPage() {
       />
       <Header />
 
-      <main className="max-w-5xl mx-auto px-4 py-16">
+      <main id="main-content" className="max-w-5xl mx-auto px-4 py-16">
         <div className="mb-12">
           <h1 className="text-4xl font-bold mb-4">GitStack Blog</h1>
           <p className="text-lg text-muted-foreground">

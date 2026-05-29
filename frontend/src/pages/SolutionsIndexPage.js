@@ -40,7 +40,7 @@ export default function SolutionsIndexPage() {
         jsonLd={jsonLd}
       />
       <Header />
-      <main className="max-w-6xl mx-auto px-4 py-12">
+      <main id="main-content" className="max-w-6xl mx-auto px-4 py-12">
         <Breadcrumbs items={[{ label: "Solutions" }]} />
         <div className="mb-10 text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-pastel-mint border-2 border-border mb-6">

@@ -159,7 +159,7 @@ export default function ToolDetailPage() {
         </script>
       </Helmet>
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <Breadcrumbs items={[
             { label: "Tools", href: "/tools" },

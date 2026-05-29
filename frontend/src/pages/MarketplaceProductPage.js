@@ -101,14 +101,14 @@ export default function MarketplaceProductPage() {
 
   if (loading) return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header /><main className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></main><Footer />
+      <Header /><main id="main-content" className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></main><Footer />
     </div>
   );
 
   if (!product) return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
-      <main className="flex-1 flex items-center justify-center">
+      <main id="main-content" className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-black uppercase mb-2">Not Found</h1>
           <Link to="/marketplace" className="neo-btn neo-btn-primary px-4 py-2 text-sm font-black">Back to Marketplace</Link>
@@ -153,7 +153,7 @@ export default function MarketplaceProductPage() {
         }}
       />
       <Header />
-      <main className="flex-1 max-w-7xl mx-auto px-4 md:px-8 py-8 w-full">
+      <main id="main-content" className="flex-1 max-w-7xl mx-auto px-4 md:px-8 py-8 w-full">
         <Breadcrumbs items={[
           { label: "Marketplace", href: "/marketplace" },
           ...(product.category ? [{ label: product.category, href: `/marketplace?category=${encodeURIComponent(product.category)}` }] : []),

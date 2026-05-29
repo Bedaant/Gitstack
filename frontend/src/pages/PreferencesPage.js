@@ -70,7 +70,7 @@ export default function PreferencesPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 flex items-center justify-center px-4">
+        <main id="main-content" className="flex-1 flex items-center justify-center px-4">
           <div className="text-center">
             <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary mb-4" />
             <p className="text-muted-foreground font-medium">Loading your preferences...</p>
@@ -85,7 +85,7 @@ export default function PreferencesPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 flex items-center justify-center px-4 py-12">
+        <main id="main-content" className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-lg">
             <div className="neo-card bg-white p-8 md:p-10 text-center">
               <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-pastel-pink border-2 border-black neo-shadow mb-6">
@@ -139,7 +139,7 @@ export default function PreferencesPage() {
     <div className="min-h-screen flex flex-col">
       <SEO title="Email Preferences" noindex />
       <Header />
-      <main className="flex-1 px-4 py-12">
+      <main id="main-content" className="flex-1 px-4 py-12">
         <div className="max-w-lg mx-auto">
           {/* Header */}
           <div className="mb-8">

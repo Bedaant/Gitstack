@@ -34,7 +34,7 @@ export default function EmbedRepoPage() {
   const gitstackUrl = `https://gitstack.pro/r/${owner}/${repo}`;
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <main id="main-content" className="min-h-screen bg-background p-4">
       <SEO
         title={`${owner}/${repo} — AI Summary`}
         description={`Plain English summary of ${owner}/${repo}. Embed this open-source repo explanation in your README or blog with GitStack.`}
@@ -89,6 +89,6 @@ export default function EmbedRepoPage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -89,7 +89,7 @@ export default function ComparisonPage() {
   return (
     <div className="min-h-screen">
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <SEO
             title={t1 && t2 ? `${t1} vs ${t2} — Open Source Tool Comparison` : "Tool Comparison — Open Source vs SaaS"}

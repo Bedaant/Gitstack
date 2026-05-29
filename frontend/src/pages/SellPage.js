@@ -136,7 +136,7 @@ export default function SellPage() {
   if (loading) return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
-      <main className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></main>
+      <main id="main-content" className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></main>
       <Footer />
     </div>
   );
@@ -146,7 +146,7 @@ export default function SellPage() {
       <div className="min-h-screen flex flex-col bg-background">
         <SEO title="Sell on GitStack" description="List your indie dev tools on GitStack marketplace." noindex />
         <Header />
-        <main className="flex-1 py-10 px-4"><OnboardingCard onDone={fetchDashboard} /></main>
+        <main id="main-content" className="flex-1 py-10 px-4"><OnboardingCard onDone={fetchDashboard} /></main>
         <Footer />
       </div>
     );
@@ -156,7 +156,7 @@ export default function SellPage() {
     <div className="min-h-screen flex flex-col bg-background">
       <SEO title="Seller Dashboard — GitStack" description="Manage your listings, setup jobs, and earnings." noindex />
       <Header />
-      <main className="flex-1 max-w-7xl mx-auto px-4 md:px-8 py-10 w-full">
+      <main id="main-content" className="flex-1 max-w-7xl mx-auto px-4 md:px-8 py-10 w-full">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <h1 className="text-3xl font-black uppercase">Seller Dashboard</h1>
           <button onClick={() => { setEditProduct(null); setWizardOpen(true); }} className="neo-btn neo-btn-primary px-4 py-2 text-sm font-black">+ New Product</button>

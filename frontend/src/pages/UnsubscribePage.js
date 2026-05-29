@@ -149,7 +149,7 @@ export default function UnsubscribePage() {
     <div className="min-h-screen flex flex-col">
       <SEO title="Unsubscribe" noindex />
       <Header />
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
+      <main id="main-content" className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-lg">
           <div className="neo-card bg-white p-8 md:p-10">
             {renderContent()}

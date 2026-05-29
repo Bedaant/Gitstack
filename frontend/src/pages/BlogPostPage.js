@@ -42,7 +42,7 @@ export default function BlogPostPage() {
     return (
       <div className="min-h-screen">
         <Header />
-        <main className="max-w-3xl mx-auto px-4 py-20 text-center">
+        <main id="main-content" className="max-w-3xl mx-auto px-4 py-20 text-center">
           <h1 className="text-2xl font-bold mb-4">Post not found</h1>
           <Link to="/blog" className="text-primary inline-flex items-center gap-2">
             <ArrowLeft className="w-4 h-4" /> Back to blog
@@ -99,7 +99,7 @@ export default function BlogPostPage() {
 
       <Header />
 
-      <main className="max-w-3xl mx-auto px-4 py-12">
+      <main id="main-content" className="max-w-3xl mx-auto px-4 py-12">
         <Breadcrumbs
           items={[
             { label: "Blog", href: "/blog" },

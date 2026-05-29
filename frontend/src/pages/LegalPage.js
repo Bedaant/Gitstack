@@ -9,7 +9,7 @@ export function LegalShell({ title, description, path, lastUpdated, children }) 
     <div className="min-h-screen flex flex-col">
       <SEO title={`${title} — GitStack`} description={description} path={path} />
       <Header />
-      <main className="flex-1 py-12 px-4">
+      <main id="main-content" className="flex-1 py-12 px-4">
         <div className="max-w-3xl mx-auto">
           <h1 className="font-heading text-4xl md:text-5xl font-black uppercase mb-3">{title}</h1>
           {lastUpdated && (

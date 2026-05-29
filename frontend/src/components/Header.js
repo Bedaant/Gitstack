@@ -24,7 +24,14 @@ export const Header = () => {
   }, []);
 
   return (
-    <header className="sticky top-0 z-50 isolate bg-background border-b-4 border-foreground py-4">
+    <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:font-bold focus:rounded-none focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+      >
+        Skip to main content
+      </a>
+      <header className="sticky top-0 z-50 isolate bg-background border-b-4 border-foreground py-4">
       <div className="max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3">
           <img src="/logo.svg" alt="GitStack" className="w-10 h-10 dark:invert" />
@@ -49,8 +56,13 @@ export const Header = () => {
             )}
           </Link>
           <div className="relative group">
-            <button className="font-semibold hover:text-primary transition-colors flex items-center gap-1">
-              <Sparkles className="w-4 h-4" /> AI Tools <ChevronDown className="w-4 h-4" />
+            <button
+              className="font-semibold hover:text-primary transition-colors flex items-center gap-1"
+              aria-haspopup="true"
+              aria-expanded={false}
+              aria-label="AI Tools menu"
+            >
+              <Sparkles className="w-4 h-4" aria-hidden="true" /> AI Tools <ChevronDown className="w-4 h-4" aria-hidden="true" />
             </button>
             <div className="absolute top-full -left-4 pt-2 hidden group-hover:block" style={{ zIndex: 9999 }}>
               <div className="bg-background border-4 border-foreground neo-shadow-lg w-64 p-2 relative">
@@ -87,8 +99,8 @@ export const Header = () => {
         {/* Mobile menu using Sheet primitive */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
-            <button className="md:hidden p-2" data-testid="mobile-menu-btn">
-              {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <button className="md:hidden p-2" data-testid="mobile-menu-btn" aria-label={mobileOpen ? "Close menu" : "Open menu"} aria-expanded={mobileOpen}>
+              {mobileOpen ? <X className="w-6 h-6" aria-hidden="true" /> : <Menu className="w-6 h-6" aria-hidden="true" />}
             </button>
           </SheetTrigger>
           <SheetContent side="right" className="w-[300px] sm:w-[400px] p-0 border-l-4 border-foreground">
@@ -173,5 +185,6 @@ export const Header = () => {
         </Sheet>
       </div>
     </header>
+    </>
   );
 };

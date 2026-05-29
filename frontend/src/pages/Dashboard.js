@@ -50,7 +50,7 @@ export default function Dashboard() {
       <SEO title="Dashboard" noindex />
       <Header />
       <RecommendationsSection />
-      <main className="py-12 px-4 flex-1">
+      <main id="main-content" className="py-12 px-4 flex-1">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="dashboard-title">Dashboard</h1>

@@ -32,7 +32,7 @@ export default function FounderStacks() {
         path="/founder-stacks"
       />
       <Header />
-      <main className="py-12 px-4 flex-1">
+      <main id="main-content" className="py-12 px-4 flex-1">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-pastel-lavender border-4 border-black neo-shadow-lg mb-6 text-black">

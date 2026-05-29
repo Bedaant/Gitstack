@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { ThemeProvider } from "next-themes";
@@ -13,43 +13,45 @@ import { trackPageView } from "./utils/analytics";
 
 const CLERK_KEY = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
 
-// Pages
+// Eager-loaded: critical path pages
 import HomePage from "./pages/HomePage";
-import DeadToolDetector from "./pages/DeadToolDetector";
-import StackGenerator from "./pages/StackGenerator";
-import RoastMyStack from "./pages/RoastMyStack";
-import RepoTranslator from "./pages/RepoTranslator";
-import IdeaExists from "./pages/IdeaExists";
-import FounderStacks from "./pages/FounderStacks";
-import ErrorExplainer from "./pages/ErrorExplainer";
-import ToolsPage from "./pages/ToolsPage";
-import ToolDetailPage from "./pages/ToolDetailPage";
-import GitHubRepoPage from "./pages/GitHubRepoPage";
-import CollectionsPage from "./pages/CollectionsPage";
-import CollectionDetailPage from "./pages/CollectionDetailPage";
-import TopicToolsPage from "./pages/TopicToolsPage";
-import Dashboard from "./pages/Dashboard";
-import RepoOfTheDayPage from "./pages/RepoOfTheDayPage";
-import ComparisonPage from "./pages/ComparisonPage";
-import PublicStackPage from "./pages/PublicStackPage";
 import NotFound from "./pages/NotFound";
-import UserProfilePage from "./pages/UserProfilePage";
-import UnsubscribePage from "./pages/UnsubscribePage";
-import PreferencesPage from "./pages/PreferencesPage";
-import MarketplacePage from "./pages/MarketplacePage";
-import MarketplaceProductPage from "./pages/MarketplaceProductPage";
-import SellPage from "./pages/SellPage";
-import AlternativesPage from "./pages/AlternativesPage";
-import EmbedRepoPage from "./pages/EmbedRepoPage";
-import RepoXrayPage from "./pages/RepoXrayPage";
-import ReadmeBadgePage from "./pages/ReadmeBadgePage";
+
+// Lazy-loaded: all other pages (reduces initial bundle size)
+const DeadToolDetector = React.lazy(() => import("./pages/DeadToolDetector"));
+const StackGenerator = React.lazy(() => import("./pages/StackGenerator"));
+const RoastMyStack = React.lazy(() => import("./pages/RoastMyStack"));
+const RepoTranslator = React.lazy(() => import("./pages/RepoTranslator"));
+const IdeaExists = React.lazy(() => import("./pages/IdeaExists"));
+const FounderStacks = React.lazy(() => import("./pages/FounderStacks"));
+const ErrorExplainer = React.lazy(() => import("./pages/ErrorExplainer"));
+const ToolsPage = React.lazy(() => import("./pages/ToolsPage"));
+const ToolDetailPage = React.lazy(() => import("./pages/ToolDetailPage"));
+const GitHubRepoPage = React.lazy(() => import("./pages/GitHubRepoPage"));
+const CollectionsPage = React.lazy(() => import("./pages/CollectionsPage"));
+const CollectionDetailPage = React.lazy(() => import("./pages/CollectionDetailPage"));
+const TopicToolsPage = React.lazy(() => import("./pages/TopicToolsPage"));
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const RepoOfTheDayPage = React.lazy(() => import("./pages/RepoOfTheDayPage"));
+const ComparisonPage = React.lazy(() => import("./pages/ComparisonPage"));
+const PublicStackPage = React.lazy(() => import("./pages/PublicStackPage"));
+const UserProfilePage = React.lazy(() => import("./pages/UserProfilePage"));
+const UnsubscribePage = React.lazy(() => import("./pages/UnsubscribePage"));
+const PreferencesPage = React.lazy(() => import("./pages/PreferencesPage"));
+const MarketplacePage = React.lazy(() => import("./pages/MarketplacePage"));
+const MarketplaceProductPage = React.lazy(() => import("./pages/MarketplaceProductPage"));
+const SellPage = React.lazy(() => import("./pages/SellPage"));
+const AlternativesPage = React.lazy(() => import("./pages/AlternativesPage"));
+const EmbedRepoPage = React.lazy(() => import("./pages/EmbedRepoPage"));
+const RepoXrayPage = React.lazy(() => import("./pages/RepoXrayPage"));
+const ReadmeBadgePage = React.lazy(() => import("./pages/ReadmeBadgePage"));
 import { TermsPage, PrivacyPage, AboutPage } from "./pages/LegalPage";
-import BlogListPage from "./pages/BlogListPage";
-import BlogPostPage from "./pages/BlogPostPage";
-import FaqPage from "./pages/FaqPage";
-import SolutionFinder from "./pages/SolutionFinder";
-import SolutionsIndexPage from "./pages/SolutionsIndexPage";
-import SolutionsCategoryPage from "./pages/SolutionsCategoryPage";
+const BlogListPage = React.lazy(() => import("./pages/BlogListPage"));
+const BlogPostPage = React.lazy(() => import("./pages/BlogPostPage"));
+const FaqPage = React.lazy(() => import("./pages/FaqPage"));
+const SolutionFinder = React.lazy(() => import("./pages/SolutionFinder"));
+const SolutionsIndexPage = React.lazy(() => import("./pages/SolutionsIndexPage"));
+const SolutionsCategoryPage = React.lazy(() => import("./pages/SolutionsCategoryPage"));
 
 const MeRedirect = () => {
   const { user, loading } = useAuth();
@@ -98,6 +100,7 @@ const AppRouter = () => {
   return (
     <>
       <RouteTracker />
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-pulse text-muted-foreground font-mono text-sm">Loading...</div></div>}>
       <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/dead-tool-detector" element={<DeadToolDetector />} />
@@ -143,6 +146,7 @@ const AppRouter = () => {
       <Route path="/preferences" element={<PreferencesPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
     </>
   );
 };

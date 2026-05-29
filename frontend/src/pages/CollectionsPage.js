@@ -35,7 +35,7 @@ export default function CollectionsPage() {
         path="/collections"
       />
       <Header />
-      <main className="py-12 px-4 flex-1">
+      <main id="main-content" className="py-12 px-4 flex-1">
         <div className="max-w-5xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-2" data-testid="collections-title">
             Collections

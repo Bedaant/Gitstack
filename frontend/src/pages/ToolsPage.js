@@ -107,7 +107,7 @@ export default function ToolsPage() {
         path="/tools"
       />
       <Header />
-      <main className="py-12 px-4 flex-1">
+      <main id="main-content" className="py-12 px-4 flex-1">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-end justify-between mb-2">
             <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tight" data-testid="tools-page-title">

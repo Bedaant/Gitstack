@@ -127,7 +127,7 @@ export default function FaqPage() {
       />
       <Header />
 
-      <main className="max-w-3xl mx-auto px-4 py-16">
+      <main id="main-content" className="max-w-3xl mx-auto px-4 py-16">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
           <p className="text-lg text-muted-foreground">

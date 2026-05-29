@@ -476,7 +476,7 @@ export default function StackGenerator() {
         }}
       />
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-primary border-4 border-foreground neo-shadow-lg mb-6">

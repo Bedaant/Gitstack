@@ -102,7 +102,7 @@ export default function MarketplacePage() {
         description="Buy indie dev tools as a one-time purchase. SaaS alternatives, MCP servers, templates, and more — pay once, own forever."
       />
       <Header />
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         <section className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
             <div>

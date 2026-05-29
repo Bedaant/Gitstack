@@ -61,7 +61,7 @@ export default function CollectionDetailPage() {
         path={`/collections/${collectionId}`}
       />
       <Header />
-      <main className="py-12 px-4">
+      <main id="main-content" className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
           <button onClick={() => navigate('/collections')} className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground mb-6" data-testid="back-to-collections">
             <ArrowLeft className="w-4 h-4" /> Back to Collections
