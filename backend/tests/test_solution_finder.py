@@ -96,7 +96,7 @@ def test_local_db_hit_only():
     ]
 
     with patch("server.db.github_repos.find", return_value=_make_async_cursor(docs)):
-        with patch("server.call_gemini") as mock_gemini:
+        with patch("server.call_ai") as mock_gemini:
             mock_gemini.return_value = '{"keywords": ["crm"], "github_query": "crm open source", "intent_summary": "CRM tool for managing customer relationships"}'
             response = client.post("/api/ai/solution-finder", json={"query": "crm local", "limit": 3})
 
@@ -105,7 +105,7 @@ def test_local_db_hit_only():
     assert data["layer_used"] == "local_db"
     assert len(data["solutions"]) == 3
     assert all(s["match_source"] == "local_db" for s in data["solutions"])
-    assert data["intent_source"] in ("gemini", "gemini_cached")
+    assert data["intent_source"] in ("ai", "ai_cached")
 
 
 def test_layer_2_fallback():
@@ -147,7 +147,7 @@ def test_layer_2_fallback():
         _make_async_cursor(local_docs),  # local_query
         _make_async_cursor([]),           # unclassified_query
     ]):
-        with patch("server.call_gemini") as mock_gemini:
+        with patch("server.call_ai") as mock_gemini:
             mock_gemini.return_value = '{"keywords": ["crm"], "github_query": "crm open source", "intent_summary": "CRM tool for managing customer relationships"}'
 
             with patch("server._get_httpx_client") as mock_get_client:
@@ -186,7 +186,7 @@ def test_layer_3_fallback():
         _make_async_cursor([]),  # local_query
         _make_async_cursor([]),  # unclassified_query
     ]):
-        with patch("server.call_gemini") as mock_gemini:
+        with patch("server.call_ai") as mock_gemini:
             mock_gemini.side_effect = [
                 '{"keywords": ["crm"], "github_query": "crm open source", "intent_summary": "CRM tool for managing customer relationships"}',  # intent parsing
                 fake_gemini_discover,  # discovery
@@ -213,7 +213,7 @@ def test_layer_3_fallback():
 def test_empty_all_layers():
     """All layers return nothing — graceful empty response."""
     with patch("server.db.github_repos.find", return_value=_make_async_cursor([])):
-        with patch("server.call_gemini") as mock_gemini:
+        with patch("server.call_ai") as mock_gemini:
             mock_gemini.side_effect = [
                 '{"keywords": ["xyz123"], "github_query": "xyz123", "intent_summary": "Unknown tool"}',
                 '[]',
@@ -232,7 +232,7 @@ def test_empty_all_layers():
     assert data["total"] == 0
 
 
-def test_gemini_intent_fallback():
+def test_ai_intent_fallback():
     """When Gemini intent parsing fails, the endpoint falls back to raw keywords."""
     docs = [
         {
@@ -250,8 +250,8 @@ def test_gemini_intent_fallback():
     ]
 
     with patch("server.db.github_repos.find", return_value=_make_async_cursor(docs)):
-        with patch("server.call_gemini") as mock_gemini:
-            mock_gemini.side_effect = Exception("Gemini is down")
+        with patch("server.call_ai") as mock_gemini:
+            mock_gemini.side_effect = Exception("AI is down")
             response = client.post("/api/ai/solution-finder", json={"query": "crm fallback", "limit": 3})
 
     assert response.status_code == 200

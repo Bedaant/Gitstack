@@ -44,7 +44,7 @@ def override_admin():
     app.dependency_overrides.pop(require_admin, None)
 
 
-@patch("server.call_gemini")
+@patch("server.call_ai")
 def test_blog_auto_generate_success(mock_gemini):
     """Admin with recent repos should get a generated blog post."""
     _seed_recent_repos()
@@ -77,8 +77,8 @@ def test_blog_auto_generate_no_repos():
     assert "No newly classified repos" in response.json()["detail"]
 
 
-@patch("server.call_gemini")
-def test_blog_auto_generate_gemini_fails(mock_gemini):
+@patch("server.call_ai")
+def test_blog_auto_generate_ai_fails(mock_gemini):
     """Gemini failure should return 500."""
     _seed_recent_repos()
 

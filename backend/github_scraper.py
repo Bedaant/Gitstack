@@ -18,11 +18,66 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from bs4 import BeautifulSoup
-from google import genai
-from google.genai import types
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+async def call_ai_scraper(prompt: str, json_response: bool = False) -> str:
+    """NVIDIA NIM + Groq fallback for scraper (avoids circular import with server.py)."""
+    last_error = None
+
+    nvidia_key = os.environ.get("NVIDIA_NIM_API_KEY")
+    if nvidia_key:
+        try:
+            url = "https://integrate.api.nvidia.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {nvidia_key}", "Content-Type": "application/json"}
+            messages = [
+                {"role": "system", "content": "You are a developer trend analyst. Return only valid JSON arrays."},
+                {"role": "user", "content": prompt}
+            ]
+            payload = {
+                "model": "meta/llama-3.3-70b-instruct",
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 4096
+            }
+            if json_response:
+                payload["response_format"] = {"type": "json_object"}
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                return response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            last_error = e
+            logger.warning(f"NVIDIA NIM scraper failed: {e}")
+
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key:
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+            messages = [
+                {"role": "system", "content": "You are a developer trend analyst. Return only valid JSON arrays."},
+                {"role": "user", "content": prompt}
+            ]
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 4096
+            }
+            if json_response:
+                payload["response_format"] = {"type": "json_object"}
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                return response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            last_error = e
+            logger.error(f"Groq scraper fallback failed: {e}")
+
+    raise Exception(f"All AI providers failed for scraper. Last error: {last_error}")
+
 
 # GitHub API config
 GITHUB_API = "https://api.github.com"
@@ -520,16 +575,7 @@ Return ONLY a valid JSON array (no markdown, no explanation):
 Only return clusters that are genuinely distinct trends with clear evidence in the repo list above. If fewer than 3 emerge clearly, return fewer."""
 
         try:
-            client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-            response = await client.aio.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction="You are a developer trend analyst. Return only valid JSON arrays.",
-                    response_mime_type="application/json"
-                )
-            )
-            raw = response.text.strip()
+            raw = await call_ai_scraper(prompt, json_response=True)
             # Strip markdown if present
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -906,16 +952,7 @@ Return ONLY a valid JSON array (no markdown) with one object per repo:
 }}}}]"""
 
             try:
-                client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-                response = await client.aio.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction="You classify GitHub repos. Return only valid JSON arrays.",
-                        response_mime_type="application/json"
-                    )
-                )
-                raw = response.text.strip()
+                raw = await call_ai_scraper(prompt, json_response=True)
                 if raw.startswith("```"):
                     raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
                 classifications = json.loads(raw)

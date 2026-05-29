@@ -6,7 +6,7 @@ Targets repos with the most stars first (these are what users see).
 Usage:
     cd backend && python scripts/classify_top_repos.py --limit 300
 
-Requires GEMINI_API_KEY env var.
+Requires GROQ_API_KEY or NVIDIA_NIM_API_KEY env var.
 """
 import os
 import sys
@@ -16,10 +16,59 @@ import argparse
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-from google import genai
-from google.genai import types
+import httpx
 
 load_dotenv()
+
+async def _call_ai_script(prompt: str, json_response: bool = False) -> str:
+    """Call Groq or NVIDIA NIM for repo classification script."""
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key:
+        try:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": "You classify GitHub repos. Return only valid JSON arrays."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 4096
+            }
+            if json_response:
+                payload["response_format"] = {"type": "json_object"}
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                return response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"  Groq failed: {e}")
+
+    nvidia_key = os.environ.get("NVIDIA_NIM_API_KEY")
+    if nvidia_key:
+        try:
+            url = "https://integrate.api.nvidia.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {nvidia_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "meta/llama-3.3-70b-instruct",
+                "messages": [
+                    {"role": "system", "content": "You classify GitHub repos. Return only valid JSON arrays."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 4096
+            }
+            if json_response:
+                payload["response_format"] = {"type": "json_object"}
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                return response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"  NVIDIA NIM failed: {e}")
+
+    raise Exception("All AI providers failed for classification script")
 
 # Config
 CLASSIFICATION_MIN_STARS = 50  # Lowered: even mid-size repos deserve labels
@@ -59,8 +108,8 @@ def calculate_health_score(repo: dict) -> int:
     return min(score, 100)
 
 
-async def classify_batch(batch: list, client, db) -> int:
-    """Classify one batch of repos using Gemini."""
+async def classify_batch(batch: list, db) -> int:
+    """Classify one batch of repos using AI."""
     batch_summaries = []
     for r in batch:
         topics_str = ", ".join(r.get("topics", [])[:8])
@@ -101,15 +150,7 @@ Return ONLY a valid JSON array (no markdown) with one object per repo:
 }}]"""
 
     try:
-        response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction="You classify GitHub repos. Return only valid JSON arrays.",
-                response_mime_type="application/json"
-            )
-        )
-        raw = response.text.strip()
+        raw = await _call_ai_script(prompt, json_response=True)
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
         classifications = json.loads(raw)
@@ -159,16 +200,15 @@ async def main():
 
     mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017/gitstack")
     db_name = os.environ.get("DB_NAME", "gitstack")
-    gemini_key = os.environ.get("GEMINI_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY")
+    nvidia_key = os.environ.get("NVIDIA_NIM_API_KEY")
 
-    if not gemini_key:
-        print("❌ GEMINI_API_KEY not set")
+    if not groq_key and not nvidia_key:
+        print("❌ GROQ_API_KEY or NVIDIA_NIM_API_KEY not set")
         sys.exit(1)
 
     client = AsyncIOMotorClient(mongo_url, maxPoolSize=10)
     db = client[db_name]
-    gemini_client = genai.Client(api_key=gemini_key)
-
     # Count current state
     total = await db.github_repos.count_documents({})
     unclassified = await db.github_repos.count_documents({"repo_type": None})
@@ -196,7 +236,7 @@ async def main():
         batch = repos[i:i + BATCH_SIZE]
         print(f"\nBatch {i // BATCH_SIZE + 1}/{(len(repos) + BATCH_SIZE - 1) // BATCH_SIZE} ({len(batch)} repos)")
 
-        classified = await classify_batch(batch, gemini_client, db)
+        classified = await classify_batch(batch, db)
         total_classified += classified
         print(f"   Classified {classified}/{len(batch)}")
 

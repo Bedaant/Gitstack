@@ -23,8 +23,6 @@ from xml.sax.saxutils import escape as xml_escape
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
-from google import genai
-from google.genai import types
 from bs4 import BeautifulSoup
 import jwt
 from jwt import PyJWKClient
@@ -78,10 +76,6 @@ logger.add(sys.stderr, format="{time:YYYY-MM-DD at HH:mm:ss!UTC} | {level} | {me
 # MongoDB & AI Config (Robust Initialization)
 mongo_url = os.environ.get('MONGO_URL')
 db_name = os.environ.get('DB_NAME', 'gitstack')
-gemini_key = os.environ.get("GEMINI_API_KEY")
-# Cached Gemini client (singleton)
-_gemini_client = None
-
 clerk_jwks_url = os.environ.get('CLERK_JWKS_URL')
 cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000')
 
@@ -105,12 +99,16 @@ try:
         db = client[db_name]
         print(f"[OK] MongoDB client initialized for {db_name} (pool: 10-50)")
 
-    if gemini_key:
-        # genai configuration uses Client now, we will instantiate it where needed
-# client = genai.Client(api_key=gemini_key)
-        print("[OK] Gemini AI configured")
+    nvidia_key = os.environ.get("NVIDIA_NIM_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key:
+        print("[OK] Groq configured")
     else:
-        print("[WARN] GEMINI_API_KEY is missing")
+        print("[WARN] GROQ_API_KEY is missing")
+    if nvidia_key:
+        print("[OK] NVIDIA NIM configured")
+    else:
+        print("[WARN] NVIDIA_NIM_API_KEY is missing")
 
 except Exception as e:
     print(f"[PRE-BOOT ERROR] {str(e)}")
@@ -480,112 +478,95 @@ async def require_admin(request: Request) -> UserModel:
 
 # ==================== AI HELPERS ====================
 
-# Discovered at startup from Gemini API — avoids hardcoding models that return 404
-_available_gemini_models: list[str] = []
+async def call_nvidia(prompt: str, json_response: bool = False) -> str:
+    """Call NVIDIA NIM API (Llama 3.3 70B) — fallback AI provider."""
+    nvidia_key = os.environ.get("NVIDIA_NIM_API_KEY")
+    if not nvidia_key:
+        raise Exception("NVIDIA_NIM_API_KEY not configured")
 
-async def _discover_gemini_models() -> list[str]:
-    """Query Gemini API for available models that support generateContent."""
-    global _available_gemini_models
-    if not gemini_key:
-        logger.warning("No GEMINI_API_KEY set — skipping model discovery")
-        return []
-    try:
-        client = genai.Client(api_key=gemini_key)
-        models = client.models.list()
-        available = []
-        for m in models:
-            name = m.name
-            # Model names come as "models/gemini-xxx" — strip prefix
-            if name.startswith("models/"):
-                name = name[7:]
-            methods = getattr(m, "supported_generation_methods", []) or []
-            if "generateContent" in methods and "gemini" in name.lower():
-                available.append(name)
-        # Prefer gemini-2.5-flash, then gemini-2.0-flash, then anything flash, then pro
-        def _sort_key(m: str) -> int:
-            if "2.5-flash" in m:
-                return 0
-            if "2.0-flash" in m:
-                return 1
-            if "flash" in m.lower():
-                return 2
-            if "pro" in m.lower():
-                return 3
-            return 4
-        available.sort(key=_sort_key)
-        _available_gemini_models = available
-        logger.info(f"Discovered {len(available)} Gemini models: {available}")
-        return available
-    except Exception as e:
-        logger.warning(f"Gemini model discovery failed: {e}")
-        return []
+    url = "https://integrate.api.nvidia.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {nvidia_key}",
+        "Content-Type": "application/json"
+    }
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools."},
+        {"role": "user", "content": prompt}
+    ]
+    payload = {
+        "model": "meta/llama-3.3-70b-instruct",
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
+    if json_response:
+        payload["response_format"] = {"type": "json_object"}
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
 
 
-def _is_model_not_found_error(e: Exception) -> bool:
-    """Check if exception is a 404 NOT_FOUND for the model."""
-    err = str(e)
-    return "NOT_FOUND" in err or "is not found for API version" in err or "'code': 404" in err
+async def call_groq(prompt: str, json_response: bool = False) -> str:
+    """Primary AI provider — Groq (Llama 3.3 70B). Extremely fast inference."""
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if not groq_key:
+        raise Exception("GROQ_API_KEY not configured")
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {groq_key}",
+        "Content-Type": "application/json"
+    }
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools."},
+        {"role": "user", "content": prompt}
+    ]
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
+    if json_response:
+        payload["response_format"] = {"type": "json_object"}
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
 
 
-def _is_rate_limit_error(e: Exception) -> bool:
-    """Check if exception is a 429 rate limit / spending cap."""
-    err = str(e)
-    return (
-        "RESOURCE_EXHAUSTED" in err
-        or "exceeded its monthly spending cap" in err
-        or "rate limit" in err.lower()
-        or "quota" in err.lower()
-    )
+def normalize_ai_json(data):
+    """Extract actual payload from AI JSON responses.
+    Models wrapped in json_object mode often wrap arrays in {"tools": [...]} etc."""
+    if isinstance(data, dict):
+        for key in ["tools", "result", "data", "alternatives", "similar_projects", "projects", "items", "recommendations"]:
+            if key in data:
+                return data[key]
+    return data
 
 
-async def call_gemini(prompt: str, json_response: bool = False) -> str:
-    global _gemini_client
-    if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=gemini_key)
-
-    # Use discovered models if available; otherwise fallback to known working model
-    if _available_gemini_models:
-        model_variants = _available_gemini_models.copy()
-    else:
-        model_variants = ["gemini-2.5-flash"]
-
+async def call_ai(prompt: str, json_response: bool = False) -> str:
+    """Try Groq first (fast), then fall back to NVIDIA NIM for reliability."""
     last_error = None
-    for model_name in model_variants:
-        try:
-            config = types.GenerateContentConfig(
-                system_instruction="You are a helpful assistant for GitStack, a platform helping non-technical founders discover GitHub tools.",
-                response_mime_type="application/json" if json_response else "text/plain",
-            )
-            response = await asyncio.wait_for(
-                _gemini_client.aio.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=config
-                ),
-                timeout=60  # 60 second timeout per model attempt
-            )
-            return response.text
-        except asyncio.TimeoutError:
-            logger.warning(f"Gemini model {model_name} timed out")
-            last_error = asyncio.TimeoutError("Gemini API timeout")
-        except Exception as e:
-            last_error = e
-            if _is_rate_limit_error(e):
-                logger.error(f"Gemini model {model_name} rate limited: {e}")
-                # Don't try other models for rate limits — they'll fail too
-                break
-            elif _is_model_not_found_error(e):
-                logger.warning(f"Gemini model {model_name} not found (404), skipping")
-            else:
-                logger.warning(f"Gemini model {model_name} failed: {e}")
-            continue
 
-    logger.error(f"All Gemini models failed. Last error: {last_error}")
-    if last_error and _is_rate_limit_error(last_error):
-        raise HTTPException(
-            status_code=429,
-            detail="Gemini API rate limit reached. Please increase your spending cap at https://ai.studio/spend or try again later."
-        )
+    try:
+        return await call_groq(prompt, json_response=json_response)
+    except Exception as e:
+        last_error = e
+        logger.warning(f"Groq failed: {e}")
+
+    try:
+        logger.info("Groq failed. Falling back to NVIDIA NIM...")
+        return await call_nvidia(prompt, json_response=json_response)
+    except Exception as e:
+        logger.error(f"NVIDIA NIM fallback also failed: {e}")
+
+    logger.error(f"All AI providers failed. Last error: {last_error}")
     raise HTTPException(status_code=503, detail="AI service temporarily unavailable. Please try again.")
 
 # ==================== AUTH ROUTES ====================
@@ -1230,7 +1211,7 @@ Return ONLY a valid JSON array with this exact structure (no markdown, no explan
 
 Be accurate with real GitHub repositories. Calculate realistic cost estimates."""
 
-    result = await call_gemini(prompt, json_response=True)
+    result = await call_ai(prompt, json_response=True)
     try:
         import json
         # Clean up response if it has markdown
@@ -1281,7 +1262,7 @@ Return ONLY a valid JSON array (no markdown):
 
 Put tools in the order they should be set up. Use real GitHub repositories."""
     try:
-        result = await call_gemini(prompt, json_response=True)
+        result = await call_ai(prompt, json_response=True)
     except Exception as e:
         logger.error(f"Stack Gen Gemini Error: {e}")
         return {"stack": [], "error": "AI service temporarily unavailable. Please try again."}
@@ -1607,7 +1588,7 @@ TONE & FORMATTING:
 - Return ONLY the raw master prompt text. Do NOT wrap it in markdown code blocks. Do NOT add introductory or concluding remarks. Just the raw, copy-pasteable prompt string."""
 
     try:
-        result = await call_gemini(prompt, json_response=False)
+        result = await call_ai(prompt, json_response=False)
         return {"prompt": result.strip()}
     except Exception as e:
         logger.error(f"Master prompt generation failed: {e}")
@@ -1657,7 +1638,7 @@ async def solution_finder(request: Request, req: SolutionFinderRequest):
     # Call Gemini FIRST to understand what the user actually wants,
     # then use its precise keywords for Layer 1 DB search.
     intent_cache_key = f"solution_finder_intent:{hashlib.md5(query.encode(), usedforsecurity=False).hexdigest()}"
-    gemini_keywords = []
+    ai_keywords = []
     github_query = query
     intent_summary = ""
     intent_source = "raw_fallback"
@@ -1668,15 +1649,15 @@ async def solution_finder(request: Request, req: SolutionFinderRequest):
         cached_intent = await backend.get(intent_cache_key)
         if cached_intent:
             parsed_intent = _json.loads(cached_intent)
-            gemini_keywords = parsed_intent.get("keywords", [])
+            ai_keywords = parsed_intent.get("keywords", [])
             github_query = parsed_intent.get("github_query", query)
             intent_summary = parsed_intent.get("intent_summary", "")
-            intent_source = "gemini_cached"
+            intent_source = "ai_cached"
     except Exception:
         pass
 
     # If no cached intent, call Gemini
-    if not gemini_keywords:
+    if not ai_keywords:
         try:
             intent_prompt = f"""You are a search intent analyzer for an open-source tool discovery platform.
 
@@ -1694,35 +1675,35 @@ Analyze what the user actually wants and return a JSON object with:
 3. "intent_summary": One sentence describing what the user wants
 
 Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": "..."}}"""
-            intent_result = await call_gemini(intent_prompt, json_response=True)
+            intent_result = await call_ai(intent_prompt, json_response=True)
             cleaned = intent_result.strip()
             if cleaned.startswith("```"):
                 cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
             parsed = _json.loads(cleaned)
-            gemini_keywords = [k.lower() for k in parsed.get("keywords", [])]
+            ai_keywords = [k.lower() for k in parsed.get("keywords", [])]
             github_query = parsed.get("github_query", query)
             intent_summary = parsed.get("intent_summary", "")
-            intent_source = "gemini"
+            intent_source = "ai"
 
             # Cache the intent result (5 min TTL)
             try:
                 backend = FastAPICache.get_backend()
                 await backend.set(
                     intent_cache_key,
-                    _json.dumps({"keywords": gemini_keywords, "github_query": github_query, "intent_summary": intent_summary}),
+                    _json.dumps({"keywords": ai_keywords, "github_query": github_query, "intent_summary": intent_summary}),
                     expire=300,
                 )
             except Exception:
                 pass
         except Exception as e:
-            logger.warning(f"Gemini intent parsing failed, using raw keywords: {e}")
+            logger.warning(f"AI intent parsing failed, using raw keywords: {e}")
 
     # --- Step 1: Raw keyword extraction (fallback) ---
     raw_words = [w.strip() for w in query.lower().split() if len(w.strip()) > 2]
 
     # Use Gemini keywords if available, else raw words
-    if gemini_keywords:
-        keywords = gemini_keywords[:6]
+    if ai_keywords:
+        keywords = ai_keywords[:6]
     else:
         keywords = raw_words[:5]
 
@@ -1891,7 +1872,7 @@ Only include repos that:
 - Are complete, deployable solutions (not libraries or SDKs)
 
 Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence why it fits"}}]"""
-            discover_result = await call_gemini(discover_prompt, json_response=True)
+            discover_result = await call_ai(discover_prompt, json_response=True)
             cleaned = discover_result.strip()
             if cleaned.startswith("```"):
                 cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -2066,7 +2047,7 @@ Explain it simply. Return in this exact Markdown format:
 
 Keep language simple. No jargon. Focus on outcomes, not technology."""
 
-    result = await call_gemini(prompt)
+    result = await call_ai(prompt)
     return {"translation": result}
 
 @api_router.post("/ai/error-explainer")
@@ -2092,7 +2073,7 @@ Explain this error in plain English like you're talking to a friend who doesn't 
 
 Keep it extremely simple. No technical jargon. Be friendly and reassuring."""
 
-    result = await call_gemini(prompt)
+    result = await call_ai(prompt)
     return {"explanation": result}
 
 @api_router.post("/ai/roast-my-stack")
@@ -2119,7 +2100,7 @@ Return in this exact Markdown format:
 
 Be direct and slightly savage, but constructive. This is meant to be fun but genuinely helpful."""
 
-    result = await call_gemini(prompt)
+    result = await call_ai(prompt)
     return {"roast": result}
 
 @api_router.get("/ai/translate-repo/{owner}/{repo}")
@@ -2208,7 +2189,7 @@ Provide a complete analysis in this exact format:
 
 Keep it extremely simple. Focus on how this open-source tool allows the founder to build without paying high monthly SaaS fees. No technical jargon. Use plain English."""
 
-    translation = await call_gemini(prompt)
+    translation = await call_ai(prompt)
 
     # Parse difficulty from translation
     difficulty = "Intermediate"
@@ -2280,7 +2261,7 @@ Return ONLY a valid JSON array (no markdown):
 
 Be accurate with REAL GitHub repositories that actually exist. Focus on popular, well-maintained projects."""
 
-    result = await call_gemini(prompt, json_response=True)
+    result = await call_ai(prompt, json_response=True)
     try:
         import json
         cleaned = result.strip()
@@ -2319,7 +2300,7 @@ async def compare_tools(req: ComparisonRequest):
     Structure the response with markdown tables where possible. Keep it concise and use founder-friendly terms."""
 
     try:
-        comparison = await call_gemini(prompt)
+        comparison = await call_ai(prompt)
         return {"comparison": comparison, "tool1": t1, "tool2": t2}
     except Exception as e:
         logger.error(f"Comparison error: {e}")
@@ -2448,7 +2429,7 @@ Write an engaging, plain-English summary:
 
 Make it exciting and accessible to non-technical people!"""
 
-        translation = await call_gemini(prompt)
+        translation = await call_ai(prompt)
 
         result = {
             "date": today,
@@ -3013,19 +2994,12 @@ async def smart_search(req: SmartSearchRequest):
     # 1. Parse query with AI
     parsed_query = {"keywords": req.query.lower().split(), "intent": "search"}
     try:
-        client = genai.Client(api_key=gemini_key)
         prompt = f"""Parse this search: "{req.query}"
 Return ONLY JSON (no markdown):
 {{"keywords": ["word1", "word2"], "categories": ["ai", "saas"], "github_query": "optimized search for open source tools", "alternative_to": "paid tool name if possible"}}"""
-        response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction="Parse search queries for GitHub tools."
-            )
-        )
+        response = await call_ai(prompt, json_response=True)
         import json
-        cleaned = response.text.strip()
+        cleaned = response.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
         parsed_query = json.loads(cleaned)
@@ -4631,21 +4605,15 @@ Pick exactly 6 tools from the numbered list above that the user would likely fin
 Return ONLY a JSON array of the EXACT tool names from the list (no extra text), e.g.: ["Exact Tool Name 1", "Exact Tool Name 2", ...]"""
 
     recommended_names = []
-    for model_name in ["gemini-2.5-flash"]:
-        try:
-            client = genai.Client(api_key=gemini_key)
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
-            text = response.text.strip()
-            import re, json
-            match = re.search(r'\[.*?\]', text, re.DOTALL)
-            if match:
-                recommended_names = json.loads(match.group())
-                break
-        except Exception:
-            continue
+    try:
+        response = await call_ai(prompt)
+        text = response.strip()
+        import re, json
+        match = re.search(r'\[.*?\]', text, re.DOTALL)
+        if match:
+            recommended_names = json.loads(match.group())
+    except Exception:
+        pass
 
     # Map names back to full tool docs (exact match first, then fuzzy)
     available_by_name = {t["name"].lower(): t["tool_id"] for t in available}
@@ -5951,7 +5919,7 @@ Format the output as JSON with these exact keys:
 Return ONLY the JSON object, no markdown code blocks."""
 
     try:
-        result = await call_gemini(prompt, json_response=True)
+        result = await call_ai(prompt, json_response=True)
         import json as _json
         cleaned = result.strip()
         if cleaned.startswith("```"):

@@ -82,10 +82,11 @@ Create `/backend/.env`:
 MONGO_URL=mongodb+srv://... (Your Atlas URL)
 DB_NAME=gitstack
 CORS_ORIGINS=*
-GEMINI_API_KEY=your_gemini_key_here
+NVIDIA_NIM_API_KEY=nvapi-your_nvidia_key_here
+GROQ_API_KEY=gsk-your_groq_key_here
 ```
 
-> **Note:** The `GEMINI_API_KEY` powers all AI features (Stack Generator, Comparison Engine, Dead Tool Detector, Repo Translator, Roast My Stack, Idea Exists). Get one for free at [Google AI Studio](https://aistudio.google.com/).
+> **Note:** AI features use NVIDIA NIM (primary) and Groq (fallback). Get free keys at [build.nvidia.com](https://build.nvidia.com) and [console.groq.com](https://console.groq.com).
 >
 > Without this key, the app still works for browsing/searching tools — only AI features will fail.
 

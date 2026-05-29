@@ -926,7 +926,9 @@ services:
         value: 3.11.0
       - key: MONGO_URL
         sync: false
-      - key: GEMINI_API_KEY
+      - key: NVIDIA_NIM_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
         sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
@@ -976,7 +978,8 @@ MONGO_URL=mongodb+srv://user:pass@cluster.mongodb.net/gitstack
 DB_NAME=gitstack
 
 # AI
-GEMINI_API_KEY=your_gemini_api_key
+NVIDIA_NIM_API_KEY=nvapi-your_nvidia_key_here
+GROQ_API_KEY=gsk-your_groq_key_here
 
 # GitHub
 GITHUB_TOKEN=ghp_your_token
