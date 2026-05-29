@@ -244,9 +244,6 @@ async def lifespan(_app: FastAPI):
     _scraper_task = asyncio.create_task(_scraper_loop())
     logger.info("Background scraper scheduled (every 6 hours)")
 
-    # Discover available Gemini models (avoids 404s from hardcoded model names)
-    asyncio.create_task(_discover_gemini_models())
-
     # Seed only if DB is empty (fast boot)
     asyncio.create_task(_maybe_seed())
 
