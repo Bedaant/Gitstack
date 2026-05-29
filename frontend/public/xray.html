@@ -2817,7 +2817,7 @@ function buildGitHubApiUrl(segments,query){
     var path=segments.filter(function(segment){return segment!==undefined&&segment!==null&&segment!=='';}).map(function(segment){
         return encodeURIComponent(String(segment));
     }).join('/');
-    var url='https://api.github.com/'+path;
+    var url='/api/github-proxy/'+path;
     if(!query)return url;
     var params=new URLSearchParams();
     Object.keys(query).forEach(function(key){

@@ -4255,6 +4255,45 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+# ==================== GITHUB PROXY (for Repo X-Ray) ====================
+
+@api_router.api_route("/github-proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"])
+@limiter.limit("60/minute")
+async def github_proxy(request: Request, path: str):
+    """Transparent proxy to GitHub API — injects GITHUB_TOKEN so Repo X-Ray doesn't hit rate limits."""
+    import httpx
+    url = f"https://api.github.com/{path}"
+    if request.query_params:
+        url += "?" + str(request.query_params)
+
+    headers = {
+        "Accept": request.headers.get("Accept", "application/vnd.github.v3+json"),
+        "User-Agent": "GitStack",
+    }
+    # Use server token by default
+    if GITHUB_HEADERS.get("Authorization"):
+        headers["Authorization"] = GITHUB_HEADERS["Authorization"]
+    # Allow client to override with their own token
+    client_auth = request.headers.get("Authorization")
+    if client_auth:
+        headers["Authorization"] = client_auth
+
+    method = request.method
+    body = await request.body() if method in ("POST", "PUT", "PATCH") else None
+
+    client = await _get_httpx_client()
+    try:
+        response = await client.request(method, url, headers=headers, content=body, follow_redirects=True)
+    except Exception as e:
+        logger.error(f"GitHub proxy error: {e}")
+        raise HTTPException(status_code=502, detail="GitHub API unreachable")
+
+    return Response(
+        content=response.content,
+        status_code=response.status_code,
+        headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-encoding", "transfer-encoding")},
+    )
+
 # ==================== ACTIVITY & RECOMMENDATIONS ====================
 
 @api_router.post("/activity")
