@@ -4866,10 +4866,12 @@ async def upload_private_to_r2(file_bytes: bytes, original_filename: str, folder
     )
     return key
 
-async def upload_public_image_to_r2(file_bytes: bytes, original_filename: str, folder: str) -> str:
+async def upload_public_image_to_r2(file_bytes: bytes, original_filename: str, folder: str, max_size_mb: int = 5) -> str:
     ext = (original_filename.rsplit(".", 1)[-1] or "png").lower()
     if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
         raise HTTPException(status_code=400, detail="Only JPG, PNG, WebP, GIF images are allowed")
+    if len(file_bytes) > max_size_mb * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Image must be under {max_size_mb} MB")
     key = f"public/{folder}/{uuid.uuid4()}.{ext}"
     content_type_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
                         "webp": "image/webp", "gif": "image/gif"}
@@ -5134,6 +5136,7 @@ async def delete_product(product_id: str, request: Request):
 # ---- Screenshot Upload (Task 9) ----
 
 @api_router.post("/marketplace/products/{product_id}/screenshots")
+@limiter.limit("20/minute")
 async def upload_screenshot(product_id: str, request: Request, file: UploadFile = File(...)):
     user = await get_current_user(request)
     if not user:
@@ -5169,6 +5172,7 @@ async def delete_screenshot(product_id: str, url: str, request: Request):
 # ---- ZIP Upload (Task 10) ----
 
 @api_router.post("/marketplace/products/{product_id}/upload")
+@limiter.limit("10/minute")
 async def upload_product_zip(product_id: str, request: Request, file: UploadFile = File(...)):
     user = await get_current_user(request)
     if not user:
@@ -5423,10 +5427,17 @@ async def razorpay_webhook(request: Request):
         payment = event.get("payload", {}).get("payment", {}).get("entity", {})
         order_id = payment.get("order_id")
         payment_id = payment.get("id")
-        if order_id:
-            purchase = await db.marketplace_purchases.find_one({"razorpay_order_id": order_id})
-            if purchase:
-                await _complete_purchase(purchase, payment_id)
+        if order_id and payment_id:
+            # Idempotency: skip if already processed
+            existing = await db.marketplace_purchases.find_one({
+                "razorpay_order_id": order_id,
+                "razorpay_payment_id": payment_id,
+                "status": "completed"
+            })
+            if not existing:
+                purchase = await db.marketplace_purchases.find_one({"razorpay_order_id": order_id})
+                if purchase:
+                    await _complete_purchase(purchase, payment_id)
     return {"ok": True}
 
 # ---- Buyer Purchases & Download (Task 15) ----
