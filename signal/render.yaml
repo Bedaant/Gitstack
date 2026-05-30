@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: claude-signal-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    rootDir: signal
+    envVars:
+      - key: PORT
+        value: 8000
+    healthCheckPath: /health
