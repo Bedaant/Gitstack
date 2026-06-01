@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks, UploadFile, File, Query
 from fastapi.responses import RedirectResponse
 from fastapi.responses import JSONResponse
 import json
@@ -39,7 +39,10 @@ from email_jobs import send_daily_drop
 from onboarding_drip import run_onboarding_drip, send_onboarding_email
 
 # ── Email Token Helpers (for unsubscribe/preferences magic links) ──
-EMAIL_TOKEN_SECRET = os.environ.get("EMAIL_TOKEN_SECRET", os.environ.get("SMTP_PASSWORD", "dev-secret-change-me"))
+EMAIL_TOKEN_SECRET = os.environ.get("EMAIL_TOKEN_SECRET") or os.environ.get("SMTP_PASSWORD")
+if not EMAIL_TOKEN_SECRET:
+    logger.critical("EMAIL_TOKEN_SECRET or SMTP_PASSWORD must be set")
+    sys.exit(1)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://gitstack.pro")
 
 def _generate_email_token(email: str) -> str:
@@ -83,35 +86,37 @@ cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000')
 client = None
 db = None
 
+if not mongo_url:
+    logger.critical("MONGO_URL is not set. Shutting down.")
+    sys.exit(1)
+
 try:
-    if not mongo_url:
-        print("[CRITICAL ERROR] MONGO_URL is not set!")
-    else:
-        # Connection pooling for scale (max 50 connections, keep 10 warm)
-        client = AsyncIOMotorClient(
-            mongo_url,
-            serverSelectionTimeoutMS=5000,
-            maxPoolSize=50,
-            minPoolSize=10,
-            maxIdleTimeMS=45000,
-            waitQueueTimeoutMS=5000,
-        )
-        db = client[db_name]
-        print(f"[OK] MongoDB client initialized for {db_name} (pool: 10-50)")
+    # Connection pooling for scale (max 50 connections, keep 10 warm)
+    client = AsyncIOMotorClient(
+        mongo_url,
+        serverSelectionTimeoutMS=5000,
+        maxPoolSize=50,
+        minPoolSize=10,
+        maxIdleTimeMS=45000,
+        waitQueueTimeoutMS=5000,
+    )
+    db = client[db_name]
+    print(f"[OK] MongoDB client initialized for {db_name} (pool: 10-50)")
 
     nvidia_key = os.environ.get("NVIDIA_NIM_API_KEY")
     groq_key = os.environ.get("GROQ_API_KEY")
     if groq_key:
         print("[OK] Groq configured")
     else:
-        print("[WARN] GROQ_API_KEY is missing")
+        print("[WARN] GROQ_API_KEY is missing — AI features will fall back to NVIDIA NIM or fail")
     if nvidia_key:
         print("[OK] NVIDIA NIM configured")
     else:
         print("[WARN] NVIDIA_NIM_API_KEY is missing")
 
 except Exception as e:
-    print(f"[PRE-BOOT ERROR] {str(e)}")
+    logger.critical(f"MongoDB connection failed: {e}")
+    sys.exit(1)
 
 # GitHub API headers — token raises rate limit from 60 to 5000 req/hr
 _gh_token = os.environ.get("GITHUB_TOKEN", "")
@@ -146,6 +151,22 @@ async def _get_httpx_client() -> httpx.AsyncClient:
                     timeout=httpx.Timeout(30.0),
                 )
     return _shared_httpx_client
+
+
+# Graceful shutdown event for background loops
+_shutdown_event = asyncio.Event()
+
+
+def _safe_task(coro, name: str = "background"):
+    """Wrap an async coroutine so unhandled exceptions are logged, not swallowed."""
+    async def _wrapper():
+        try:
+            await coro
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.exception(f"Background task '{name}' failed: {e}")
+    return asyncio.create_task(_wrapper())
 
 
 # Cache invalidation helpers
@@ -241,14 +262,14 @@ async def _keep_alive_ping():
 async def lifespan(_app: FastAPI):
     # Startup
     global _scraper_task
-    _scraper_task = asyncio.create_task(_scraper_loop())
+    _scraper_task = asyncio.create_task(_safe_task(_scraper_loop(), "scraper"))
     logger.info("Background scraper scheduled (every 6 hours)")
 
     # Seed only if DB is empty (fast boot)
-    asyncio.create_task(_maybe_seed())
+    asyncio.create_task(_safe_task(_maybe_seed(), "seed"))
 
     # Create indexes in background (non-blocking boot)
-    asyncio.create_task(_create_indexes_background())
+    asyncio.create_task(_safe_task(_create_indexes_background(), "indexes"))
 
     # Initialize cache (in-memory for dev, Redis in production)
     try:
@@ -266,22 +287,21 @@ async def lifespan(_app: FastAPI):
         logger.warning(f"Cache init skipped: {e}")
 
     # Marketplace auto-release escrow worker (hourly)
-    asyncio.create_task(auto_release_escrow_loop())
+    asyncio.create_task(_safe_task(auto_release_escrow_loop(), "escrow"))
 
     # Keep-alive self-ping (prevents Render free-tier spin-down)
-    asyncio.create_task(_keep_alive_ping())
+    asyncio.create_task(_safe_task(_keep_alive_ping(), "keepalive"))
 
-    asyncio.create_task(send_phone_alert(
+    asyncio.create_task(_safe_task(send_phone_alert(
         title="🚀 GitStack Server Started",
         message="Backend is live and cron is running (every 6 hours).",
         priority="default"
-    ))
+    ), "startup_alert"))
     yield
     # Shutdown
+    _shutdown_event.set()
     if _scraper_task:
         _scraper_task.cancel()
-    # BUG-03 FIX: guard against client being None if MongoDB never connected;
-    # use await directly (not create_task) — the event loop is still running here.
     try:
         await send_phone_alert(
             title="⚠️ GitStack Server Shutting Down",
@@ -306,14 +326,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
 
 # Health check endpoint
-async def _check_mongo() -> dict:
+@api_router.get("/health", tags=["Health"])
+async def health_check():
     try:
         await db.command("ping")
-        return {"status": "up", "database": "connected"}
+        return {"status": "healthy", "database": "connected"}
     except Exception as e:
-        return {"status": "down", "database": str(e)}
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
 
-app.add_api_route("/health", health([_check_mongo]), tags=["Health"])
+# Legacy root health endpoint — redirects to canonical /api/health
+app.add_api_route("/health", lambda: RedirectResponse(url="/api/health", status_code=307))
 
 # Clerk JWKS client (caches keys automatically)
 _jwks_client = None
@@ -617,7 +639,7 @@ async def logout(request: Request):
 # ==================== TOOLS ROUTES ====================
 
 @api_router.get("/tools")
-async def get_tools(category: Optional[str] = None, topic: Optional[str] = None, search: Optional[str] = None, limit: int = 50):
+async def get_tools(category: Optional[str] = None, topic: Optional[str] = None, search: Optional[str] = None, limit: int = Query(50, ge=1, le=200)):
     query = {}
     if category:
         query["category"] = category
@@ -1041,154 +1063,6 @@ TOPIC_KEYWORDS = {
     ],
 }
 
-
-async def get_topic_keywords(topic_id: str, db) -> list:
-    """Get keywords for a topic — checks hardcoded dict first, then DB for auto-discovered topics"""
-    if topic_id in TOPIC_KEYWORDS:
-        return TOPIC_KEYWORDS[topic_id]
-    # Fall back to auto-discovered keywords from DB
-    doc = await db.auto_topic_keywords.find_one({"topic_id": topic_id}, {"_id": 0, "keywords": 1})
-    if doc:
-        return doc.get("keywords", [])
-    return []
-
-
-def _build_topic_query(topic_id: str) -> list:
-    """Build a list of regex conditions for matching repos to a topic (sync version for hardcoded topics)"""
-    keywords = TOPIC_KEYWORDS.get(topic_id, [])
-    if not keywords:
-        return []
-    return [{"$regex": kw, "$options": "i"} for kw in keywords]
-
-import time
-_topics_cache = None
-_topics_cache_time = 0
-
-@api_router.get("/topics")
-async def get_topics():
-    global _topics_cache, _topics_cache_time
-
-    if _topics_cache and time.time() - _topics_cache_time < 3600 * 6:
-        return _topics_cache
-
-    topics = await db.topics.find({}, {"_id": 0}).to_list(50)  # up to 50 including auto-discovered
-
-    async def get_topic_count(topic):
-        topic_id = topic.get("topic_id", "")
-        topic_name = topic.get("name", "")
-        keywords = await get_topic_keywords(topic_id, db)
-        if not keywords:
-            keywords = [topic_name.lower().replace(" ", "-")]
-
-        or_conditions = []
-        for kw in keywords:
-            or_conditions.append({"tags": {"$regex": kw, "$options": "i"}})
-            or_conditions.append({"category": {"$regex": kw, "$options": "i"}})
-
-        gh_or = [{"topics": {"$in": keywords}}]
-        for kw in keywords[:8]:
-            gh_or.append({"topics": {"$regex": kw, "$options": "i"}})
-            gh_or.append({"description": {"$regex": kw, "$options": "i"}})
-
-        async def dummy_count(): return 0
-
-        # Run counts in parallel for this topic
-        results = await asyncio.gather(
-            db.tools.count_documents({"$or": or_conditions}) if or_conditions else dummy_count(),
-            db.github_repos.count_documents({"$or": gh_or})
-        )
-        topic["tool_count"] = (results[0] or 0) + (results[1] or 0)
-        return topic
-
-    # Run processing for all topics in parallel
-    await asyncio.gather(*(get_topic_count(t) for t in topics))
-
-    _topics_cache = topics
-    _topics_cache_time = time.time()
-    return topics
-
-@api_router.get("/topics/{topic_id}/tools")
-async def get_topic_tools(topic_id: str):
-    topic = await db.topics.find_one({"topic_id": topic_id}, {"_id": 0})
-    if not topic:
-        raise HTTPException(status_code=404, detail="Topic not found")
-
-    topic_name = topic.get("name", "")
-    # Use async lookup so auto-discovered topics also work
-    keywords = await get_topic_keywords(topic_id, db)
-    if not keywords:
-        keywords = [topic_name.lower().replace(" ", "-")]
-
-    # Search curated tools
-    or_conditions = []
-    for kw in keywords:
-        escaped_kw = re.escape(kw)  # SEC-12: prevent ReDoS from AI-generated keywords
-        or_conditions.append({"tags": {"$regex": escaped_kw, "$options": "i"}})
-        or_conditions.append({"category": {"$regex": escaped_kw, "$options": "i"}})
-
-    tools = await db.tools.find(
-        {"$or": or_conditions} if or_conditions else {},
-        {"_id": 0}
-    ).to_list(100)
-
-    # Search github_repos with expanded keywords
-    gh_or = [{"topics": {"$in": keywords}}]
-    for kw in keywords[:8]:  # More coverage
-        escaped_kw = re.escape(kw)  # SEC-12: prevent ReDoS
-        gh_or.append({"topics": {"$regex": escaped_kw, "$options": "i"}})
-        gh_or.append({"description": {"$regex": escaped_kw, "$options": "i"}})
-        gh_or.append({"name": {"$regex": escaped_kw, "$options": "i"}})
-
-    remaining = max(100 - len(tools), 20)
-    gh_repos = await db.github_repos.find(
-        {"$or": gh_or},
-        {"_id": 0}
-    ).sort("score", -1).limit(remaining).to_list(remaining)
-
-    # Convert github repos to tool format — dedupe by name
-    seen_names = {t["name"].lower() for t in tools}
-    for repo in gh_repos:
-        if repo.get("name", "").lower() in seen_names:
-            continue
-        seen_names.add(repo["name"].lower())
-        tools.append({
-            "tool_id": repo.get("repo_id", repo.get("full_name", "").replace("/", "_")),
-            "name": repo.get("name", ""),
-            "description": repo.get("description", ""),
-            "who_its_for": "Developers and founders",
-            "what_you_can_build": [],
-            "difficulty": "Intermediate",
-            "setup_time": "30 mins",
-            "setup_steps": ["Visit the GitHub repo", "Follow the README instructions"],
-            "related_tools": [],
-            "github_url": repo.get("html_url", f"https://github.com/{repo.get('full_name', '')}"),
-            "stars": f"{repo.get('stars', 0):,}",
-            "language": repo.get("language", "Unknown"),
-            "category": topic_name,
-            "tags": repo.get("topics", []),
-            "source": "github",
-            "full_name": repo.get("full_name", "")
-        })
-
-    # Update topic count to match actual results
-    topic["tool_count"] = len(tools)
-
-    return {"topic": topic, "tools": tools}
-
-# ==================== COLLECTIONS ROUTES ====================
-
-@api_router.get("/collections")
-async def get_collections():
-    collections = await db.collections.find({}, {"_id": 0}).to_list(20)
-    return collections
-
-@api_router.get("/collections/{collection_id}")
-async def get_collection(collection_id: str):
-    collection = await db.collections.find_one({"collection_id": collection_id}, {"_id": 0})
-    if not collection:
-        raise HTTPException(status_code=404, detail="Collection not found")
-    tools = await db.tools.find({"tool_id": {"$in": collection.get("tools", [])}}, {"_id": 0}).to_list(20)
-    return {"collection": collection, "tools": tools}
 
 # ==================== AI FEATURES ====================
 
@@ -2106,6 +1980,7 @@ Be direct and slightly savage, but constructive. This is meant to be fun but gen
     return {"roast": result}
 
 @api_router.get("/ai/translate-repo/{owner}/{repo}")
+@limiter.limit("10/minute")
 async def translate_github_repo(owner: str, repo: str):
     """Translate any GitHub repo to plain English with AI"""
     full_name = f"{owner}/{repo}"
@@ -2282,6 +2157,7 @@ class ComparisonRequest(BaseModel):
     tool2: str
 
 @api_router.post("/ai/compare")
+@limiter.limit("10/minute")
 async def compare_tools(req: ComparisonRequest):
     """Compare two tools using AI with a focus on Founder needs"""
     t1 = req.tool1.strip()
@@ -2690,6 +2566,7 @@ class EmailStackRequest(BaseModel):
     tools: List[Dict[str, Any]]
 
 @api_router.post("/stacks/email-me")
+@limiter.limit("10/minute")
 async def email_stack(req: EmailStackRequest):
     """Save an email + stack so the user can be reminded to build it."""
     email = req.email.lower().strip()
@@ -4257,11 +4134,19 @@ async def health():
 
 # ==================== GITHUB PROXY (for Repo X-Ray) ====================
 
-@api_router.api_route("/github-proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"])
+# Whitelist of safe read-only GitHub API paths for Repo X-Ray
+_GITHUB_PROXY_ALLOWLIST = re.compile(
+    r'^repos/[^/]+/[^/]+(?:/readme|/contents/.*|/git/trees/.*|/releases|/contributors|/languages|/topics)?$'
+)
+_ALLOWED_PROXY_HEADERS = {"content-type", "cache-control", "last-modified", "etag", "x-ratelimit-remaining", "x-ratelimit-reset"}
+
+@api_router.api_route("/github-proxy/{path:path}", methods=["GET", "HEAD"])
 @limiter.limit("60/minute")
 async def github_proxy(request: Request, path: str):
-    """Transparent proxy to GitHub API — injects GITHUB_TOKEN so Repo X-Ray doesn't hit rate limits."""
-    import httpx
+    """Read-only proxy to GitHub API — injects GITHUB_TOKEN so Repo X-Ray doesn't hit rate limits."""
+    if not _GITHUB_PROXY_ALLOWLIST.match(path):
+        raise HTTPException(status_code=403, detail="Proxy path not allowed")
+
     url = f"https://api.github.com/{path}"
     if request.query_params:
         url += "?" + str(request.query_params)
@@ -4270,20 +4155,13 @@ async def github_proxy(request: Request, path: str):
         "Accept": request.headers.get("Accept", "application/vnd.github.v3+json"),
         "User-Agent": "GitStack",
     }
-    # Use server token by default
+    # Use server token only (do not allow client to override — prevents token abuse)
     if GITHUB_HEADERS.get("Authorization"):
         headers["Authorization"] = GITHUB_HEADERS["Authorization"]
-    # Allow client to override with their own token
-    client_auth = request.headers.get("Authorization")
-    if client_auth:
-        headers["Authorization"] = client_auth
-
-    method = request.method
-    body = await request.body() if method in ("POST", "PUT", "PATCH") else None
 
     client = await _get_httpx_client()
     try:
-        response = await client.request(method, url, headers=headers, content=body, follow_redirects=True)
+        response = await client.request(request.method, url, headers=headers, follow_redirects=True)
     except Exception as e:
         logger.error(f"GitHub proxy error: {e}")
         raise HTTPException(status_code=502, detail="GitHub API unreachable")
@@ -4291,7 +4169,7 @@ async def github_proxy(request: Request, path: str):
     return Response(
         content=response.content,
         status_code=response.status_code,
-        headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-encoding", "transfer-encoding")},
+        headers={k: v for k, v in response.headers.items() if k.lower() in _ALLOWED_PROXY_HEADERS},
     )
 
 # ==================== ACTIVITY & RECOMMENDATIONS ====================
@@ -4464,8 +4342,8 @@ async def get_user_repos(user_id: str):
         return {"repos": []}
 
     headers = {"Accept": "application/vnd.github+json"}
-    if os.environ.get("GITHUB_TOKEN"):
-        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    if _gh_token:
+        headers["Authorization"] = _gh_auth
 
     import httpx
     async with httpx.AsyncClient() as client:
@@ -4631,11 +4509,14 @@ def get_r2_client():
     )
 
 async def upload_private_to_r2(file_bytes: bytes, original_filename: str, folder: str) -> str:
+    bucket = os.environ.get("R2_BUCKET_NAME")
+    if not bucket:
+        raise HTTPException(status_code=503, detail="Storage bucket not configured")
     ext = original_filename.rsplit(".", 1)[-1] if "." in original_filename else "bin"
     key = f"{folder}/{uuid.uuid4()}.{ext}"
     client = get_r2_client()
     client.put_object(
-        Bucket=os.environ["R2_BUCKET_NAME"],
+        Bucket=bucket,
         Key=key,
         Body=file_bytes,
         ContentType="application/octet-stream",
@@ -4659,7 +4540,10 @@ async def upload_public_image_to_r2(file_bytes: bytes, original_filename: str, f
         ContentType=content_type_map[ext],
         CacheControl="public, max-age=31536000, immutable",
     )
-    return f"{os.environ['R2_PUBLIC_URL'].rstrip('/')}/{key}"
+    public_url = os.environ.get("R2_PUBLIC_URL")
+    if not public_url:
+        raise HTTPException(status_code=503, detail="Storage public URL not configured")
+    return f"{public_url.rstrip('/')}/{key}"
 
 def get_r2_signed_url(key: str, expiry_seconds: int = 300) -> str:
     client = get_r2_client()
@@ -4673,7 +4557,11 @@ def get_r2_signed_url(key: str, expiry_seconds: int = 300) -> str:
 
 def get_razorpay_client():
     import razorpay
-    return razorpay.Client(auth=(os.environ["RAZORPAY_KEY_ID"], os.environ["RAZORPAY_KEY_SECRET"]))
+    key_id = os.environ.get("RAZORPAY_KEY_ID")
+    secret = os.environ.get("RAZORPAY_KEY_SECRET")
+    if not key_id or not secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    return razorpay.Client(auth=(key_id, secret))
 
 def verify_razorpay_signature(order_id: str, payment_id: str, signature: str) -> bool:
     secret = os.environ.get("RAZORPAY_KEY_SECRET")
@@ -5332,7 +5220,7 @@ async def buyer_confirm_setup(request_id: str, request: Request):
 # ---- Auto-release worker (Task 17) ----
 
 async def auto_release_escrow_loop():
-    while True:
+    while not _shutdown_event.is_set():
         try:
             now_iso = datetime.now(timezone.utc).isoformat()
             cursor = db.setup_requests.find({
@@ -5348,7 +5236,10 @@ async def auto_release_escrow_loop():
                     logger.exception(f"auto-release failed for {sr.get('request_id')}: {e}")
         except Exception as e:
             logger.exception(f"auto-release loop error: {e}")
-        await asyncio.sleep(60 * 60)  # hourly
+        try:
+            await asyncio.wait_for(_shutdown_event.wait(), timeout=60 * 60)
+        except asyncio.TimeoutError:
+            continue
 
 # ---- Wallet (Task 18) ----
 
@@ -5822,9 +5713,10 @@ app.include_router(og_router)
 _cors_origins = [
     "https://gitstack.pro",
     "https://www.gitstack.pro",
-    "http://localhost:3000",
-    "http://localhost:5173",
 ]
+# Development origins only in dev mode
+if os.environ.get("ENVIRONMENT", "production") == "development":
+    _cors_origins.extend(["http://localhost:3000", "http://localhost:5173"])
 # Also allow any vercel preview deployment
 _cors_origins_env = os.environ.get("CORS_ORIGINS", "")
 if _cors_origins_env:
@@ -5834,7 +5726,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=list(dict.fromkeys(_cors_origins)),
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

@@ -1,14 +1,17 @@
 <!doctype html>
 <html lang="en">
     <head>
-        <!-- Google Tag Manager -->
+        <!-- Google Tag Manager — only loaded on production domain -->
         <script>
-            window.dataLayer = window.dataLayer || [];
-            window.dataLayer.push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
-            var gtmScript = document.createElement('script');
-            gtmScript.async = true;
-            gtmScript.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-WL8RTZWW';
-            document.head.insertBefore(gtmScript, document.head.firstChild);
+            (function() {
+                if (window.location.hostname !== 'gitstack.pro' && window.location.hostname !== 'www.gitstack.pro') return;
+                window.dataLayer = window.dataLayer || [];
+                window.dataLayer.push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+                var gtmScript = document.createElement('script');
+                gtmScript.async = true;
+                gtmScript.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-WL8RTZWW';
+                document.head.insertBefore(gtmScript, document.head.firstChild);
+            })();
         </script>
         <!-- End Google Tag Manager -->
         <meta charset="utf-8" />
@@ -24,9 +27,13 @@
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
     </head>
     <body>
-        <!-- Google Tag Manager (noscript) -->
-        <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL8RTZWW"
-        height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+        <!-- Google Tag Manager (noscript) — production only -->
+        <noscript>
+            <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL8RTZWW"
+            height="0" width="0" style="display:none;visibility:hidden"
+            data-host="gitstack.pro"></iframe>
+        </noscript>
+        <script>document.querySelector('iframe[data-host="gitstack.pro"]')?.remove();</script>
         <!-- End Google Tag Manager (noscript) -->
         <noscript>You need to enable JavaScript to run this app.</noscript>
         <div id="root"></div>
@@ -92,7 +99,8 @@
                     }),
                     (e.__SV = 1));
             })(document, window.posthog || []);
-            posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
+            if (window.location.hostname === 'gitstack.pro' || window.location.hostname === 'www.gitstack.pro') {
+                posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
                 api_host: "https://us.i.posthog.com",
                 person_profiles: "identified_only",
                 session_recording: {
@@ -100,6 +108,7 @@
                     capturePerformance: false,
                 },
             });
+            }
         </script>
     </body>
 </html>

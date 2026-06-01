@@ -16,14 +16,16 @@ const fs = require("fs");
 const path = require("path");
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001/api";
-const PROD_API = "https://gitstack-backend.onrender.com/api";
-const SITE_URL = "https://www.gitstack.pro";
+const PROD_API = "https://gitstack-api.onrender.com/api";
+const SITE_URL = process.env.REACT_APP_SITE_URL || "https://gitstack.pro";
+const IS_CI = process.env.CI === "true" || process.env.NODE_ENV === "production";
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend", "public");
 const OUT_INDEX = path.join(PUBLIC_DIR, "sitemap.xml");
 const OUT_STATIC = path.join(PUBLIC_DIR, "sitemap-static.xml");
 const OUT_TOOLS = path.join(PUBLIC_DIR, "sitemap-tools.xml");
 
 async function fetchJson(url, fallbackUrl = null) {
+  if (IS_CI) return null;
   try {
     const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -104,6 +106,11 @@ async function main() {
   console.log("🗺️  Generating dynamic sitemap...");
   console.log(`   Primary API: ${API_BASE}`);
   console.log(`   Fallback API: ${PROD_API}`);
+
+  if (IS_CI) {
+    console.log("   CI environment detected — skipping live backend fetches to avoid timeouts.");
+    console.log("   (Sitemap will use static pages + any existing generated files.)");
+  }
 
   const staticUrls = [];
   const toolUrls = [];

@@ -102,6 +102,32 @@ html = html.replace(
 );
 
 // ---------------------------------------------------------------------------
+// 2c. FIX FALSE PRIVACY CLAIMS — X-Ray now uses a backend proxy
+// ---------------------------------------------------------------------------
+html = html.replace(
+  "CodeFlow runs entirely in your browser. No backend servers, no data collection.",
+  "Repo X-Ray uses GitStack's authenticated proxy to avoid GitHub rate limits. Your code is never stored."
+);
+html = html.replace(
+  "Your GitHub token is stored only in your browser's memory. It's never saved, logged, or transmitted anywhere except directly to GitHub's API.",
+  "GitHub API calls are routed through GitStack's secure proxy. No token storage required."
+);
+html = html.replace(
+  "All GitHub API calls go directly from your browser to api.github.com. We have no proxy, no middleware, no way to intercept your data.",
+  "API calls are proxied through GitStack with authenticated rate limits. No personal data is logged or stored."
+);
+
+// ---------------------------------------------------------------------------
+// 2d. FIX REMAINING CODEFLOW BRANDING IN EXPORTS / EMPTY STATES
+// ---------------------------------------------------------------------------
+html = html.replace(/codeflow-analysis\.json/g, "repo-xray-analysis.json");
+html = html.replace(/codeflow-report\.json/g, "repo-xray-report.json");
+html = html.replace(/codeflow-report\.md/g, "repo-xray-report.md");
+html = html.replace(/codeflow-report\.txt/g, "repo-xray-report.txt");
+html = html.replace(/codeflowVersion/g, "repoXrayVersion");
+html = html.replace(/'CodeFlow'(?![^<>]*>)/g, "'Repo X-Ray'");
+
+// ---------------------------------------------------------------------------
 // 3. APPLY REPLACEMENTS
 // ---------------------------------------------------------------------------
 let swaps = 0;

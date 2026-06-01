@@ -50,6 +50,32 @@ services:
         sync: false          # set to https://gitstack.pro
       - key: EMAIL_TOKEN_SECRET
         sync: false          # generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+      - key: REDIS_URL
+        sync: false          # optional — Redis cache URL, e.g. redis://redis:6379
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_TLS
+        value: "true"
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_DROP_EMAIL
+        sync: false
+      - key: SMTP_MARKETPLACE_EMAIL
+        sync: false
+      - key: SMTP_HELP_EMAIL
+        sync: false
+      - key: SMTP_NOREPLY_EMAIL
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: RAZORPAY_SUBSCRIPTION_PLAN_ID
+        sync: false
 
   # ── Cron: Daily Drop ────────────────────────────────────────────
   - type: cron

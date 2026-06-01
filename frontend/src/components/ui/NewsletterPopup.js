@@ -13,31 +13,35 @@ export const NewsletterPopup = () => {
   const location = useLocation();
 
   useEffect(() => {
-    // Check if already subscribed or closed previously
-    if (localStorage.getItem("gitstack_newsletter_closed") || localStorage.getItem("gitstack_subscribed")) {
-      return;
-    }
-
-    // Trigger on 2nd view of a tool or repo page
-    const viewCount = parseInt(localStorage.getItem("gitstack_tool_views") || "0", 10);
-    
-    if (location.pathname.startsWith('/r/') || location.pathname.startsWith('/tools/')) {
-      const newCount = viewCount + 1;
-      localStorage.setItem("gitstack_tool_views", newCount.toString());
-      
-      // If they've viewed 2 or more tools, show popup after 3 seconds
-      if (newCount >= 2) {
-        const timer = setTimeout(() => {
-          setIsOpen(true);
-        }, 3000);
-        return () => clearTimeout(timer);
+    try {
+      // Check if already subscribed or closed previously
+      if (localStorage.getItem("gitstack_newsletter_closed") || localStorage.getItem("gitstack_subscribed")) {
+        return;
       }
+
+      // Trigger on 2nd view of a tool or repo page
+      const viewCount = parseInt(localStorage.getItem("gitstack_tool_views") || "0", 10);
+      
+      if (location.pathname.startsWith('/r/') || location.pathname.startsWith('/tools/')) {
+        const newCount = viewCount + 1;
+        localStorage.setItem("gitstack_tool_views", newCount.toString());
+        
+        // If they've viewed 2 or more tools, show popup after 3 seconds
+        if (newCount >= 2) {
+          const timer = setTimeout(() => {
+            setIsOpen(true);
+          }, 3000);
+          return () => clearTimeout(timer);
+        }
+      }
+    } catch {
+      // localStorage blocked (private browsing, iframe, etc.) — silently ignore
     }
   }, [location.pathname]);
 
   const handleClose = () => {
     setIsOpen(false);
-    localStorage.setItem("gitstack_newsletter_closed", "true");
+    try { localStorage.setItem("gitstack_newsletter_closed", "true"); } catch {}
   };
 
   const handleSubscribe = async (e) => {
@@ -48,7 +52,7 @@ export const NewsletterPopup = () => {
     try {
       await axios.post(`${API}/newsletter/subscribe`, { email });
       setSubscribed(true);
-      localStorage.setItem("gitstack_subscribed", "true");
+      try { localStorage.setItem("gitstack_subscribed", "true"); } catch {}
       toast.success("Welcome! You'll get 3 new tools next Monday.");
       setTimeout(() => setIsOpen(false), 2000);
     } catch (e) {

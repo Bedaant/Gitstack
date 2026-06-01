@@ -42,9 +42,11 @@ export default function RepoTranslator() {
       const isNetwork = !e.response;
       if (isNetwork) {
         toast.error(
-          "Cannot reach the server. Is the backend running?",
-          { description: `Tried: ${API}. Start backend with: python backend/app.py`, duration: 8000 }
+          "We're having trouble connecting. Please try again in a moment.",
+          { duration: 5000 }
         );
+        // eslint-disable-next-line no-console
+        console.error(`Backend unreachable. Tried: ${API}`);
       } else {
         const detail = e.response?.data?.detail || e.response?.statusText || "Unknown error";
         toast.error(`Translation failed: ${detail}`);

@@ -67,6 +67,9 @@ const RepoRedirect = () => {
 
 const RepoShortlink = () => {
   const { owner, repo } = useParams();
+  // Validate GitHub username/repo format to avoid catching unrelated two-segment paths
+  const isValid = /^[\w.-]+$/.test(owner) && /^[\w.-]+$/.test(repo);
+  if (!isValid) return <NotFound />;
   return <Navigate to={`/r/${owner}/${repo}`} replace />;
 };
 

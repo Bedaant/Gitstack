@@ -267,7 +267,7 @@ export default function GitHubRepoPage() {
                 className="w-full border-0"
                 style={{ height: "70vh", minHeight: "300px", maxHeight: "800px" }}
                 loading="lazy"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-downloads"
               />
             </div>
           )}

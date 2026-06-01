@@ -5549,7 +5549,7 @@ function App(){
         d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform,d3.zoomIdentity.translate(w/2-scale*(minX+maxX)/2,h/2-scale*(minY+maxY)/2).scale(Math.min(scale,2)));
     }
     function exportSVG(){if(!svgRef.current)return;var svgClone=svgRef.current.cloneNode(true);svgClone.setAttribute('xmlns','http://www.w3.org/2000/svg');svgClone.setAttribute('width',svgRef.current.clientWidth);svgClone.setAttribute('height',svgRef.current.clientHeight);var style=document.createElementNS('http://www.w3.org/2000/svg','style');style.textContent='text{font-family:JetBrains Mono,monospace;pointer-events:none}';svgClone.insertBefore(style,svgClone.firstChild);var blob=new Blob([new XMLSerializer().serializeToString(svgClone)],{type:'image/svg+xml'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-'+Date.now()+'.svg';a.click();URL.revokeObjectURL(url);}
-    function exportJSON(){if(!data)return;var blob=new Blob([JSON.stringify({stats:data.stats,files:data.files.map(function(f){return{path:f.path,fns:f.functions.length,layer:f.layer,lines:f.lines,dependencies:f.dependencies||[]};}),connections:data.connections,issues:data.issues,patterns:data.patterns,security:data.securityIssues},null,2)],{type:'application/json'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-analysis.json';a.click();}
+    function exportJSON(){if(!data)return;var blob=new Blob([JSON.stringify({stats:data.stats,files:data.files.map(function(f){return{path:f.path,fns:f.functions.length,layer:f.layer,lines:f.lines,dependencies:f.dependencies||[]};}),connections:data.connections,issues:data.issues,patterns:data.patterns,security:data.securityIssues},null,2)],{type:'application/json'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='repo-xray-analysis.json';a.click();}
     function getAnalysisSourceLabel(){
         if(localSourceKind==='folder')return'Local Folder';
         if(localSourceKind==='zip')return repoInfo&&repoInfo.name?repoInfo.name:'ZIP Archive';
@@ -5562,7 +5562,7 @@ function App(){
         var report={
             repository:repo,
             analyzedAt:new Date().toISOString(),
-            codeflowVersion:'1.0',
+            repoXrayVersion:'1.0',
             summary:{
                 healthScore:h.score,
                 healthGrade:h.grade,
@@ -5642,7 +5642,7 @@ function App(){
         };
         if(format==='json'){
             var blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});
-            var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-report.json';a.click();URL.revokeObjectURL(url);
+            var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='repo-xray-report.json';a.click();URL.revokeObjectURL(url);
         }else if(format==='md'){
             var md='# CodeFlow Analysis Report\n\n';
             md+='**Repository:** '+repo+'\n';
@@ -5712,7 +5712,7 @@ function App(){
             });
             if(data.files.length>100)md+='\n*...and '+(data.files.length-100)+' more files*\n';
             var blob=new Blob([md],{type:'text/markdown'});
-            var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-report.md';a.click();URL.revokeObjectURL(url);
+            var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='repo-xray-report.md';a.click();URL.revokeObjectURL(url);
         }else if(format==='txt'){
             var txt='CODEFLOW ANALYSIS REPORT\n';
             txt+='========================\n\n';
@@ -5776,7 +5776,7 @@ function App(){
             });
             if(data.connections.length>100)txt+='\n...and '+(data.connections.length-100)+' more dependencies\n';
             var blob=new Blob([txt],{type:'text/plain'});
-            var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-report.txt';a.click();URL.revokeObjectURL(url);
+            var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='repo-xray-report.txt';a.click();URL.revokeObjectURL(url);
         }
         showNotification('Report exported as '+format.toUpperCase(),'success');
     }
@@ -6690,7 +6690,7 @@ function App(){
                 React.createElement('div',{className:'modal-body'},
                     React.createElement('div',{className:'privacy-item'},
                         React.createElement('div',{className:'privacy-icon'},React.createElement(Icon,{name:'globe',size:'l'})),
-                        React.createElement('div',null,React.createElement('div',{className:'privacy-title'},'100% Browser-Based'),React.createElement('div',{className:'privacy-text'},'CodeFlow runs entirely in your browser. No backend servers, no data collection.'))
+                        React.createElement('div',null,React.createElement('div',{className:'privacy-title'},'100% Browser-Based'),React.createElement('div',{className:'privacy-text'},'Repo X-Ray uses GitStack's authenticated proxy to avoid GitHub rate limits. Your code is never stored.'))
                     ),
                     React.createElement('div',{className:'privacy-item'},
                         React.createElement('div',{className:'privacy-icon'},React.createElement(Icon,{name:'key',size:'l'})),
@@ -6698,7 +6698,7 @@ function App(){
                     ),
                     React.createElement('div',{className:'privacy-item'},
                         React.createElement('div',{className:'privacy-icon'},React.createElement(Icon,{name:'share',size:'l'})),
-                        React.createElement('div',null,React.createElement('div',{className:'privacy-title'},'Direct API Calls'),React.createElement('div',{className:'privacy-text'},'All GitHub API calls go directly from your browser to api.github.com. We have no proxy, no middleware, no way to intercept your data.'))
+                        React.createElement('div',null,React.createElement('div',{className:'privacy-title'},'Direct API Calls'),React.createElement('div',{className:'privacy-text'},'API calls are proxied through GitStack with authenticated rate limits. No personal data is logged or stored.'))
                     ),
                     React.createElement('div',{className:'privacy-item'},
                         React.createElement('div',{className:'privacy-icon'},React.createElement(Icon,{name:'ban',size:'l'})),

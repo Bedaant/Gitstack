@@ -42,9 +42,9 @@ COPY . .
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Health check (FastAPI health endpoint)
+# Health check (FastAPI health endpoint) — uses $PORT if set, falls back to 10000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:10000/api/health || exit 1
+    CMD curl -f http://localhost:${PORT:-10000}/api/health || exit 1
 
 # Default port (overridden by PORT env var on most platforms)
 EXPOSE 10000
