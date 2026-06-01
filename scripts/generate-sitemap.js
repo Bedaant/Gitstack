@@ -16,7 +16,7 @@ const fs = require("fs");
 const path = require("path");
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL || "http://localhost:8001/api";
-const PROD_API = "https://gitstack-api.onrender.com/api";
+const PROD_API = "https://gitstack-backend.onrender.com/api";
 const SITE_URL = process.env.REACT_APP_SITE_URL || "https://gitstack.pro";
 const IS_CI = process.env.CI === "true" || process.env.NODE_ENV === "production";
 const PUBLIC_DIR = path.join(__dirname, "..", "frontend", "public");

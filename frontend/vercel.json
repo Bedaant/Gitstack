@@ -5,7 +5,7 @@
     { "source": "/63b65d7aaf214e50a64c7b90fb33ae90.txt", "destination": "/63b65d7aaf214e50a64c7b90fb33ae90.txt" },
     { "source": "/sitemap.xml", "destination": "/sitemap.xml" },
     { "source": "/robots.txt", "destination": "/robots.txt" },
-    { "source": "/api/github-proxy/:path*", "destination": "https://gitstack-api.onrender.com/api/github-proxy/:path*" },
+    { "source": "/api/github-proxy/:path*", "destination": "https://gitstack-backend.onrender.com/api/github-proxy/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
