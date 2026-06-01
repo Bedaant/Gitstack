@@ -54,7 +54,7 @@ async def _safe_send_welcome(email: str):
 
 @router.post("/newsletter/preferences-link")
 @server.limiter.limit("10/minute")
-async def api_send_preferences_link(req: PreferencesLinkRequest):
+async def api_send_preferences_link(request: Request, req: PreferencesLinkRequest):
     """Send a magic link to manage email preferences."""
     email = req.email.lower().strip()
     if not email or "@" not in email:
@@ -111,7 +111,7 @@ async def update_preferences(req: PreferencesUpdateRequest):
 
 @router.post("/newsletter/unsubscribe")
 @server.limiter.limit("30/minute")
-async def unsubscribe_post(token: str):
+async def unsubscribe_post(request: Request, token: str):
     """Unsubscribe using a token (POST to prevent CSRF via embedded images)."""
     email = server._verify_email_token(token)
     result = await server.db.newsletter_subscribers.update_one(
@@ -130,7 +130,7 @@ async def unsubscribe_post(token: str):
 
 @router.get("/newsletter/unsubscribe")
 @server.limiter.limit("30/minute")
-async def unsubscribe_get(token: str):
+async def unsubscribe_get(request: Request, token: str):
     """GET handler for email links — validates token and returns confirmation prompt.
     The frontend should show a 'Confirm Unsubscribe' button that POSTs."""
     email = server._verify_email_token(token)

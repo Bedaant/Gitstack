@@ -1981,7 +1981,7 @@ Be direct and slightly savage, but constructive. This is meant to be fun but gen
 
 @api_router.get("/ai/translate-repo/{owner}/{repo}")
 @limiter.limit("10/minute")
-async def translate_github_repo(owner: str, repo: str):
+async def translate_github_repo(request: Request, owner: str, repo: str):
     """Translate any GitHub repo to plain English with AI"""
     full_name = f"{owner}/{repo}"
 
@@ -2158,7 +2158,7 @@ class ComparisonRequest(BaseModel):
 
 @api_router.post("/ai/compare")
 @limiter.limit("10/minute")
-async def compare_tools(req: ComparisonRequest):
+async def compare_tools(request: Request, req: ComparisonRequest):
     """Compare two tools using AI with a focus on Founder needs"""
     t1 = req.tool1.strip()
     t2 = req.tool2.strip()
@@ -2567,7 +2567,7 @@ class EmailStackRequest(BaseModel):
 
 @api_router.post("/stacks/email-me")
 @limiter.limit("10/minute")
-async def email_stack(req: EmailStackRequest):
+async def email_stack(request: Request, req: EmailStackRequest):
     """Save an email + stack so the user can be reminded to build it."""
     email = req.email.lower().strip()
     if not email or "@" not in email:
