@@ -127,6 +127,12 @@ html = html.replace(/codeflow-report\.txt/g, "repo-xray-report.txt");
 html = html.replace(/codeflowVersion/g, "repoXrayVersion");
 html = html.replace(/'CodeFlow'(?![^<>]*>)/g, "'Repo X-Ray'");
 
+// Fix misleading 403 error message (proxy rejection vs GitHub rate limit)
+html = html.replace(
+  "'Rate limited - add a GitHub token for 5000 req/hour'",
+  "'Request blocked by proxy — try again or use full-screen mode'"
+);
+
 // ---------------------------------------------------------------------------
 // 3. APPLY REPLACEMENTS
 // ---------------------------------------------------------------------------

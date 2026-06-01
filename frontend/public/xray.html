@@ -2950,7 +2950,7 @@ var GitHub={
                         : r.status===401
                             ? 'Invalid token'
                             : r.status===403
-                                ? 'Rate limited - add a GitHub token for 5000 req/hour'
+                                ? 'Request blocked by proxy — try again or use full-screen mode'
                                 : r.status===404
                                     ? 'Repository not found'
                                     : r.status===429

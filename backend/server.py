@@ -575,6 +575,20 @@ def normalize_ai_json(data):
     return data
 
 
+def _repo_to_stack_item(repo: dict) -> dict:
+    """Convert a github_repos DB document to the Stack Generator item format."""
+    return {
+        "name": repo.get("name", "Unknown"),
+        "description": repo.get("description", "") or "Open-source repository on GitHub.",
+        "difficulty": "Intermediate",
+        "setupTime": "30 mins",
+        "githubUrl": repo.get("html_url", ""),
+        "setupSteps": ["Clone the repository", "Follow the README instructions", "Customize for your use case"],
+        "stars": repo.get("stars", 0),
+        "language": repo.get("language", "Unknown"),
+    }
+
+
 async def call_ai(prompt: str, json_response: bool = False) -> str:
     """Try Groq first (fast), then fall back to NVIDIA NIM for reliability."""
     last_error = None
@@ -1104,6 +1118,8 @@ Be accurate with real GitHub repositories. Calculate realistic cost estimates.""
 @api_router.post("/ai/stack-generator")
 @limiter.limit("10/minute")
 async def stack_generator(request: Request, req: StackGeneratorRequest):
+    import json, re, httpx, urllib.parse, asyncio
+
     context = f"Idea: {req.idea}"
     if req.budget:
         context += f"\nBudget: {req.budget}"
@@ -1112,13 +1128,62 @@ async def stack_generator(request: Request, req: StackGeneratorRequest):
     if req.building_alone is not None:
         context += f"\nBuilding alone: {'Yes' if req.building_alone else 'No'}"
 
-    prompt = f"""Help a non-technical founder build: {context}
+    # ── Step 0: Extract keywords from the idea for DB search ──
+    raw_words = [w.strip() for w in req.idea.lower().split() if len(w.strip()) > 2]
+    keywords = raw_words[:6]
+    text_regex = "|".join(re.escape(k) for k in keywords)
 
-Recommend 4-6 free/open-source GitHub CODE repositories to build this idea.
+    # ── Step 1: Query local DB for seed repos (fast, no AI needed) ──
+    seed_repos = []
+    seen_names = set()
+    try:
+        local_query = {
+            "$or": [
+                {"name": {"$regex": text_regex, "$options": "i"}},
+                {"use_cases": {"$regex": text_regex, "$options": "i"}},
+                {"description": {"$regex": text_regex, "$options": "i"}},
+                {"replaces_saas": {"$regex": text_regex, "$options": "i"}},
+                {"topics": {"$in": keywords}},
+            ]
+        }
+        local_candidates = await db.github_repos.find(
+            local_query, {"_id": 0}
+        ).sort([("is_trending", -1), ("today_stars", -1), ("stars", -1)]).limit(20).to_list(20)
+
+        for r in local_candidates:
+            score = 0
+            name = (r.get("name") or "").lower()
+            desc = (r.get("description") or "").lower()
+            for k in keywords:
+                if k in name: score += 4
+                if k in desc: score += 1
+            if score > 0:
+                r["_db_score"] = score
+                seed_repos.append(r)
+                seen_names.add(r.get("full_name", "").lower())
+
+        # Sort by DB score then by trending/stars
+        seed_repos.sort(key=lambda x: (-x.get("_db_score", 0), -x.get("today_stars", 0), -x.get("stars", 0)))
+        seed_repos = seed_repos[:8]
+    except Exception as e:
+        logger.warning(f"Stack Gen DB query failed: {e}")
+
+    # Build seed context for AI prompt
+    seed_context = ""
+    if seed_repos:
+        seed_context = "\n\nRepositories already in our database (do NOT repeat these):\n"
+        for r in seed_repos[:5]:
+            seed_context += f"- {r.get('full_name')}: {r.get('description', '')[:80]}\n"
+
+    prompt = f"""Help a non-technical founder build: {context}{seed_context}
+
+Recommend 6 free/open-source GitHub CODE repositories to build this idea.
 
 IMPORTANT RULES:
 - ONLY suggest repositories that contain SOURCE CODE (React, Node.js, Python, etc.) which can be cloned, modified, and customized.
 - DO NOT suggest infrastructure tools that need separate installation like: Ollama, n8n, Metabase, Airbyte, or any tool that runs as its own server/platform.
+- Include a MIX: 2-3 well-known popular options AND 2-3 newer/smaller alternatives (100-2000 stars) that are actively maintained.
+- Do NOT repeat any repo from the seed list above.
 - If the idea needs AI, suggest a repo that already has OpenAI API integration (not Ollama).
 - If the idea needs automation, suggest a repo with built-in workflow logic (not n8n).
 - If the idea needs analytics, suggest a repo with built-in chart components (not Metabase).
@@ -1141,59 +1206,108 @@ Put tools in the order they should be set up. Use real GitHub repositories."""
     try:
         result = await call_ai(prompt, json_response=True)
     except Exception as e:
-        logger.error(f"Stack Gen Gemini Error: {e}")
+        logger.error(f"Stack Gen AI Error: {e}")
+        # Fallback: return DB seed repos if AI fails
+        if seed_repos:
+            return {"stack": [_repo_to_stack_item(r) for r in seed_repos[:6]]}
         return {"stack": [], "error": "AI service temporarily unavailable. Please try again."}
 
     try:
-        import json, re, httpx
         cleaned = result.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1]
             cleaned = cleaned.rsplit("```", 1)[0]
         data = json.loads(cleaned)
+        data = normalize_ai_json(data)
 
-        # Hallucination Defense: Validate & Auto-correct GitHub URLs
-        valid_stack = []
+        if not isinstance(data, list):
+            logger.error(f"Stack Gen: AI returned non-list after normalize: {type(data)}")
+            if seed_repos:
+                return {"stack": [_repo_to_stack_item(r) for r in seed_repos[:6]]}
+            return {"stack": [], "raw": result}
+
+        # ── Parallel validation with semaphore ──
         client = await _get_httpx_client()
-        for tool in data:
+        _validate_sem = asyncio.Semaphore(4)
+
+        async def _validate_tool(tool):
             gh_url = tool.get("githubUrl", "")
-            is_valid = False
-            
-            if gh_url and "github.com/" in gh_url:
-                match = re.search(r'github\.com/([^/]+/[^/]+)', gh_url)
-                if match:
-                    full_name = match.group(1).split('#')[0].split('?')[0].strip('/')
-                    # 1. Ping the repo directly
-                    resp = await client.head(f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS, follow_redirects=True, timeout=5)
-                    if resp.status_code == 200:
-                        tool["githubUrl"] = f"https://github.com/{full_name}"
-                        is_valid = True
-            
-            # 2. If 404 Hallucination or bad URL, auto-correct by searching live GitHub
-            if not is_valid:
-                search_q = tool.get("name", "").replace(" ", "+")
-                try:
-                    search_resp = await client.get(
-                        f"https://api.github.com/search/repositories?q={search_q}&per_page=1", 
-                        headers=GITHUB_HEADERS, 
+            if not gh_url or "github.com/" not in gh_url:
+                return tool
+
+            match = re.search(r'github\.com/([^/]+/[^/]+)', gh_url)
+            if not match:
+                return tool
+
+            full_name = match.group(1).split('#')[0].split('?')[0].strip('/')
+            try:
+                async with _validate_sem:
+                    resp = await client.head(
+                        f"https://api.github.com/repos/{full_name}",
+                        headers=GITHUB_HEADERS,
+                        follow_redirects=True,
                         timeout=5
                     )
-                    if search_resp.status_code == 200:
-                        items = search_resp.json().get("items", [])
-                        if items:
-                            real_repo = items[0]["full_name"]
-                            tool["githubUrl"] = f"https://github.com/{real_repo}"
-                            is_valid = True
-                        else:
-                            tool["githubUrl"] = "" # Nullify fake URL so clone script doesn't break
-                except:
-                    tool["githubUrl"] = ""
-            
-            valid_stack.append(tool)
-                            
-        return {"stack": valid_stack}
+                if resp.status_code == 200:
+                    tool["githubUrl"] = f"https://github.com/{full_name}"
+                    return tool
+            except Exception:
+                pass
+
+            # Fallback: search GitHub for the tool name
+            search_q = tool.get("name", "").replace(" ", "+")
+            try:
+                async with _validate_sem:
+                    search_resp = await client.get(
+                        f"https://api.github.com/search/repositories?q={search_q}&per_page=5",
+                        headers=GITHUB_HEADERS,
+                        timeout=5
+                    )
+                if search_resp.status_code == 200:
+                    items = search_resp.json().get("items", [])
+                    # Pick best match by stars + description containing keywords
+                    best = None
+                    best_score = -1
+                    for item in items:
+                        fn = item.get("full_name", "").lower()
+                        if fn in seen_names:
+                            continue
+                        score = item.get("stargazers_count", 0)
+                        desc = (item.get("description") or "").lower()
+                        for k in keywords:
+                            if k in desc:
+                                score += 100
+                        if score > best_score:
+                            best_score = score
+                            best = item
+                    if best:
+                        tool["githubUrl"] = f"https://github.com/{best['full_name']}"
+                        seen_names.add(best['full_name'].lower())
+                        return tool
+            except Exception:
+                pass
+
+            tool["githubUrl"] = ""
+            return tool
+
+        validated = await asyncio.gather(*[_validate_tool(t) for t in data])
+        valid_stack = [t for t in validated if t.get("githubUrl")]
+
+        # If AI gave us < 3 valid tools, supplement with DB seed repos
+        if len(valid_stack) < 3 and seed_repos:
+            for r in seed_repos:
+                fn = r.get("full_name", "").lower()
+                if fn not in seen_names:
+                    valid_stack.append(_repo_to_stack_item(r))
+                    seen_names.add(fn)
+                if len(valid_stack) >= 6:
+                    break
+
+        return {"stack": valid_stack[:8]}
     except Exception as e:
         logger.error(f"Stack Gen Parse Error: {e}")
+        if seed_repos:
+            return {"stack": [_repo_to_stack_item(r) for r in seed_repos[:6]]}
         return {"stack": [], "raw": result}
 
 @api_router.post("/ai/stack-master-prompt")
@@ -4137,7 +4251,7 @@ async def health():
 
 # Whitelist of safe read-only GitHub API paths for Repo X-Ray
 _GITHUB_PROXY_ALLOWLIST = re.compile(
-    r'^repos/[^/]+/[^/]+(?:/readme|/contents/.*|/git/trees/.*|/releases|/contributors|/languages|/topics)?$'
+    r'^(?:repos/[^/]+/[^/]+(?:/readme|/contents/.*|/git/trees/.*|/releases|/contributors|/languages|/topics|/commits(?:\?.*)?|/pulls(?:/\d+)?(?:/files)?)?|rate_limit)$'
 )
 _ALLOWED_PROXY_HEADERS = {"content-type", "cache-control", "last-modified", "etag", "x-ratelimit-remaining", "x-ratelimit-reset"}
 
