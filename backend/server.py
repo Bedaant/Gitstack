@@ -1399,9 +1399,9 @@ Return ONLY valid JSON (no markdown):
         if isinstance(raw_diy, list):
             building_blocks = raw_diy
 
-    # ── Step 5: Parallel validation ──
+    # ── Step 5: Parallel validation (primary tools only, skip alternatives for speed) ──
     client = await _get_httpx_client()
-    _validate_sem = asyncio.Semaphore(4)
+    _validate_sem = asyncio.Semaphore(5)
 
     async def _validate_url(gh_url: str) -> str:
         if not gh_url or "github.com/" not in gh_url:
@@ -1416,7 +1416,7 @@ Return ONLY valid JSON (no markdown):
                     f"https://api.github.com/repos/{full_name}",
                     headers=GITHUB_HEADERS,
                     follow_redirects=True,
-                    timeout=5
+                    timeout=4
                 )
             if resp.status_code == 200:
                 return f"https://github.com/{full_name}"
@@ -1431,7 +1431,7 @@ Return ONLY valid JSON (no markdown):
                 search_resp = await client.get(
                     f"https://api.github.com/search/repositories?q={search_q}&per_page=5",
                     headers=GITHUB_HEADERS,
-                    timeout=5
+                    timeout=4
                 )
             if search_resp.status_code == 200:
                 items = search_resp.json().get("items", [])
@@ -1456,45 +1456,49 @@ Return ONLY valid JSON (no markdown):
             pass
         return ""
 
-    # Validate complete solutions
+    async def _validate_primary(item: dict, is_bb: bool = False):
+        """Validate a primary tool. For building blocks, item is the 'primary' dict."""
+        target = item.get("primary", item) if is_bb else item
+        url = target.get("githubUrl", "")
+        validated = await _validate_url(url)
+        if validated:
+            target["githubUrl"] = validated
+        else:
+            validated = await _search_fallback(target.get("name", ""))
+            if validated:
+                target["githubUrl"] = validated
+
+    # Gather all primary validations in parallel
+    to_validate = []
     for sol in complete_solutions:
-        url = sol.get("githubUrl", "")
-        validated = await _validate_url(url)
-        if validated:
-            sol["githubUrl"] = validated
-        else:
-            validated = await _search_fallback(sol.get("name", ""))
-            if validated:
-                sol["githubUrl"] = validated
-
-        # Validate alternatives
-        for alt in sol.get("alternatives", []):
-            v = await _validate_url(alt.get("githubUrl", ""))
-            if v:
-                alt["githubUrl"] = v
-            else:
-                alt["githubUrl"] = ""
-
-    # Validate building blocks
+        to_validate.append(_validate_primary(sol))
     for bb in building_blocks:
-        primary = bb.get("primary", {})
-        url = primary.get("githubUrl", "")
-        validated = await _validate_url(url)
-        if validated:
-            primary["githubUrl"] = validated
-        else:
-            validated = await _search_fallback(primary.get("name", ""))
-            if validated:
-                primary["githubUrl"] = validated
+        to_validate.append(_validate_primary(bb, is_bb=True))
+    if to_validate:
+        await asyncio.gather(*to_validate, return_exceptions=True)
 
-        for alt in bb.get("alternatives", []):
-            v = await _validate_url(alt.get("githubUrl", ""))
-            if v:
-                alt["githubUrl"] = v
+    # Quick regex cleanup for alternatives (no HTTP calls)
+    for sol in complete_solutions:
+        for alt in sol.get("alternatives", []):
+            url = alt.get("githubUrl", "")
+            if url and "github.com/" in url:
+                match = re.search(r'github\.com/([^/]+/[^/]+)', url)
+                if match:
+                    alt["githubUrl"] = f"https://github.com/{match.group(1).split('#')[0].split('?')[0].strip('/')}"
             else:
                 alt["githubUrl"] = ""
 
-    # Filter out invalid
+    for bb in building_blocks:
+        for alt in bb.get("alternatives", []):
+            url = alt.get("githubUrl", "")
+            if url and "github.com/" in url:
+                match = re.search(r'github\.com/([^/]+/[^/]+)', url)
+                if match:
+                    alt["githubUrl"] = f"https://github.com/{match.group(1).split('#')[0].split('?')[0].strip('/')}"
+            else:
+                alt["githubUrl"] = ""
+
+    # Filter out invalid primaries
     complete_solutions = [s for s in complete_solutions if s.get("githubUrl")]
     building_blocks = [b for b in building_blocks if b.get("primary", {}).get("githubUrl")]
 
