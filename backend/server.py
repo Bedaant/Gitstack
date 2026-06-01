@@ -13,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import sys
+import time
 import uuid
 import httpx
 import asyncio
@@ -4255,6 +4256,37 @@ _GITHUB_PROXY_ALLOWLIST = re.compile(
 )
 _ALLOWED_PROXY_HEADERS = {"content-type", "cache-control", "last-modified", "etag", "x-ratelimit-remaining", "x-ratelimit-reset"}
 
+# ---- In-memory TTL cache for GitHub proxy ----
+_GITHUB_PROXY_CACHE: dict[str, tuple[float, int, bytes, dict]] = {}
+_GITHUB_PROXY_CACHE_LOCK = asyncio.Lock()
+
+def _proxy_cache_ttl(path: str) -> int:
+    """Return TTL in seconds based on endpoint volatility."""
+    if path == "rate_limit":
+        return 0  # never cache
+    if any(p in path for p in ("/readme", "/contents/", "/languages", "/topics", "/git/trees/")):
+        return 600  # 10 min — relatively static
+    if any(p in path for p in ("/releases", "/contributors")):
+        return 300  # 5 min
+    return 120  # 2 min — commits, pulls, etc.
+
+async def _get_cached_proxy(cache_key: str):
+    async with _GITHUB_PROXY_CACHE_LOCK:
+        entry = _GITHUB_PROXY_CACHE.get(cache_key)
+        if not entry:
+            return None
+        expires_at, status_code, content, headers = entry
+        if time.time() > expires_at:
+            del _GITHUB_PROXY_CACHE[cache_key]
+            return None
+        return status_code, content, headers
+
+async def _set_cached_proxy(cache_key: str, ttl: int, status_code: int, content: bytes, headers: dict):
+    if ttl <= 0:
+        return
+    async with _GITHUB_PROXY_CACHE_LOCK:
+        _GITHUB_PROXY_CACHE[cache_key] = (time.time() + ttl, status_code, content, headers)
+
 @api_router.api_route("/github-proxy/{path:path}", methods=["GET", "HEAD"])
 @limiter.limit("60/minute")
 async def github_proxy(request: Request, path: str):
@@ -4262,9 +4294,21 @@ async def github_proxy(request: Request, path: str):
     if not _GITHUB_PROXY_ALLOWLIST.match(path):
         raise HTTPException(status_code=403, detail="Proxy path not allowed")
 
+    query = str(request.query_params)
+    cache_key = f"{request.method}:{path}?{query}"
+    ttl = _proxy_cache_ttl(path)
+
+    # Check cache
+    cached = await _get_cached_proxy(cache_key)
+    if cached:
+        status_code, content, headers = cached
+        headers = dict(headers)
+        headers["x-cache"] = "HIT"
+        return Response(content=content, status_code=status_code, headers=headers)
+
     url = f"https://api.github.com/{path}"
-    if request.query_params:
-        url += "?" + str(request.query_params)
+    if query:
+        url += "?" + query
 
     headers = {
         "Accept": request.headers.get("Accept", "application/vnd.github.v3+json"),
@@ -4281,10 +4325,17 @@ async def github_proxy(request: Request, path: str):
         logger.error(f"GitHub proxy error: {e}")
         raise HTTPException(status_code=502, detail="GitHub API unreachable")
 
+    response_headers = {k: v for k, v in response.headers.items() if k.lower() in _ALLOWED_PROXY_HEADERS}
+    response_headers["x-cache"] = "MISS"
+
+    # Cache successful GETs
+    if request.method == "GET" and response.status_code == 200:
+        await _set_cached_proxy(cache_key, ttl, response.status_code, response.content, response_headers)
+
     return Response(
         content=response.content,
         status_code=response.status_code,
-        headers={k: v for k, v in response.headers.items() if k.lower() in _ALLOWED_PROXY_HEADERS},
+        headers=response_headers,
     )
 
 # ==================== ACTIVITY & RECOMMENDATIONS ====================
