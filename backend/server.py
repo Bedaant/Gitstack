@@ -422,6 +422,7 @@ class StackGeneratorRequest(BaseModel):
     budget: Optional[str] = Field(None, max_length=50)
     needs_payments: Optional[bool] = None
     building_alone: Optional[bool] = None
+    solution_mode: Optional[str] = Field(default="both", pattern="^(complete|diy|both)$")
 
 class StackMasterPromptRequest(BaseModel):
     idea: str = Field(..., min_length=3, max_length=300)
@@ -1153,6 +1154,7 @@ Be accurate with real GitHub repositories. Calculate realistic cost estimates.""
 async def stack_generator(request: Request, req: StackGeneratorRequest):
     import json, re, httpx, urllib.parse, asyncio
 
+    mode = req.solution_mode or "both"
     context = f"Idea: {req.idea}"
     if req.budget:
         context += f"\nBudget: {req.budget}"
@@ -1161,14 +1163,24 @@ async def stack_generator(request: Request, req: StackGeneratorRequest):
     if req.building_alone is not None:
         context += f"\nBuilding alone: {'Yes' if req.building_alone else 'No'}"
 
-    # ── Step 0: Extract keywords from the idea for DB search ──
+    # ── Infer user intent from inputs ──
+    lean_complete = False
+    lean_diy = False
+    if req.building_alone and req.budget and "$0" in req.budget:
+        lean_complete = True  # Solo + free = easier to use ready-made
+    if any(w in req.idea.lower() for w in ["custom", "from scratch", "build my own", "api", "sdk", "library"]):
+        lean_diy = True
+
+    # ── Step 0: Extract keywords ──
     raw_words = [w.strip() for w in req.idea.lower().split() if len(w.strip()) > 2]
     keywords = raw_words[:6]
     text_regex = "|".join(re.escape(k) for k in keywords)
 
-    # ── Step 1: Query local DB for seed repos (fast, no AI needed) ──
-    seed_repos = []
+    # ── Step 1: Smart DB query with repo_type filtering ──
+    seed_complete = []
+    seed_diy = []
     seen_names = set()
+
     try:
         local_query = {
             "$or": [
@@ -1179,169 +1191,378 @@ async def stack_generator(request: Request, req: StackGeneratorRequest):
                 {"topics": {"$in": keywords}},
             ]
         }
+
+        # Apply repo_type filter based on mode
+        if mode == "complete":
+            local_query["repo_type"] = "complete_solution"
+        elif mode == "diy":
+            local_query["repo_type"] = {"$in": ["building_block", None]}
+
         local_candidates = await db.github_repos.find(
             local_query, {"_id": 0}
-        ).sort([("is_trending", -1), ("today_stars", -1), ("stars", -1)]).limit(20).to_list(20)
+        ).sort([("health_score", -1), ("stars", -1)]).limit(40).to_list(40)
 
         for r in local_candidates:
             score = 0
             name = (r.get("name") or "").lower()
             desc = (r.get("description") or "").lower()
+            use_cases = " ".join(r.get("use_cases") or []).lower()
+            replaces = " ".join(r.get("replaces_saas") or []).lower()
+            topics = [t.lower() for t in (r.get("topics") or [])]
+
             for k in keywords:
-                if k in name: score += 4
-                if k in desc: score += 1
+                k_lower = k.lower()
+                if k_lower in name: score += 5
+                if k_lower in use_cases: score += 4
+                if k_lower in replaces: score += 3
+                if k_lower in topics: score += 2
+                if k_lower in desc: score += 1
+
             if score > 0:
                 r["_db_score"] = score
-                seed_repos.append(r)
+                r["_match_reason"] = f"Matched on {score} relevance signals"
+                repo_type = r.get("repo_type", "building_block")
+                if repo_type == "complete_solution":
+                    seed_complete.append(r)
+                else:
+                    seed_diy.append(r)
                 seen_names.add(r.get("full_name", "").lower())
 
-        # Sort by DB score then by trending/stars
-        seed_repos.sort(key=lambda x: (-x.get("_db_score", 0), -x.get("today_stars", 0), -x.get("stars", 0)))
-        seed_repos = seed_repos[:8]
+        # Sort by relevance then health
+        for seed_list in [seed_complete, seed_diy]:
+            seed_list.sort(key=lambda x: (-x.get("_db_score", 0), -x.get("health_score", 0), -x.get("stars", 0)))
+
+        seed_complete = seed_complete[:6]
+        seed_diy = seed_diy[:10]
     except Exception as e:
         logger.warning(f"Stack Gen DB query failed: {e}")
 
-    # Build seed context for AI prompt
+    # ── Build seed context for AI prompt ──
     seed_context = ""
-    if seed_repos:
+    if seed_complete or seed_diy:
         seed_context = "\n\nRepositories already in our database (do NOT repeat these):\n"
-        for r in seed_repos[:5]:
-            seed_context += f"- {r.get('full_name')}: {r.get('description', '')[:80]}\n"
+        for r in (seed_complete + seed_diy)[:6]:
+            repo_type = r.get("repo_type", "building_block")
+            type_label = "[COMPLETE]" if repo_type == "complete_solution" else "[BUILDING_BLOCK]"
+            seed_context += f"- {type_label} {r.get('full_name')}: {r.get('description', '')[:80]}\n"
 
-    prompt = f"""Help a non-technical founder build: {context}{seed_context}
+    # ── Step 2: AI prompt based on solution_mode ──
+    if mode == "complete":
+        prompt = f"""Help a non-technical founder find ready-to-deploy solutions for: {context}{seed_context}
 
-Recommend 6 free/open-source GitHub CODE repositories to build this idea.
+Recommend 4 COMPLETE, ready-to-deploy open-source GitHub repositories that solve this problem END-TO-END.
+These should be full applications (not libraries or SDKs) that a founder can clone, configure, and deploy.
 
 IMPORTANT RULES:
-- ONLY suggest repositories that contain SOURCE CODE (React, Node.js, Python, etc.) which can be cloned, modified, and customized.
-- DO NOT suggest infrastructure tools that need separate installation like: Ollama, n8n, Metabase, Airbyte, or any tool that runs as its own server/platform.
-- Include a MIX: 2-3 well-known popular options AND 2-3 newer/smaller alternatives (100-2000 stars) that are actively maintained.
+- ONLY suggest COMPLETE APPLICATIONS with source code (React, Node.js, Python, etc.) that solve the ENTIRE problem.
+- Each repo must have a working UI and be deployable with Docker or one-click deploy.
+- Include a MIX: 1-2 well-known popular options AND 1-2 newer/smaller alternatives (100-2000 stars).
 - Do NOT repeat any repo from the seed list above.
-- If the idea needs AI, suggest a repo that already has OpenAI API integration (not Ollama).
-- If the idea needs automation, suggest a repo with built-in workflow logic (not n8n).
-- If the idea needs analytics, suggest a repo with built-in chart components (not Metabase).
-- Each repo should be a real, working product that the founder can clone and tweak for their own use case.
+- For EACH primary recommendation, also suggest 2 ALTERNATIVE repos with a brief "why" (e.g., "Lighter weight, better for small teams").
+- If the user has $0 budget, prioritize self-hosted options with no paid dependencies.
 
-Return ONLY a valid JSON array (no markdown):
-[
-  {{
-    "order": 1,
-    "name": "Tool Name",
-    "description": "Plain English description of what it does and why you need it (for non-tech people)",
-    "difficulty": "Beginner/Intermediate/Advanced",
-    "setupTime": "X mins/hours",
-    "githubUrl": "https://github.com/...",
-    "setupSteps": ["Step 1 in plain English", "Step 2", "Step 3"]
-  }}
-]
+Return ONLY valid JSON (no markdown):
+{{
+  "complete_solutions": [
+    {{
+      "order": 1,
+      "name": "Tool Name",
+      "description": "Plain English description",
+      "difficulty": "Beginner/Intermediate/Advanced",
+      "setupTime": "X mins/hours",
+      "githubUrl": "https://github.com/...",
+      "setupSteps": ["Step 1", "Step 2", "Step 3"],
+      "is_free": true,
+      "alternatives": [
+        {{"name": "Alt Name", "githubUrl": "https://github.com/...", "why": "One sentence why"}}
+      ]
+    }}
+  ]
+}}"""
+    elif mode == "diy":
+        prompt = f"""Help a non-technical founder build from scratch: {context}{seed_context}
 
-Put tools in the order they should be set up. Use real GitHub repositories."""
+Recommend 6 BUILDING BLOCK repositories — one per category — that the founder can assemble into a complete product.
+
+CATEGORIES to cover (pick the most relevant 5-6):
+1. Authentication / User Management
+2. Database / Backend
+3. Frontend / UI Framework
+4. Payments / Billing (if needed)
+5. AI / ML Integration (if needed)
+6. Email / Notifications
+7. Analytics / Dashboard
+8. File Storage / Assets
+
+IMPORTANT RULES:
+- Suggest LIBRARIES, SDKs, or starter templates — not complete apps.
+- Each repo should be a component the founder integrates into THEIR codebase.
+- Include a MIX: well-known options AND newer alternatives.
+- Do NOT repeat any repo from the seed list above.
+- For EACH primary recommendation, also suggest 2 ALTERNATIVE repos with a brief "why".
+
+Return ONLY valid JSON (no markdown):
+{{
+  "building_blocks": [
+    {{
+      "category": "Auth",
+      "primary": {{
+        "name": "Tool Name",
+        "description": "Plain English",
+        "difficulty": "Beginner/Intermediate/Advanced",
+        "setupTime": "X mins",
+        "githubUrl": "https://github.com/...",
+        "setupSteps": ["Step 1", "Step 2"]
+      }},
+      "alternatives": [
+        {{"name": "Alt", "githubUrl": "...", "why": "One sentence"}}
+      ]
+    }}
+  ]
+}}"""
+    else:
+        prompt = f"""Help a non-technical founder build: {context}{seed_context}
+
+Return TWO sections:
+
+SECTION A — Complete Solutions (2-3 repos):
+Ready-to-deploy FULL APPLICATIONS that solve the problem end-to-end.
+- Each must be a complete app with UI, not a library.
+- Include 2 alternatives per primary recommendation.
+
+SECTION B — DIY Building Blocks (3-4 repos):
+Libraries/components to build a custom solution. Cover the most important categories:
+- Auth, Database/Backend, Frontend framework, and any domain-specific needs.
+- Include 2 alternatives per primary recommendation.
+
+IMPORTANT RULES:
+- Do NOT repeat any repo from the seed list above.
+- All repos must be real GitHub repositories.
+- Mix of popular + newer alternatives.
+
+Return ONLY valid JSON (no markdown):
+{{
+  "complete_solutions": [
+    {{
+      "order": 1,
+      "name": "...",
+      "description": "...",
+      "difficulty": "...",
+      "setupTime": "...",
+      "githubUrl": "https://github.com/...",
+      "setupSteps": ["..."],
+      "is_free": true,
+      "alternatives": [{{"name": "...", "githubUrl": "...", "why": "..."}}]
+    }}
+  ],
+  "building_blocks": [
+    {{
+      "category": "Auth",
+      "primary": {{"name": "...", "description": "...", "difficulty": "...", "setupTime": "...", "githubUrl": "...", "setupSteps": ["..."]}},
+      "alternatives": [{{"name": "...", "githubUrl": "...", "why": "..."}}]
+    }}
+  ]
+}}"""
+
     try:
         result = await call_ai(prompt, json_response=True)
     except Exception as e:
         logger.error(f"Stack Gen AI Error: {e}")
-        # Fallback: return DB seed repos if AI fails
-        if seed_repos:
-            return {"stack": [_repo_to_stack_item(r) for r in seed_repos[:6]]}
-        return {"stack": [], "error": "AI service temporarily unavailable. Please try again."}
+        return _stack_fallback(seed_complete, seed_diy, mode)
 
+    # ── Step 3: Parse & normalize AI response ──
     try:
         cleaned = result.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1]
             cleaned = cleaned.rsplit("```", 1)[0]
         data = json.loads(cleaned)
-        data = normalize_ai_json(data)
 
-        if not isinstance(data, list):
-            logger.error(f"Stack Gen: AI returned non-list after normalize: {type(data)}")
-            if seed_repos:
-                return {"stack": [_repo_to_stack_item(r) for r in seed_repos[:6]]}
-            return {"stack": [], "raw": result}
-
-        # ── Parallel validation with semaphore ──
-        client = await _get_httpx_client()
-        _validate_sem = asyncio.Semaphore(4)
-
-        async def _validate_tool(tool):
-            gh_url = tool.get("githubUrl", "")
-            if not gh_url or "github.com/" not in gh_url:
-                return tool
-
-            match = re.search(r'github\.com/([^/]+/[^/]+)', gh_url)
-            if not match:
-                return tool
-
-            full_name = match.group(1).split('#')[0].split('?')[0].strip('/')
-            try:
-                async with _validate_sem:
-                    resp = await client.head(
-                        f"https://api.github.com/repos/{full_name}",
-                        headers=GITHUB_HEADERS,
-                        follow_redirects=True,
-                        timeout=5
-                    )
-                if resp.status_code == 200:
-                    tool["githubUrl"] = f"https://github.com/{full_name}"
-                    return tool
-            except Exception:
-                pass
-
-            # Fallback: search GitHub for the tool name
-            search_q = tool.get("name", "").replace(" ", "+")
-            try:
-                async with _validate_sem:
-                    search_resp = await client.get(
-                        f"https://api.github.com/search/repositories?q={search_q}&per_page=5",
-                        headers=GITHUB_HEADERS,
-                        timeout=5
-                    )
-                if search_resp.status_code == 200:
-                    items = search_resp.json().get("items", [])
-                    # Pick best match by stars + description containing keywords
-                    best = None
-                    best_score = -1
-                    for item in items:
-                        fn = item.get("full_name", "").lower()
-                        if fn in seen_names:
-                            continue
-                        score = item.get("stargazers_count", 0)
-                        desc = (item.get("description") or "").lower()
-                        for k in keywords:
-                            if k in desc:
-                                score += 100
-                        if score > best_score:
-                            best_score = score
-                            best = item
-                    if best:
-                        tool["githubUrl"] = f"https://github.com/{best['full_name']}"
-                        seen_names.add(best['full_name'].lower())
-                        return tool
-            except Exception:
-                pass
-
-            tool["githubUrl"] = ""
-            return tool
-
-        validated = await asyncio.gather(*[_validate_tool(t) for t in data])
-        valid_stack = [t for t in validated if t.get("githubUrl")]
-
-        # If AI gave us < 3 valid tools, supplement with DB seed repos
-        if len(valid_stack) < 3 and seed_repos:
-            for r in seed_repos:
-                fn = r.get("full_name", "").lower()
-                if fn not in seen_names:
-                    valid_stack.append(_repo_to_stack_item(r))
-                    seen_names.add(fn)
-                if len(valid_stack) >= 6:
-                    break
-
-        return {"stack": valid_stack[:8]}
+        if not isinstance(data, dict):
+            logger.error(f"Stack Gen: AI returned non-dict: {type(data)}")
+            return _stack_fallback(seed_complete, seed_diy, mode)
     except Exception as e:
         logger.error(f"Stack Gen Parse Error: {e}")
-        if seed_repos:
-            return {"stack": [_repo_to_stack_item(r) for r in seed_repos[:6]]}
-        return {"stack": [], "raw": result}
+        return _stack_fallback(seed_complete, seed_diy, mode)
+
+    # ── Step 4: Extract & validate ──
+    complete_solutions = []
+    building_blocks = []
+
+    if mode in ("complete", "both"):
+        raw_complete = data.get("complete_solutions", [])
+        if isinstance(raw_complete, list):
+            complete_solutions = raw_complete
+
+    if mode in ("diy", "both"):
+        raw_diy = data.get("building_blocks", [])
+        if isinstance(raw_diy, list):
+            building_blocks = raw_diy
+
+    # ── Step 5: Parallel validation ──
+    client = await _get_httpx_client()
+    _validate_sem = asyncio.Semaphore(4)
+
+    async def _validate_url(gh_url: str) -> str:
+        if not gh_url or "github.com/" not in gh_url:
+            return ""
+        match = re.search(r'github\.com/([^/]+/[^/]+)', gh_url)
+        if not match:
+            return ""
+        full_name = match.group(1).split('#')[0].split('?')[0].strip('/')
+        try:
+            async with _validate_sem:
+                resp = await client.head(
+                    f"https://api.github.com/repos/{full_name}",
+                    headers=GITHUB_HEADERS,
+                    follow_redirects=True,
+                    timeout=5
+                )
+            if resp.status_code == 200:
+                return f"https://github.com/{full_name}"
+        except Exception:
+            pass
+        return ""
+
+    async def _search_fallback(name: str) -> str:
+        search_q = name.replace(" ", "+")
+        try:
+            async with _validate_sem:
+                search_resp = await client.get(
+                    f"https://api.github.com/search/repositories?q={search_q}&per_page=5",
+                    headers=GITHUB_HEADERS,
+                    timeout=5
+                )
+            if search_resp.status_code == 200:
+                items = search_resp.json().get("items", [])
+                best = None
+                best_score = -1
+                for item in items:
+                    fn = item.get("full_name", "").lower()
+                    if fn in seen_names:
+                        continue
+                    score = item.get("stargazers_count", 0)
+                    desc = (item.get("description") or "").lower()
+                    for k in keywords:
+                        if k in desc:
+                            score += 100
+                    if score > best_score:
+                        best_score = score
+                        best = item
+                if best:
+                    seen_names.add(best['full_name'].lower())
+                    return f"https://github.com/{best['full_name']}"
+        except Exception:
+            pass
+        return ""
+
+    # Validate complete solutions
+    for sol in complete_solutions:
+        url = sol.get("githubUrl", "")
+        validated = await _validate_url(url)
+        if validated:
+            sol["githubUrl"] = validated
+        else:
+            validated = await _search_fallback(sol.get("name", ""))
+            if validated:
+                sol["githubUrl"] = validated
+
+        # Validate alternatives
+        for alt in sol.get("alternatives", []):
+            v = await _validate_url(alt.get("githubUrl", ""))
+            if v:
+                alt["githubUrl"] = v
+            else:
+                alt["githubUrl"] = ""
+
+    # Validate building blocks
+    for bb in building_blocks:
+        primary = bb.get("primary", {})
+        url = primary.get("githubUrl", "")
+        validated = await _validate_url(url)
+        if validated:
+            primary["githubUrl"] = validated
+        else:
+            validated = await _search_fallback(primary.get("name", ""))
+            if validated:
+                primary["githubUrl"] = validated
+
+        for alt in bb.get("alternatives", []):
+            v = await _validate_url(alt.get("githubUrl", ""))
+            if v:
+                alt["githubUrl"] = v
+            else:
+                alt["githubUrl"] = ""
+
+    # Filter out invalid
+    complete_solutions = [s for s in complete_solutions if s.get("githubUrl")]
+    building_blocks = [b for b in building_blocks if b.get("primary", {}).get("githubUrl")]
+
+    # ── Step 6: Fallback to DB seeds if AI under-delivers ──
+    if mode in ("complete", "both") and len(complete_solutions) < 2 and seed_complete:
+        for r in seed_complete:
+            fn = r.get("full_name", "").lower()
+            if fn not in seen_names:
+                item = _repo_to_stack_item(r)
+                item["alternatives"] = []
+                item["is_free"] = True
+                complete_solutions.append(item)
+                seen_names.add(fn)
+            if len(complete_solutions) >= 3:
+                break
+
+    if mode in ("diy", "both") and len(building_blocks) < 3 and seed_diy:
+        for r in seed_diy:
+            fn = r.get("full_name", "").lower()
+            if fn not in seen_names:
+                item = _repo_to_stack_item(r)
+                bb = {
+                    "category": r.get("topics", ["Component"])[0] if r.get("topics") else "Component",
+                    "primary": item,
+                    "alternatives": []
+                }
+                building_blocks.append(bb)
+                seen_names.add(fn)
+            if len(building_blocks) >= 4:
+                break
+
+    return {
+        "mode": mode,
+        "complete_solutions": complete_solutions[:4],
+        "building_blocks": building_blocks[:6],
+        "lean_complete": lean_complete,
+        "lean_diy": lean_diy,
+    }
+
+
+def _stack_fallback(seed_complete, seed_diy, mode):
+    """Return DB seed repos when AI fails."""
+    complete_solutions = []
+    building_blocks = []
+
+    if mode in ("complete", "both"):
+        for r in seed_complete[:3]:
+            item = _repo_to_stack_item(r)
+            item["alternatives"] = []
+            item["is_free"] = True
+            complete_solutions.append(item)
+
+    if mode in ("diy", "both"):
+        for r in seed_diy[:4]:
+            item = _repo_to_stack_item(r)
+            bb = {
+                "category": r.get("topics", ["Component"])[0] if r.get("topics") else "Component",
+                "primary": item,
+                "alternatives": []
+            }
+            building_blocks.append(bb)
+
+    return {
+        "mode": mode,
+        "complete_solutions": complete_solutions,
+        "building_blocks": building_blocks,
+        "fallback": True
+    }
 
 @api_router.post("/ai/stack-master-prompt")
 @limiter.limit("10/minute")

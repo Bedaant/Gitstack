@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, Link } from "react-router-dom";
 import axios from "axios";
@@ -310,6 +310,7 @@ export default function StackGenerator() {
   const [budget, setBudget] = useState(draft.budget || "");
   const [buildingAlone, setBuildingAlone] = useState(draft.buildingAlone ?? null);
   const [needsPayments, setNeedsPayments] = useState(draft.needsPayments ?? null);
+  const [solutionMode, setSolutionMode] = useState(draft.solutionMode || "both");
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [stack, setStack] = useState(null);
@@ -324,11 +325,13 @@ export default function StackGenerator() {
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [completeSolutions, setCompleteSolutions] = useState([]);
   const [solutionsLoading, setSolutionsLoading] = useState(false);
+  const [selectedComplete, setSelectedComplete] = useState(null);
+  const [selectedBlocks, setSelectedBlocks] = useState({});
 
   useEffect(() => {
     if (stack) return;
-    saveDraft({ idea, budget, buildingAlone, needsPayments });
-  }, [idea, budget, buildingAlone, needsPayments, stack]);
+    saveDraft({ idea, budget, buildingAlone, needsPayments, solutionMode });
+  }, [idea, budget, buildingAlone, needsPayments, solutionMode, stack]);
 
   useEffect(() => {
     if (!loading) { setLoadingStep(0); return; }
@@ -345,24 +348,35 @@ export default function StackGenerator() {
     setSaved(false);
     setActiveTab("stack");
     setMasterPrompt("");
+    setSelectedComplete(null);
+    setSelectedBlocks({});
     try {
       const res = await axios.post(`${API}/ai/stack-generator`, {
         idea,
         ...(budget && { budget }),
         ...(buildingAlone !== null && { building_alone: buildingAlone }),
         ...(needsPayments !== null && { needs_payments: needsPayments }),
+        solution_mode: solutionMode,
       });
-      setStack(res.data.stack || []);
+      const data = res.data;
+      // Support both old format (flat array) and new format (categorized)
+      const newStack = data.complete_solutions || data.building_blocks
+        ? data
+        : { mode: "both", complete_solutions: [], building_blocks: (data.stack || []).map((t, i) => ({ category: "Tool " + (i+1), primary: t, alternatives: [] })) };
+      setStack(newStack);
       setSaved(isStackSaved(idea));
       clearDraft();
-      trackEvent("stack_generated", { idea: idea.slice(0, 50), tool_count: res.data.stack?.length || 0 });
-      // Phase 4: Also fetch complete solutions in parallel
-      setSolutionsLoading(true);
-      setCompleteSolutions([]);
-      axios.post(`${API}/ai/solution-finder`, { query: idea, limit: 3 })
-        .then(r => setCompleteSolutions(r.data.solutions || []))
-        .catch(() => {})
-        .finally(() => setSolutionsLoading(false));
+      const toolCount = (newStack.complete_solutions?.length || 0) + (newStack.building_blocks?.length || 0);
+      trackEvent("stack_generated", { idea: idea.slice(0, 50), tool_count: toolCount, mode: solutionMode });
+      // Phase 4: Also fetch complete solutions in parallel (for "both" mode supplement)
+      if (solutionMode === "both" || solutionMode === "complete") {
+        setSolutionsLoading(true);
+        setCompleteSolutions([]);
+        axios.post(`${API}/ai/solution-finder`, { query: idea, limit: 3 })
+          .then(r => setCompleteSolutions(r.data.solutions || []))
+          .catch(() => {})
+          .finally(() => setSolutionsLoading(false));
+      }
     } catch (e) {
       toast.error("Failed to generate stack. Try again.");
       console.error(e);
@@ -370,11 +384,30 @@ export default function StackGenerator() {
     setLoading(false);
   };
 
+  // Derive flat stack array from new categorized format for backward-compat actions
+  const flatStack = useMemo(() => {
+    if (!stack) return [];
+    if (Array.isArray(stack)) return stack;
+    const items = [];
+    if (stack.complete_solutions && selectedComplete) {
+      items.push(selectedComplete);
+    } else if (stack.complete_solutions) {
+      items.push(...stack.complete_solutions);
+    }
+    if (stack.building_blocks) {
+      stack.building_blocks.forEach(bb => {
+        const selected = selectedBlocks[bb.category];
+        items.push(selected || bb.primary);
+      });
+    }
+    return items;
+  }, [stack, selectedComplete, selectedBlocks]);
+
   const handleSave = () => {
     if (!stack || saved) return;
-    saveStackLocally(idea, stack);
+    saveStackLocally(idea, flatStack);
     setSaved(true);
-    trackEvent("stack_saved", { idea: idea.slice(0, 50), tool_count: stack.length });
+    trackEvent("stack_saved", { idea: idea.slice(0, 50), tool_count: flatStack.length });
     toast.success("Stack saved! View it in My Stacks →", {
       action: { label: "View", onClick: () => window.location.href = '/dashboard' },
     });
@@ -385,9 +418,9 @@ export default function StackGenerator() {
     setPublishing(true);
     try {
       const name = idea.length > 60 ? idea.slice(0, 57) + '...' : idea;
-      const res = await axios.post(`${API}/stacks/publish`, { name, idea, tools: stack });
+      const res = await axios.post(`${API}/stacks/publish`, { name, idea, tools: flatStack });
       setPublicSlug(res.data.stack_id);
-      trackEvent("stack_published", { idea: idea.slice(0, 50), tool_count: stack.length });
+      trackEvent("stack_published", { idea: idea.slice(0, 50), tool_count: flatStack.length });
       toast.success("Stack published! Share the link →");
     } catch {
       toast.error("Couldn't publish. Try again.");
@@ -399,7 +432,7 @@ export default function StackGenerator() {
     e.preventDefault();
     if (!email.trim() || emailSent) return;
     try {
-      await axios.post(`${API}/stacks/email-me`, { email: email.trim(), idea, tools: stack });
+      await axios.post(`${API}/stacks/email-me`, { email: email.trim(), idea, tools: flatStack });
       setEmailSent(true);
       toast.success("Saved! We'll remind you when it's time to build.");
     } catch {
@@ -411,9 +444,9 @@ export default function StackGenerator() {
     if (!stack || generatingPrompt) return;
     setGeneratingPrompt(true);
     try {
-      const res = await axios.post(`${API}/ai/stack-master-prompt`, { idea, tools: stack });
+      const res = await axios.post(`${API}/ai/stack-master-prompt`, { idea, tools: flatStack });
       setMasterPrompt(res.data.prompt);
-      trackEvent("enhanced_prompt_generated", { idea: idea.slice(0, 50), tool_count: stack.length });
+      trackEvent("enhanced_prompt_generated", { idea: idea.slice(0, 50), tool_count: flatStack.length });
       toast.success("Enhanced prompt generated!");
     } catch (e) {
       toast.error("Failed to generate enhanced prompt. Using instant prompt instead.");
@@ -424,7 +457,7 @@ export default function StackGenerator() {
 
   useEffect(() => {
     if (initialIdea && !stack) {
-      handleGenerate();
+      handleGenerate(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -546,8 +579,35 @@ export default function StackGenerator() {
               </div>
             </div>
 
+            {/* Solution Mode Selector */}
+            <div className="neo-card p-4 border-2 border-foreground">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">What do you prefer?</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'complete', label: '🔧 Ready to Deploy', desc: 'Complete apps' },
+                  { id: 'diy', label: '🛠️ DIY Blocks', desc: 'Build from components' },
+                  { id: 'both', label: '📋 Show Both', desc: 'Compare options' },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setSolutionMode(mode.id)}
+                    className={`p-3 border-2 border-foreground text-left transition-all ${
+                      solutionMode === mode.id
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <div className="font-bold text-sm">{mode.label}</div>
+                    <div className={`text-xs mt-0.5 ${solutionMode === mode.id ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                      {mode.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button
-              onClick={handleGenerate}
+              onClick={() => handleGenerate(1)}
               disabled={loading || !idea.trim()}
               className="neo-btn neo-btn-primary px-8 py-4 w-full text-lg disabled:opacity-50"
               data-testid="stack-gen-submit"
@@ -574,7 +634,7 @@ export default function StackGenerator() {
             </div>
           )}
 
-          {stack && stack.length > 0 && (
+          {stack && (stack.length > 0 || stack.complete_solutions || stack.building_blocks) && (
             <div className="space-y-4">
               {/* ── Tabs ── */}
               <div className="flex border-b-4 border-foreground mb-6">
@@ -606,29 +666,188 @@ export default function StackGenerator() {
 
               {/* ── Stack Tab ── */}
               {activeTab === "stack" && (
-                <div className="space-y-4">
-                  <p className="text-sm font-mono uppercase tracking-wider text-muted-foreground mb-6 font-bold">
-                    Here's your tailored stack:
-                  </p>
+                <div className="space-y-6">
+                  {/* Legacy flat array fallback */}
+                  {Array.isArray(stack) && (
+                    <>
+                      <p className="text-sm font-mono uppercase tracking-wider text-muted-foreground mb-6 font-bold">
+                        Here's your tailored stack:
+                      </p>
+                      <AnimatePresence>
+                        {stack.map((tool, i) => (
+                          <motion.div
+                            key={`${tool.name}-${i}`}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.1 }}
+                          >
+                            <StackToolCard
+                              tool={tool}
+                              index={i}
+                              expanded={expandedTool === i}
+                              onToggle={() => setExpandedTool(expandedTool === i ? null : i)}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </>
+                  )}
 
-                  <AnimatePresence>
-                    {stack.map((tool, i) => (
-                      <motion.div
-                        key={`${tool.name}-${i}`}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                      >
-                        <StackToolCard
-                          tool={tool}
-                          index={i}
-                          expanded={expandedTool === i}
-                          onToggle={() => setExpandedTool(expandedTool === i ? null : i)}
-                        />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
+                  {/* New categorized format */}
+                  {!Array.isArray(stack) && (
+                    <>
+                      {/* Complete Solutions */}
+                      {stack.complete_solutions && stack.complete_solutions.length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+                            <Rocket className="w-5 h-5" /> Ready to Deploy
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Complete applications you can clone and deploy today. Pick one as your foundation.
+                          </p>
+                          <div className="space-y-3">
+                            {stack.complete_solutions.map((sol, i) => (
+                              <motion.div
+                                key={sol.name}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.1 }}
+                                className={`neo-card p-5 border-2 ${selectedComplete?.name === sol.name ? 'border-primary bg-primary/5' : 'border-foreground'}`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h4 className="font-bold text-lg">{sol.name}</h4>
+                                      {sol.stars && (
+                                        <span className="text-xs font-bold bg-muted px-2 py-0.5 rounded flex items-center gap-1">
+                                          <Star className="w-3 h-3 text-yellow-500" fill="currentColor" /> {sol.stars}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mb-2">{sol.description}</p>
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      <span className={`px-2 py-0.5 font-bold rounded ${sol.difficulty === 'Beginner' ? 'bg-green-100 text-green-800' : sol.difficulty === 'Advanced' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                        {sol.difficulty}
+                                      </span>
+                                      <span className="px-2 py-0.5 bg-muted rounded flex items-center gap-1">
+                                        <Clock className="w-3 h-3" /> {sol.setupTime}
+                                      </span>
+                                      {sol.is_free && (
+                                        <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold">Free</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => setSelectedComplete(selectedComplete?.name === sol.name ? null : sol)}
+                                    className={`neo-btn px-3 py-1.5 text-xs font-black whitespace-nowrap ${selectedComplete?.name === sol.name ? 'neo-btn-primary' : ''}`}
+                                  >
+                                    {selectedComplete?.name === sol.name ? '✓ Selected' : 'Use This'}
+                                  </button>
+                                </div>
 
+                                {/* Alternatives */}
+                                {sol.alternatives && sol.alternatives.length > 0 && (
+                                  <div className="mt-3 pt-3 border-t border-border">
+                                    <p className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wider">Alternatives</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {sol.alternatives.filter(a => a.githubUrl).map((alt) => (
+                                        <button
+                                          key={alt.name}
+                                          onClick={() => {
+                                            const newSol = { ...sol, name: alt.name, githubUrl: alt.githubUrl, description: alt.why || sol.description };
+                                            setSelectedComplete(newSol);
+                                          }}
+                                          className={`text-xs px-3 py-1.5 border-2 border-foreground rounded font-semibold transition-colors ${
+                                            selectedComplete?.name === alt.name ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                                          }`}
+                                          title={alt.why}
+                                        >
+                                          {alt.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </motion.div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Building Blocks */}
+                      {stack.building_blocks && stack.building_blocks.length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-black uppercase tracking-tight mb-4 flex items-center gap-2">
+                            <Wand2 className="w-5 h-5" /> DIY Building Blocks
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Components to assemble your custom solution. Swap any piece for an alternative.
+                          </p>
+                          <div className="space-y-3">
+                            {stack.building_blocks.map((bb, i) => {
+                              const selected = selectedBlocks[bb.category];
+                              const active = selected || bb.primary;
+                              return (
+                                <motion.div
+                                  key={bb.category}
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: i * 0.1 }}
+                                  className="neo-card p-5 border-2 border-foreground"
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xs font-black uppercase tracking-widest text-primary bg-primary/10 px-2 py-0.5">
+                                      {bb.category}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-bold">{active.name}</h4>
+                                        {active.stars && (
+                                          <span className="text-xs font-bold bg-muted px-2 py-0.5 rounded flex items-center gap-1">
+                                            <Star className="w-3 h-3 text-yellow-500" fill="currentColor" /> {active.stars}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">{active.description}</p>
+                                    </div>
+                                  </div>
+
+                                  {/* Alternatives */}
+                                  {bb.alternatives && bb.alternatives.filter(a => a.githubUrl).length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <span className="text-xs text-muted-foreground py-1">Swap for:</span>
+                                      <button
+                                        onClick={() => setSelectedBlocks(prev => ({ ...prev, [bb.category]: undefined }))}
+                                        className={`text-xs px-2 py-1 border-2 border-foreground rounded font-semibold ${!selected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                                      >
+                                        {bb.primary.name}
+                                      </button>
+                                      {bb.alternatives.filter(a => a.githubUrl).map((alt) => (
+                                        <button
+                                          key={alt.name}
+                                          onClick={() => setSelectedBlocks(prev => ({ ...prev, [bb.category]: alt }))}
+                                          className={`text-xs px-2 py-1 border-2 border-foreground rounded font-semibold transition-colors ${
+                                            selected?.name === alt.name ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                                          }`}
+                                          title={alt.why}
+                                        >
+                                          {alt.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Actions */}
                   <div className="flex flex-wrap gap-3 mt-8">
                     <button
                       onClick={handleSave}
@@ -642,7 +861,7 @@ export default function StackGenerator() {
                     </button>
                     <button
                       onClick={() => {
-                        const text = `My stack for "${idea}":\n${stack.map((t, i) => `${i+1}. ${t.name}`).join(', ')}\n\nBuilt with @GitStackDev: ${window.location.origin}/stack-generator`;
+                        const text = `My stack for "${idea}":\n${flatStack.map((t, i) => `${i+1}. ${t.name}`).join(', ')}\n\nBuilt with @GitStackDev: ${window.location.origin}/stack-generator`;
                         const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
                         trackEvent("stack_shared", { platform: "twitter", idea: idea.slice(0, 50) });
                         window.open(xUrl, '_blank');
@@ -656,7 +875,7 @@ export default function StackGenerator() {
                     </button>
                     <button
                       onClick={() => {
-                        const text = stack.map((t, i) => `${i+1}. ${t.name}: ${t.description}`).join('\n');
+                        const text = flatStack.map((t, i) => `${i+1}. ${t.name}: ${t.description}`).join('\n');
                         navigator.clipboard.writeText(text);
                         toast.success("Details copied!");
                       }}
@@ -846,7 +1065,7 @@ export default function StackGenerator() {
                   </div>
 
                   {/* Step 3+: Per-tool setup steps */}
-                  {stack.map((tool, i) => (
+                  {flatStack.map((tool, i) => (
                     <div key={`setup-${tool.name}`} className="neo-card bg-background overflow-hidden">
                       <div className="p-5">
                         <h3 className="font-black text-sm uppercase tracking-wide mb-3 flex items-center gap-2">
@@ -899,7 +1118,7 @@ export default function StackGenerator() {
                         ]),
                       ].join("\n");
                       navigator.clipboard.writeText(fullGuide);
-                      trackEvent("setup_guide_copied", { idea: idea.slice(0, 50), tool_count: stack.length });
+                      trackEvent("setup_guide_copied", { idea: idea.slice(0, 50), tool_count: flatStack.length });
                       toast.success("Full setup guide copied!");
                     }}
                     className="neo-btn neo-btn-primary px-6 py-3 w-full font-black"
@@ -937,7 +1156,7 @@ export default function StackGenerator() {
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(masterPrompt || instantPrompt);
-                            trackEvent("master_prompt_copied", { idea: idea.slice(0, 50), enhanced: !!masterPrompt, tool_count: stack.length });
+                            trackEvent("master_prompt_copied", { idea: idea.slice(0, 50), enhanced: !!masterPrompt, tool_count: flatStack.length });
                             toast.success("Master prompt copied!");
                           }}
                           className="absolute top-2 right-2 bg-background text-foreground px-3 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
