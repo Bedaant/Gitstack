@@ -106,11 +106,11 @@ html = html.replace(
 // ---------------------------------------------------------------------------
 html = html.replace(
   "CodeFlow runs entirely in your browser. No backend servers, no data collection.",
-  "Repo X-Ray uses GitStack's authenticated proxy to avoid GitHub rate limits. Your code is never stored."
+  "Repo X-Ray uses the GitStack authenticated proxy to avoid GitHub rate limits. Your code is never stored."
 );
 html = html.replace(
   "Your GitHub token is stored only in your browser's memory. It's never saved, logged, or transmitted anywhere except directly to GitHub's API.",
-  "GitHub API calls are routed through GitStack's secure proxy. No token storage required."
+  "GitHub API calls are routed through the GitStack secure proxy. No token storage required."
 );
 html = html.replace(
   "All GitHub API calls go directly from your browser to api.github.com. We have no proxy, no middleware, no way to intercept your data.",
