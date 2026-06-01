@@ -463,9 +463,9 @@ export default function StackGenerator() {
   }, []);
 
   // Pre-compute tab content data
-  const cloneCommands = stack ? generateCloneCommands(stack) : [];
-  const totalTime = stack ? estimateTotalTime(stack) : "";
-  const instantPrompt = stack ? generateInstantPrompt(idea, stack) : "";
+  const cloneCommands = flatStack.length > 0 ? generateCloneCommands(flatStack) : [];
+  const totalTime = flatStack.length > 0 ? estimateTotalTime(flatStack) : "";
+  const instantPrompt = flatStack.length > 0 ? generateInstantPrompt(idea, flatStack) : "";
 
   return (
     <div className="min-h-screen">
