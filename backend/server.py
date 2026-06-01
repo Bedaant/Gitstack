@@ -441,11 +441,15 @@ class SaveStackRequest(BaseModel):
 class SmartSearchRequest(BaseModel):
     query: str
     limit: int = Field(default=20, ge=1, le=100)
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=10, ge=1, le=50)
     include_github_live: bool = True
 
 class SolutionFinderRequest(BaseModel):
     query: str = Field(..., min_length=3, max_length=500)
-    limit: int = Field(default=8, ge=1, le=20)
+    limit: int = Field(default=8, ge=1, le=100)
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=10, ge=1, le=50)
 
 class RepoUpvoteRequest(BaseModel):
     full_name: str = Field(..., min_length=3, max_length=200)
@@ -655,12 +659,18 @@ async def logout(request: Request):
 # ==================== TOOLS ROUTES ====================
 
 @api_router.get("/tools")
-async def get_tools(category: Optional[str] = None, topic: Optional[str] = None, search: Optional[str] = None, limit: int = Query(50, ge=1, le=200)):
+async def get_tools(
+    category: Optional[str] = None,
+    topic: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=50)
+):
     query = {}
     if category:
         query["category"] = category
     if topic:
-        # Search in category or tags
         safe_topic = re.escape(topic)
         query["$or"] = [
             {"category": {"$regex": safe_topic, "$options": "i"}},
@@ -680,23 +690,33 @@ async def get_tools(category: Optional[str] = None, topic: Optional[str] = None,
         else:
             query = search_query
 
-    tools = await db.tools.find(query, {"_id": 0}).limit(limit).to_list(limit)
+    # Count totals for pagination metadata
+    total_tools = await db.tools.count_documents(query)
 
-    # Also search github_repos if not enough results
-    if len(tools) < limit:
-        gh_query = {}
-        if topic:
-            gh_query["$or"] = [
-                {"topics": {"$regex": topic, "$options": "i"}},
-                {"language": {"$regex": topic, "$options": "i"}}
-            ]
-        if search:
-            gh_query["$or"] = [
-                {"name": {"$regex": search, "$options": "i"}},
-                {"description": {"$regex": search, "$options": "i"}}
-            ]
+    # Build github_repos query for count
+    gh_query = {}
+    if topic:
+        gh_query["$or"] = [
+            {"topics": {"$regex": topic, "$options": "i"}},
+            {"language": {"$regex": topic, "$options": "i"}}
+        ]
+    if search:
+        gh_query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}}
+        ]
+    total_github = await db.github_repos.count_documents(gh_query)
+    total = total_tools + total_github
 
-        gh_repos = await db.github_repos.find(gh_query, {"_id": 0}).sort("score", -1).limit(limit - len(tools)).to_list(limit - len(tools))
+    # Pagination logic: curated tools first, then github_repos
+    skip = (page - 1) * per_page
+    tools = await db.tools.find(query, {"_id": 0}).skip(skip).limit(per_page).to_list(per_page)
+
+    # Fill remainder from github_repos
+    remaining = per_page - len(tools)
+    if remaining > 0:
+        gh_skip = max(0, skip - total_tools)
+        gh_repos = await db.github_repos.find(gh_query, {"_id": 0}).sort("score", -1).skip(gh_skip).limit(remaining).to_list(remaining)
 
         # Convert github_repos format to tools format
         for repo in gh_repos:
@@ -719,7 +739,19 @@ async def get_tools(category: Optional[str] = None, topic: Optional[str] = None,
                 "full_name": repo.get("full_name", "")
             })
 
-    return tools
+    total_pages = (total + per_page - 1) // per_page
+
+    return {
+        "results": tools,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }
 
 @api_router.get("/tools/{tool_id}")
 async def get_tool(tool_id: str):
@@ -1611,7 +1643,7 @@ async def solution_finder(request: Request, req: SolutionFinderRequest):
     import json as _json
 
     query = " ".join(req.query.strip().lower().split())
-    cache_key = f"solution_finder:{hashlib.md5(query.encode(), usedforsecurity=False).hexdigest()}"
+    cache_key = f"solution_finder:{hashlib.md5(query.encode(), usedforsecurity=False).hexdigest()}:p{req.page}:pp{req.per_page}"
 
     # Try cache first (FastAPICache backend: Redis or in-memory)
     try:
@@ -1777,7 +1809,7 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
     # Fetch more than needed so we can score and pick the best
     local_candidates = await db.github_repos.find(
         local_query, {"_id": 0}
-    ).sort("stars", -1).limit(req.limit * 6).to_list(req.limit * 6)
+    ).sort("stars", -1).limit(100).to_list(100)
 
     scored_local = []
     for r in local_candidates:
@@ -1796,7 +1828,7 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
         # Include lower-scored ones if we don't have enough, but cap at score >= 1
         fallback = [r for r in scored_local if r["relevance_score"] >= 1]
         good_local = fallback if len(fallback) >= len(good_local) else good_local
-    solutions.extend(good_local[:req.limit])
+    solutions.extend(good_local)
 
     # --- Layer 2: Live GitHub API search (if < 3 GOOD results) ---
     # Trigger Layer 2 if we have fewer than 3 results OR best result has low relevance
@@ -1811,7 +1843,7 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
                     "q": f"{github_query} stars:>100",
                     "sort": "stars",
                     "order": "desc",
-                    "per_page": 15
+                    "per_page": 30
                 },
                 headers=GITHUB_HEADERS,
                 timeout=15
@@ -1919,7 +1951,7 @@ Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence wh
                     return None
                 return None
 
-            validated = await asyncio.gather(*[_validate_one(s) for s in suggestions[:8]])
+            validated = await asyncio.gather(*[_validate_one(s) for s in suggestions[:15]])
             for repo_data in validated:
                 if repo_data:
                     repo_data["relevance_score"] = _score_repo(repo_data, keywords)
@@ -1932,20 +1964,33 @@ Return ONLY a JSON array: [{{"full_name": "owner/repo", "reason": "1 sentence wh
     # Final sort: relevance score first, then stars
     solutions.sort(key=lambda x: (-x.get("relevance_score", 0), -x.get("stars", 0)))
 
+    # Pagination
+    skip = (req.page - 1) * req.per_page
+    paginated = solutions[skip:skip + req.per_page]
+    total_pages = max(1, (len(solutions) + req.per_page - 1) // req.per_page)
+
     # --- Calculate health scores for results that don't have one ---
     from github_scraper import GitHubScraper
     scraper = GitHubScraper(db)
-    for sol in solutions:
+    for sol in paginated:
         if not sol.get("health_score"):
             sol["health_score"] = scraper.calculate_health_score(sol)
         if "has_docker" not in sol:
             sol["has_docker"] = scraper.detect_docker_support(sol)
 
     result = {
-        "solutions": solutions[:req.limit],
+        "solutions": paginated,
         "query_keywords": keywords,
         "total": len(solutions),
         "intent_source": intent_source,
+        "pagination": {
+            "page": req.page,
+            "per_page": req.per_page,
+            "total": len(solutions),
+            "total_pages": total_pages,
+            "has_next": req.page < total_pages,
+            "has_prev": req.page > 1
+        },
         **source_info,
     }
 
@@ -2716,8 +2761,6 @@ async def _safe_send_stack(email: str, idea: str, tools: list):
 @api_router.post("/search")
 async def smart_search(req: SmartSearchRequest):
     """AI-powered search across curated DB and live GitHub"""
-    results = []
-
     # 1. Parse query with AI
     parsed_query = {"keywords": req.query.lower().split(), "intent": "search"}
     try:
@@ -2734,8 +2777,9 @@ Return ONLY JSON (no markdown):
         logger.error(f"Query parse error: {e}")
 
     keywords = parsed_query.get("keywords", req.query.lower().split())
+    results = []
 
-    # 2. Search our database
+    # 2. Search our database with pagination
     if keywords:
         text_regex = "|".join(re.escape(k) for k in keywords[:5])
         db_query = {
@@ -2747,20 +2791,33 @@ Return ONLY JSON (no markdown):
             ]
         }
 
-        # Search curated tools
-        tools = await db.tools.find(db_query, {"_id": 0}).limit(req.limit).to_list(req.limit)
+        # Count totals for pagination metadata
+        total_tools = await db.tools.count_documents(db_query)
+        total_github = await db.github_repos.count_documents(db_query)
+        total_db = total_tools + total_github
+
+        skip = (req.page - 1) * req.per_page
+        max_fetch = skip + req.per_page  # how many we need up to this page
+
+        # Fetch curated tools first
+        tools = await db.tools.find(db_query, {"_id": 0}).skip(skip).limit(req.per_page).to_list(req.per_page)
         for t in tools:
             t["source"] = "curated"
             results.append(t)
 
-        # Search github_repos
-        gh_repos = await db.github_repos.find(db_query, {"_id": 0}).sort("score", -1).limit(req.limit - len(results)).to_list(req.limit - len(results))
-        for r in gh_repos:
-            r["source"] = "github_cached"
-            results.append(r)
+        # Fill remainder from github_repos
+        remaining = req.per_page - len(tools)
+        if remaining > 0:
+            gh_skip = max(0, skip - total_tools)
+            gh_repos = await db.github_repos.find(db_query, {"_id": 0}).sort("score", -1).skip(gh_skip).limit(remaining).to_list(remaining)
+            for r in gh_repos:
+                r["source"] = "github_cached"
+                results.append(r)
+    else:
+        total_db = 0
 
-    # 3. Search GitHub live if not enough results
-    if req.include_github_live and len(results) < req.limit:
+    # 3. Search GitHub live on page 1 only (fills remaining slots)
+    if req.include_github_live and req.page == 1 and len(results) < req.per_page:
         github_query = parsed_query.get("github_query", req.query)
         try:
             async with httpx.AsyncClient() as client:
@@ -2770,7 +2827,7 @@ Return ONLY JSON (no markdown):
                         "q": f"{github_query} stars:>50",
                         "sort": "stars",
                         "order": "desc",
-                        "per_page": req.limit - len(results)
+                        "per_page": req.per_page - len(results)
                     },
                     headers=GITHUB_HEADERS,
                     timeout=15
@@ -2789,20 +2846,31 @@ Return ONLY JSON (no markdown):
                             "topics": item.get("topics", []),
                             "source": "github_live"
                         })
+                    total_db += data.get("total_count", 0)  # approximate
         except Exception as e:
             logger.error(f"GitHub live search error: {e}")
 
-    # Split results into solutions vs building blocks (Phase 6)
+    total_pages = max(1, (total_db + req.per_page - 1) // req.per_page)
+
+    # Split results into solutions vs building blocks
     complete_solutions = [r for r in results if r.get("repo_type") == "complete_solution"]
     building_blocks = [r for r in results if r.get("repo_type") != "complete_solution"]
 
     return {
         "query": req.query,
         "parsed": parsed_query,
-        "results": results[:req.limit],
+        "results": results,
         "solutions": complete_solutions[:5],
-        "building_blocks": building_blocks[:req.limit],
-        "total": len(results)
+        "building_blocks": building_blocks[:req.per_page],
+        "total": total_db,
+        "pagination": {
+            "page": req.page,
+            "per_page": req.per_page,
+            "total": total_db,
+            "total_pages": total_pages,
+            "has_next": req.page < total_pages,
+            "has_prev": req.page > 1
+        }
     }
 
 

@@ -39,7 +39,7 @@ export const RecommendationsSection = () => {
         }
         // Fallback: show popular tools for new/unauthed users
         const res = await axios.get(`${API}/tools`, { params: { limit: 6, sort: "popular" } });
-        const list = res.data.tools || res.data || [];
+        const list = res.data.results || res.data.tools || res.data || [];
         setTools(list.slice(0, 6));
         setIsFallback(true);
       } catch {

@@ -45,28 +45,57 @@ export default function ToolsPage() {
   const [sortBy, setSortBy] = useState("stars-desc");
   const [showFilters, setShowFilters] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(12);
+  const [pagination, setPagination] = useState(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchTools = async () => {
-      try {
-        const [toolsRes, statusRes] = await Promise.all([
-          axios.get(`${API}/tools`, { params: { limit: 200 } }),
-          axios.get(`${API}/scraper/status`)
-        ]);
-        setTools(toolsRes.data);
-        const curated = toolsRes.data ? toolsRes.data.length : 44;
-        const github = (statusRes.data && statusRes.data.total_repos) || 4344;
-        setTotalCount(curated + github);
-      } catch (e) {
-        console.error("Tools load error:", e);
-        setTotalCount(4388);
-      }
-      setLoading(false);
-    };
+  const fetchTools = async (pageNum = 1, searchTerm = "") => {
+    setLoading(true);
+    try {
+      const [toolsRes, statusRes] = await Promise.all([
+        axios.get(`${API}/tools`, {
+          params: {
+            search: searchTerm || undefined,
+            page: pageNum,
+            per_page: perPage
+          }
+        }),
+        axios.get(`${API}/scraper/status`)
+      ]);
+      const data = toolsRes.data.results || toolsRes.data || [];
+      const pag = toolsRes.data.pagination || null;
+      setTools(data);
+      setPagination(pag);
+      const github = (statusRes.data && statusRes.data.total_repos) || 4344;
+      setTotalCount((pag?.total || data.length) + github);
+    } catch (e) {
+      console.error("Tools load error:", e);
+      setTools([]);
+    }
+    setLoading(false);
+  };
 
-    fetchTools();
+  useEffect(() => {
+    fetchTools(1, "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPage(1);
+      fetchTools(1, search);
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  // Fetch on page change
+  useEffect(() => {
+    fetchTools(page, search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   const languages = useMemo(() => {
     const langs = new Set();
@@ -76,12 +105,9 @@ export default function ToolsPage() {
 
   const filteredTools = useMemo(() => {
     let result = tools.filter(t => {
-      const matchSearch = !search || 
-        t.name.toLowerCase().includes(search.toLowerCase()) ||
-        t.description.toLowerCase().includes(search.toLowerCase());
       const matchDifficulty = difficulty === 'All' || t.difficulty === difficulty;
       const matchLanguage = language === 'All' || t.language === language;
-      return matchSearch && matchDifficulty && matchLanguage;
+      return matchDifficulty && matchLanguage;
     });
 
     result.sort((a, b) => {
@@ -95,7 +121,7 @@ export default function ToolsPage() {
     });
 
     return result;
-  }, [tools, search, difficulty, language, sortBy]);
+  }, [tools, difficulty, language, sortBy]);
 
   const activeFilters = (difficulty !== 'All' ? 1 : 0) + (language !== 'All' ? 1 : 0);
 
@@ -242,7 +268,11 @@ export default function ToolsPage() {
 
           {/* Results count */}
           <p className="text-sm text-muted-foreground mb-4" data-testid="results-count">
-            Showing {filteredTools.length} of {tools.length} curated tools
+            {pagination ? (
+              <>Showing {(pagination.page - 1) * pagination.per_page + 1}–{Math.min(pagination.page * pagination.per_page, pagination.total)} of {pagination.total} tools</>
+            ) : (
+              <>Showing {filteredTools.length} tools</>
+            )}
           </p>
 
           {loading ? (
@@ -255,36 +285,81 @@ export default function ToolsPage() {
               <p className="opacity-70 text-sm mt-2">Try adjusting your search or filters.</p>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 gap-4">
-              {filteredTools.map(tool => (
-                <button
-                  key={tool.tool_id}
-                  onClick={() => navigate(`/tools/${tool.tool_id}`)}
-                  className="neo-card p-6 text-left bg-background hover:border-primary transition-colors"
-                  data-testid={`tool-card-${tool.tool_id}`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-bold text-lg">{tool.name}</h3>
-                    <span className={`text-xs font-bold px-2 py-1 flex-shrink-0 ${
-                      tool.difficulty === 'Beginner' ? 'badge-beginner' : 
-                      tool.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
-                    }`}>
-                      {tool.difficulty}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{tool.description}</p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="font-mono bg-muted px-2 py-1 border border-border">{tool.language}</span>
-                    <span className="flex items-center gap-1">
-                      <Star className="w-3 h-3 text-yellow-500" fill="currentColor" /> {tool.stars}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> {tool.setup_time}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="grid md:grid-cols-2 gap-4">
+                {filteredTools.map(tool => (
+                  <button
+                    key={tool.tool_id}
+                    onClick={() => navigate(`/tools/${tool.tool_id}`)}
+                    className="neo-card p-6 text-left bg-background hover:border-primary transition-colors"
+                    data-testid={`tool-card-${tool.tool_id}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-bold text-lg">{tool.name}</h3>
+                      <span className={`text-xs font-bold px-2 py-1 flex-shrink-0 ${
+                        tool.difficulty === 'Beginner' ? 'badge-beginner' : 
+                        tool.difficulty === 'Intermediate' ? 'badge-intermediate' : 'badge-advanced'
+                      }`}>
+                        {tool.difficulty}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{tool.description}</p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span className="font-mono bg-muted px-2 py-1 border border-border">{tool.language}</span>
+                      <span className="flex items-center gap-1">
+                        <Star className="w-3 h-3 text-yellow-500" fill="currentColor" /> {tool.stars}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {tool.setup_time}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {pagination && pagination.total_pages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-8">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={!pagination.has_prev}
+                    className="neo-btn px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    ← Prev
+                  </button>
+                  {Array.from({ length: Math.min(5, pagination.total_pages) }, (_, i) => {
+                    let pageNum;
+                    if (pagination.total_pages <= 5) {
+                      pageNum = i + 1;
+                    } else if (pagination.page <= 3) {
+                      pageNum = i + 1;
+                    } else if (pagination.page >= pagination.total_pages - 2) {
+                      pageNum = pagination.total_pages - 4 + i;
+                    } else {
+                      pageNum = pagination.page - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setPage(pageNum)}
+                        className={`neo-btn px-3 py-2 text-sm ${
+                          pageNum === pagination.page ? 'neo-btn-primary' : ''
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setPage(p => Math.min(pagination.total_pages, p + 1))}
+                    disabled={!pagination.has_next}
+                    className="neo-btn px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

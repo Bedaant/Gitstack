@@ -322,6 +322,8 @@ export default function SolutionFinder() {
   const [loadingLayer, setLoadingLayer] = useState(0);
   const [results, setResults] = useState(null);
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(10);
   const inputRef = useRef(null);
 
   // Rotate placeholder
@@ -350,33 +352,50 @@ export default function SolutionFinder() {
     const q = searchParams.get("query");
     if (q && query === q && !autoSearched && !loading && !results) {
       setAutoSearched(true);
-      handleSearch();
+      handleSearch(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  const handleSearch = async () => {
+  const handleSearch = async (pageNum = 1, isPageChange = false) => {
     if (!query.trim() || loading) return;
     setLoading(true);
-    setResults(null);
-    setLoadingLayer(1);
-    trackEvent("solution_finder_search", { query });
+    if (!isPageChange) {
+      setResults(null);
+      setLoadingLayer(1);
+    }
+    trackEvent("solution_finder_search", { query, page: pageNum });
 
-    // Simulate layer progression for UX
-    const layerTimer1 = setTimeout(() => setLoadingLayer(2), 1500);
-    const layerTimer2 = setTimeout(() => setLoadingLayer(3), 4000);
+    // Simulate layer progression for UX (only on new search, not page change)
+    let layerTimer1, layerTimer2;
+    if (!isPageChange) {
+      layerTimer1 = setTimeout(() => setLoadingLayer(2), 1500);
+      layerTimer2 = setTimeout(() => setLoadingLayer(3), 4000);
+    }
 
     try {
-      const res = await axios.post(`${API}/ai/solution-finder`, { query: query.trim(), limit: 8 });
+      const res = await axios.post(`${API}/ai/solution-finder`, {
+        query: query.trim(),
+        limit: 100,
+        page: pageNum,
+        per_page: perPage
+      });
       setResults(res.data);
+      setPage(pageNum);
     } catch (err) {
       toast.error("Search failed. Please try again.");
     } finally {
       setLoading(false);
       setLoadingLayer(0);
-      clearTimeout(layerTimer1);
-      clearTimeout(layerTimer2);
+      if (layerTimer1) clearTimeout(layerTimer1);
+      if (layerTimer2) clearTimeout(layerTimer2);
     }
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage === page) return;
+    setPage(newPage);
+    handleSearch(newPage, true);
   };
 
   const handleUpvote = async (fullName) => {
@@ -394,7 +413,7 @@ export default function SolutionFinder() {
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSearch();
+      handleSearch(1);
     }
   };
 
@@ -475,7 +494,7 @@ export default function SolutionFinder() {
           <div className="flex items-center justify-between mt-3">
             <span className="text-xs text-muted-foreground">{query.length}/500</span>
             <button
-              onClick={handleSearch}
+              onClick={() => handleSearch(1)}
               disabled={!query.trim() || loading}
               className="neo-btn neo-btn-primary px-8 py-3 font-black text-sm flex items-center gap-2 disabled:opacity-50"
             >
@@ -530,6 +549,11 @@ export default function SolutionFinder() {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-black uppercase">
                     {results.total} Solution{results.total !== 1 ? "s" : ""} Found
+                    {results.pagination && (
+                      <span className="text-sm font-normal text-muted-foreground ml-2">
+                        (page {results.pagination.page} of {results.pagination.total_pages})
+                      </span>
+                    )}
                   </h2>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Zap className="w-3 h-3" />
@@ -548,6 +572,49 @@ export default function SolutionFinder() {
                     />
                   ))}
                 </div>
+
+                {/* Pagination */}
+                {results.pagination && results.pagination.total_pages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-6">
+                    <button
+                      onClick={() => handlePageChange(page - 1)}
+                      disabled={!results.pagination.has_prev}
+                      className="neo-btn px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      ← Prev
+                    </button>
+                    {Array.from({ length: Math.min(5, results.pagination.total_pages) }, (_, i) => {
+                      let pageNum;
+                      if (results.pagination.total_pages <= 5) {
+                        pageNum = i + 1;
+                      } else if (results.pagination.page <= 3) {
+                        pageNum = i + 1;
+                      } else if (results.pagination.page >= results.pagination.total_pages - 2) {
+                        pageNum = results.pagination.total_pages - 4 + i;
+                      } else {
+                        pageNum = results.pagination.page - 2 + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => handlePageChange(pageNum)}
+                          className={`neo-btn px-3 py-2 text-sm ${
+                            pageNum === results.pagination.page ? 'neo-btn-primary' : ''
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => handlePageChange(page + 1)}
+                      disabled={!results.pagination.has_next}
+                      className="neo-btn px-3 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
 
                 {/* Compare table */}
                 <CompareTable solutions={results.solutions} />
