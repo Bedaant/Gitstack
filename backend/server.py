@@ -158,7 +158,8 @@ _shutdown_event = asyncio.Event()
 
 
 def _safe_task(coro, name: str = "background"):
-    """Wrap an async coroutine so unhandled exceptions are logged, not swallowed."""
+    """Wrap an async coroutine so unhandled exceptions are logged, not swallowed.
+    Returns a coroutine — caller must await it or pass to asyncio.create_task()."""
     async def _wrapper():
         try:
             await coro
@@ -166,7 +167,7 @@ def _safe_task(coro, name: str = "background"):
             raise
         except Exception as e:
             logger.exception(f"Background task '{name}' failed: {e}")
-    return asyncio.create_task(_wrapper())
+    return _wrapper()
 
 
 # Cache invalidation helpers
