@@ -41,7 +41,7 @@ class QueryAnalyzer:
             return QueryAnalysis()
 
         normalized = query.lower().strip()[:200]
-        cache_key = f"query:{hashlib.sha256(normalized.encode()).hexdigest()}"
+        cache_key = f"query_v2:{hashlib.sha256(normalized.encode()).hexdigest()}"
 
         # Check cache
         try:
@@ -56,6 +56,7 @@ class QueryAnalyzer:
             prompt = self._build_prompt(normalized)
             response = await self.call_ai(prompt, json_response=True)
             analysis = self._parse_response(response)
+            logger.info(f"Query parsed: intent='{analysis.intent}' alt_to={analysis.alternative_to} repo_type={analysis.expected_repo_type}")
         except Exception as e:
             logger.error(f"Query analysis LLM failed: {e}")
             # Fallback: basic analysis
