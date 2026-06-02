@@ -53,11 +53,37 @@ function Badge({ children, className = "" }) {
   );
 }
 
-function SolutionCard({ sol, onUpvote }) {
+function SolutionCard({ sol, onUpvote, query, position }) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [localUpvoted, setLocalUpvoted] = useState(false);
   const [localUpvotes, setLocalUpvotes] = useState(sol.upvotes || 0);
+
+  // Send click feedback to backend
+  const sendFeedback = (action) => {
+    try {
+      axios.post(`${API}/search/feedback`, {
+        query: query || "",
+        full_name: sol.full_name || sol.name || "",
+        action,
+        position: position || 1,
+        session_id: localStorage.getItem("gitstack_session") || "anonymous",
+      });
+    } catch (e) {
+      // Silent fail
+    }
+  };
+
+  // Track impression when card mounts
+  useEffect(() => {
+    const timer = setTimeout(() => sendFeedback("impression"), 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleGitHubClick = () => {
+    sendFeedback("click");
+  };
 
   const dockerCmd = sol.has_docker
     ? `docker run -d -p 3000:3000 ${sol.full_name?.split("/")[1] || sol.name}`
@@ -80,16 +106,18 @@ function SolutionCard({ sol, onUpvote }) {
       className="neo-card p-5 relative group"
     >
       {/* Source badge */}
-      {sol.match_source && (
+      {(sol.match_source || sol.source) && (
         <div className="absolute top-3 right-3">
           <Badge className={
-            sol.match_source === "local_db" ? "bg-green-100 text-green-800" :
-            sol.match_source === "github_live" ? "bg-blue-100 text-blue-800" :
-            "bg-purple-100 text-purple-800"
+            (sol.match_source === "local_db" || sol.source === "bm25" || sol.source === "curated") ? "bg-green-100 text-green-800" :
+            (sol.match_source === "github_live" || sol.source === "github_live") ? "bg-blue-100 text-blue-800" :
+            (sol.match_source === "ai_discovered" || sol.source === "llm") ? "bg-purple-100 text-purple-800" :
+            "bg-gray-100 text-gray-800"
           }>
-            {sol.match_source === "local_db" ? "📦 In Database" :
-             sol.match_source === "github_live" ? "🔍 Found on GitHub" :
-             "🤖 AI Discovered"}
+            {(sol.match_source === "local_db" || sol.source === "bm25" || sol.source === "curated") ? "📦 In Database" :
+             (sol.match_source === "github_live" || sol.source === "github_live") ? "🔍 Found on GitHub" :
+             (sol.match_source === "ai_discovered" || sol.source === "llm") ? "🤖 AI Discovered" :
+             "⭐ Trending"}
           </Badge>
         </div>
       )}
@@ -117,6 +145,11 @@ function SolutionCard({ sol, onUpvote }) {
           <span className="text-xs font-bold px-2 py-0.5 bg-muted rounded">{sol.language}</span>
         )}
         {sol.health_score > 0 && <HealthBar score={sol.health_score} />}
+        {sol._score > 0 && (
+          <span className="text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded" title="Search relevance score">
+            Score: {sol._score}
+          </span>
+        )}
       </div>
 
       {/* Capability badges */}
@@ -223,6 +256,7 @@ function SolutionCard({ sol, onUpvote }) {
         <a
           href={sol.affiliate_url || sol.html_url || `https://github.com/${sol.full_name}`}
           target="_blank" rel="noopener noreferrer"
+          onClick={handleGitHubClick}
           className="neo-btn px-3 py-1.5 text-xs font-black flex items-center gap-1"
         >
           {sol.affiliate_url ? "Get Started" : "GitHub"} <ExternalLink className="w-3 h-3" />
@@ -564,11 +598,13 @@ export default function SolutionFinder() {
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
-                  {results.solutions.map((sol) => (
+                  {results.solutions.map((sol, idx) => (
                     <SolutionCard
                       key={sol.full_name || sol.name}
                       sol={sol}
                       onUpvote={handleUpvote}
+                      query={query}
+                      position={idx + 1}
                     />
                   ))}
                 </div>

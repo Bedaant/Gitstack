@@ -2073,6 +2073,30 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
     # --- Layer 1: Local DB search (instant) ---
     # Search ALL repos — complete_solution, building_block, unclassified.
     # The classifier is often wrong. Relevance scoring handles ranking.
+
+    # 1a: BM25 search (new engine) if available
+    bm25_candidates = []
+    if search_engine._built:
+        try:
+            bm25_results = search_engine.search(query, k=50)
+            for r in bm25_results:
+                if r.get("full_name", "").lower() in seen_names:
+                    continue
+                if r.get("is_course") or r.get("is_template"):
+                    continue
+                score = _score_repo(r, keywords)
+                bm25_score = r.get("_bm25_score", 0)
+                # Boost BM25 results that also score well with heuristic
+                combined_score = score + int(bm25_score * 3)
+                if combined_score > 0:
+                    r["match_source"] = "local_db"
+                    r["relevance_score"] = combined_score
+                    bm25_candidates.append(r)
+                    seen_names.add(r["full_name"].lower())
+        except Exception as e:
+            logger.debug(f"BM25 search in solution-finder failed: {e}")
+
+    # 1b: Fallback regex search for repos BM25 missed
     text_regex = "|".join(re.escape(k) for k in keywords[:6])
     local_query = {
         "$or": [
@@ -2083,13 +2107,16 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
             {"topics": {"$in": keywords}},
         ]
     }
-    # Fetch more than needed so we can score and pick the best
-    local_candidates = await db.github_repos.find(
+    regex_candidates = await db.github_repos.find(
         local_query, {"_id": 0}
     ).sort("stars", -1).limit(100).to_list(100)
 
     scored_local = []
-    for r in local_candidates:
+    for r in regex_candidates:
+        if r.get("full_name", "").lower() in seen_names:
+            continue
+        if r.get("is_course") or r.get("is_template"):
+            continue
         score = _score_repo(r, keywords)
         if score > 0:
             r["match_source"] = "local_db"
@@ -2097,13 +2124,12 @@ Return ONLY JSON: {{"keywords": [...], "github_query": "...", "intent_summary": 
             scored_local.append(r)
             seen_names.add(r["full_name"].lower())
 
-    # Sort by relevance score desc, then stars desc
-    scored_local.sort(key=lambda x: (-x["relevance_score"], -x.get("stars", 0)))
-    # Only keep results with decent relevance (score >= 4 for quality cutoff)
-    good_local = [r for r in scored_local if r["relevance_score"] >= 4]
+    # Combine BM25 + regex candidates
+    all_local = bm25_candidates + scored_local
+    all_local.sort(key=lambda x: (-x["relevance_score"], -x.get("stars", 0)))
+    good_local = [r for r in all_local if r["relevance_score"] >= 4]
     if len(good_local) < 3:
-        # Include lower-scored ones if we don't have enough, but cap at score >= 1
-        fallback = [r for r in scored_local if r["relevance_score"] >= 1]
+        fallback = [r for r in all_local if r["relevance_score"] >= 1]
         good_local = fallback if len(fallback) >= len(good_local) else good_local
     solutions.extend(good_local)
 
@@ -3260,6 +3286,22 @@ async def trigger_scraper(request: Request, background_tasks: BackgroundTasks, a
 
     background_tasks.add_task(run_scrape)
     return {"message": "Scraper started in background"}
+
+@api_router.post("/admin/reclassify")
+@limiter.limit("1/minute")
+async def trigger_reclassification(request: Request, background_tasks: BackgroundTasks, admin: UserModel = Depends(require_admin)):
+    """Trigger repo re-classification in background (admin only)."""
+    import subprocess
+    import sys
+
+    def run_reclassify():
+        try:
+            subprocess.run([sys.executable, "scripts/reclassify_repos.py"], cwd=str(ROOT_DIR), check=True)
+        except Exception as e:
+            logger.error(f"Reclassification failed: {e}")
+
+    background_tasks.add_task(run_reclassify)
+    return {"message": "Re-classification started in background. This will take ~20 minutes."}
 
 @api_router.get("/scraper/status")
 async def scraper_status():
