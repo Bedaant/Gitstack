@@ -22,17 +22,17 @@ def compute_composite_score(
         return " ".join(val)
 
     # Build searchable text with FIELD WEIGHTING
-    # use_cases and replaces_saas are 3x more important than topics
     name = candidate.get("name", "")
     description = candidate.get("description", "")
     topics = _j(candidate.get("topics"))
     use_cases = _j(candidate.get("use_cases"))
     replaces_saas = _j(candidate.get("replaces_saas"))
 
+    # Weighted text for matching: use_cases and replaces_saas are 3x more important than topics
     text = f"{name} {description} {topics} {use_cases} {use_cases} {use_cases} {replaces_saas} {replaces_saas} {replaces_saas}"
     text_lower = text.lower()
 
-    # Also build a separate text for exact-field matching
+    # Separate fields for precision matching
     name_lower = name.lower()
     desc_lower = (description or "").lower()
     uc_lower = use_cases.lower()
@@ -46,6 +46,8 @@ def compute_composite_score(
         score += 120
     if "alternative" in pillar:
         score += 80
+    if "alternative_exact" in pillar:
+        score += 200  # Extra boost for exact replaces_saas match
     if "bm25" in pillar:
         bm25_score = candidate.get("_bm25_score", 0)
         score += bm25_score * 10
@@ -55,18 +57,16 @@ def compute_composite_score(
     # === REPLACES_SAAS MATCH — KILLER SIGNAL ===
     if analysis.alternative_to:
         alt_lower = analysis.alternative_to.lower()
-        # Direct match in replaces_saas array
         rs_list = candidate.get("replaces_saas") or []
         if rs_list and any(alt_lower == r.lower() for r in rs_list):
-            score += 500  # Exact match = dominant boost
+            score += 500
         elif alt_lower in rs_lower:
-            score += 300  # Partial match in replaces_saas text
+            score += 300
         elif alt_lower in desc_lower:
-            score += 80   # Mentioned in description
+            score += 80
         elif alt_lower in name_lower:
-            score += 60   # Mentioned in name
+            score += 60
 
-        # Also boost if ANY of the specific_tools match replaces_saas
         for tool in analysis.specific_tools:
             tl = tool.lower()
             if any(tl == r.lower() for r in (rs_list if rs_list else [])):
@@ -81,11 +81,16 @@ def compute_composite_score(
 
     # === PHRASE MATCHES (AND semantics) ===
     feature_matches = 0
+    name_only_matches = 0
     for feature in analysis.core_features:
         f_lower = feature.lower()
         if f_lower in text_lower:
             score += 20 * max(len(feature.split()), 1)
             feature_matches += 1
+            # Track if this match is ONLY in the name, not in description/use_cases/replaces_saas
+            if f_lower in name_lower and f_lower not in desc_lower and f_lower not in uc_lower and f_lower not in rs_lower:
+                name_only_matches += 1
+
     if feature_matches > 0 and feature_matches == len(analysis.core_features):
         score *= 1.5  # All features matched
 
@@ -95,33 +100,63 @@ def compute_composite_score(
             if syn.lower() in text_lower:
                 score += 12
 
+    # === NAME-ONLY MATCH PENALTY ===
+    # If most matches are just name matches without description support, penalize heavily
+    if analysis.core_features and name_only_matches >= len(analysis.core_features) // 2:
+        score *= 0.3  # Name-only match = likely keyword spam
+
+    # === DESCRIPTION MANDATORY CHECK ===
+    # If NONE of the core features, synonyms, or alternative_to appear in description/use_cases/replaces_saas
+    # the repo is probably irrelevant despite name/topic matches
+    meaningful_in_desc = False
+    for feature in analysis.core_features:
+        if feature.lower() in desc_lower or feature.lower() in uc_lower or feature.lower() in rs_lower:
+            meaningful_in_desc = True
+            break
+    if not meaningful_in_desc:
+        for word, syns in analysis.synonyms.items():
+            for syn in syns:
+                if syn.lower() in desc_lower or syn.lower() in uc_lower or syn.lower() in rs_lower:
+                    meaningful_in_desc = True
+                    break
+            if meaningful_in_desc:
+                break
+    if analysis.alternative_to:
+        if analysis.alternative_to.lower() in desc_lower or analysis.alternative_to.lower() in rs_lower:
+            meaningful_in_desc = True
+
+    if analysis.core_features and not meaningful_in_desc:
+        score *= 0.4  # Heavy penalty if description doesn't support the intent
+
     # === ANTI-KEYWORD PENALTY ===
     anti_count = sum(
         1 for anti in analysis.anti_keywords
         if anti.lower() in text_lower
     )
     if anti_count > 0:
-        score *= (0.05 ** anti_count)  # Much stronger penalty
+        score *= (0.05 ** anti_count)
 
     # === REPO_TYPE PENALTIES / BOOSTS ===
     repo_type = candidate.get("repo_type", "") or ""
     query_repo_type = analysis.expected_repo_type or ""
 
-    # Hard penalties for mismatched repo types
     if query_repo_type == "complete_solution":
         if repo_type in ("tutorial", "course", "learning"):
-            score *= 0.001  # Nearly eliminate tutorials
+            score *= 0.001
         elif repo_type == "building_block":
-            score *= 0.3    # Strongly penalize libraries
+            score *= 0.3
         elif repo_type == "complete_solution":
-            score += 50     # Boost actual complete solutions
+            score += 50
     elif query_repo_type == "building_block":
         if repo_type == "complete_solution":
             score *= 0.7
         elif repo_type == "building_block":
             score += 50
 
-    # Legacy is_course / is_template flags
+    # Unclassified repo penalty
+    if not repo_type:
+        score *= 0.7
+
     if candidate.get("is_course"):
         score *= 0.01
     if candidate.get("is_template"):
@@ -140,11 +175,12 @@ def compute_composite_score(
         if candidate.get("language", "").lower() == excluded.lower():
             score *= 0.1
 
-    # === POPULARITY ===
+    # === POPULARITY (REDUCED) ===
     stars = candidate.get("stars", 0) or 0
     if isinstance(stars, str):
         stars = int(stars.replace(",", ""))
-    score += min(math.log10(max(stars, 1)) * 8, 40)
+    # Reduced from 40 cap to 25 — popularity should not drown relevance
+    score += min(math.log10(max(stars, 1)) * 5, 25)
 
     # === RECENCY / STALENESS ===
     days = candidate.get("last_push_days")

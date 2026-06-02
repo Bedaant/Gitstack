@@ -41,7 +41,7 @@ class QueryAnalyzer:
             return QueryAnalysis()
 
         normalized = query.lower().strip()[:200]
-        cache_key = f"query_v2:{hashlib.sha256(normalized.encode()).hexdigest()}"
+        cache_key = f"query_v3:{hashlib.sha256(normalized.encode()).hexdigest()}"
 
         # Check cache
         try:
@@ -88,7 +88,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "core_features": ["feature1", "feature2"],
   "search_phrases": ["exact phrases from query"],
   "synonyms": {{"word": ["synonym1", "synonym2"]}},
-  "anti_keywords": ["course", "tutorial", "learn", "from-scratch"],
+  "anti_keywords": ["course", "tutorial", "learn", "from-scratch", "template", "boilerplate", "example"],
   "specific_tools": ["langroid", "n8n"],
   "alternative_to": null,
   "expected_repo_type": "complete_solution",
@@ -99,17 +99,27 @@ Return ONLY valid JSON (no markdown, no explanation):
   "github_query": "optimized github api search query"
 }}
 
-Rules:
-- intent: Be specific about what the user wants (e.g., "LLM orchestration framework" not just "search")
-- core_features: Extract key capabilities the tool must have
-- search_phrases: Multi-word phrases from the query (for exact phrase matching)
-- synonyms: Map domain terms to common alternatives (e.g., "harness" → ["framework", "orchestrator"])
-- specific_tools: If user names a known open-source tool, include it
-- alternative_to: If query says "alternative to X" or "like X" or "instead of X", extract X
-- expected_repo_type: "complete_solution" (end-users deploy) or "building_block" (developers use) or "library"
-- self_hosted: true if query mentions "self-hosted", "local", "on-premise", "docker"
-- github_query: Optimize for GitHub API search. Use in:name, in:description, stars:>50, language:xxx
-- comparison_mode: true if query contains "vs", "versus", "compare", "or", "better than"
+CRITICAL RULES:
+- intent: Be SPECIFIC. "LLM orchestration framework" not "search tool". "Self-hosted newsletter platform" not "email tool".
+- core_features: List 2-4 CAPABILITIES the tool must provide. NEVER include ambiguous slang/metaphors from the raw query. If user says "harness", output "multi-agent orchestration", "LLM abstraction layer" — NOT "harness". If user says "run LLMs locally", output ["local inference", "model serving", "GPU optimization"].
+- search_phrases: Extract multi-word phrases from the ORIGINAL query for exact matching. Include these verbatim.
+- synonyms: Map EVERY domain-specific or slang word to 2-3 standard technical terms. Example: "harness" → ["framework", "orchestrator", "abstraction layer"]. "worker" → ["agent", "autonomous process", "task executor"].
+- specific_tools: If user mentions ANY known open-source tool by name, list it here.
+- alternative_to: If query says "alternative to X", "like X", "instead of X", or "similar to X" — extract X EXACTLY.
+- expected_repo_type: "complete_solution" for end-user deployable products. "building_block" for developer libraries/frameworks. "library" for code packages.
+- self_hosted: true ONLY if query explicitly mentions local/self-hosted/on-premise/docker.
+- github_query: Write an optimized GitHub search query. Include stars:>50. If alternative_to is set, include that tool name.
+- comparison_mode: true if query asks to compare tools ("vs", "compare", "better than").
+
+BAD core_features examples (DO NOT DO THIS):
+- Query: "LLM harness" → BAD: ["LLM connection", "harness"]  ← "harness" is slang!
+- Query: "AI agent workers" → BAD: ["ai", "autonomy"]  ← too generic!
+- Query: "run LLMs locally" → BAD: ["run", "local LLMs"]  ← just query words!
+
+GOOD core_features examples:
+- Query: "LLM harness" → GOOD: ["multi-agent orchestration", "LLM abstraction layer", "model routing"]
+- Query: "AI agent workers" → GOOD: ["autonomous task execution", "agent orchestration", "long-running worker processes"]
+- Query: "run LLMs locally" → GOOD: ["local model inference", "GPU-optimized serving", "single-binary deployment"]
 '''
 
     def _parse_response(self, response: str) -> QueryAnalysis:
