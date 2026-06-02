@@ -89,7 +89,7 @@ def compute_composite_score(
             score *= 0.1
 
     # === POPULARITY ===
-    stars = candidate.get("stars", 0)
+    stars = candidate.get("stars", 0) or 0
     if isinstance(stars, str):
         stars = int(stars.replace(",", ""))
     score += min(math.log10(max(stars, 1)) * 8, 40)
@@ -120,7 +120,8 @@ def compute_composite_score(
         score += 25
 
     # === HEALTH SCORE ===
-    score += candidate.get("health_score", 50) / 5
+    health = candidate.get("health_score", 50) or 50
+    score += health / 5
 
     # === CLICK FEEDBACK ===
     full_name = candidate.get("full_name", "")

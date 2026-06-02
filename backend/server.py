@@ -3112,10 +3112,14 @@ async def smart_search(req: SmartSearchRequest):
     # === STAGE 2: Parallel Retrieval ===
     async def _search_bm25_pillar():
         """Pillar A: BM25 inverted index search."""
-        q = req.query
-        if analysis.search_phrases:
-            q = " ".join(analysis.search_phrases)
-        return search_engine.search(q, k=50)
+        try:
+            q = req.query
+            if analysis.search_phrases:
+                q = " ".join(analysis.search_phrases)
+            return search_engine.search(q, k=50)
+        except Exception as e:
+            logger.warning(f"BM25 search failed: {e}")
+            return []
 
     async def _search_exact_pillar():
         """Pillar B: Exact name/full_name lookups."""
@@ -3128,18 +3132,21 @@ async def smart_search(req: SmartSearchRequest):
 
     async def _search_alternative_pillar():
         """Pillar C: Search by replaces_saas field."""
-        if not analysis.alternative_to:
+        try:
+            if not analysis.alternative_to:
+                return []
+            alt = analysis.alternative_to.lower()
+            matches = []
+            for idx, doc in search_engine.repo_map.items():
+                rs = doc.get("replaces_saas") or []
+                uc = doc.get("use_cases") or []
+                text = f"{' '.join(rs)} {' '.join(uc)}"
+                if alt in text.lower():
+                    matches.append({**doc, "_pillar": "alternative_match"})
+            return matches
+        except Exception as e:
+            logger.warning(f"Alternative search failed: {e}")
             return []
-        alt = analysis.alternative_to.lower()
-        # Use regex search on use_cases and replaces_saas in index
-        matches = []
-        for idx, doc in search_engine.repo_map.items():
-            rs = doc.get("replaces_saas") or []
-            uc = doc.get("use_cases") or []
-            text = f"{' '.join(rs)} {' '.join(uc)}"
-            if alt in text.lower():
-                matches.append({**doc, "_pillar": "alternative_match"})
-        return matches
 
     async def _search_github_pillar():
         """Pillar D: GitHub live API search."""
@@ -3198,7 +3205,11 @@ async def smart_search(req: SmartSearchRequest):
         logger.debug(f"Click data load failed: {e}")
 
     for c in candidates:
-        c["_composite_score"] = compute_composite_score(c, analysis, click_data)
+        try:
+            c["_composite_score"] = compute_composite_score(c, analysis, click_data)
+        except Exception as e:
+            logger.warning(f"Scoring failed for {c.get('full_name')}: {e}")
+            c["_composite_score"] = 0
 
     # === STAGE 5: Diversity Injection ===
     diverse = inject_diversity(candidates, max_per_category=3, max_results=25)
