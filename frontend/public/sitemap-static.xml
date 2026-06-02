@@ -111,47 +111,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/topics/testing-qa/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/rag-vector-search/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/web3-blockchain/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/ai-agents-advanced/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/ui-ux/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/code-quality-review/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/payments/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/cms-content/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/mobile-dev/</loc>
+    <loc>https://www.gitstack.pro/topics/ai-agents/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -161,22 +121,7 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/topics/automation/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/selfhosted/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://www.gitstack.pro/topics/ai-memory-pkm/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/voice-speech-ai/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -191,22 +136,17 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/topics/ai-agents/</loc>
+    <loc>https://www.gitstack.pro/topics/ai-agents-advanced/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/topics/terminal-shell/</loc>
+    <loc>https://www.gitstack.pro/topics/ui-ux/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/topics/scraping-data-extraction/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/topics/auth/</loc>
+    <loc>https://www.gitstack.pro/topics/automation/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -216,7 +156,67 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.gitstack.pro/topics/voice-speech-ai/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/code-quality-review/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/rag-vector-search/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/scraping-data-extraction/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/terminal-shell/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/payments/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/auth/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.gitstack.pro/topics/email-messaging/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/cms-content/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/mobile-dev/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/testing-qa/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/web3-blockchain/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/topics/selfhosted/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -226,12 +226,7 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/collections/booking-platform/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/collections/ecommerce-store/</loc>
+    <loc>https://www.gitstack.pro/collections/ai-chatbot/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -241,122 +236,22 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.gitstack.pro/collections/ecommerce-store/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.gitstack.pro/collections/internal-tools/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/collections/ai-chatbot/</loc>
+    <loc>https://www.gitstack.pro/collections/booking-platform/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/convertkit/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/botpress/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/statuspage/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/custom-development/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/slack-business/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/amplitude/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/auth0/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/readme/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/webflow/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/freshbooks/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://www.gitstack.pro/alternatives/typeform/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/aws-amplify/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/okta/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/datadog/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/zapier/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/substack-pro/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/pinecone-custom-dev/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/salesforce/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/algolia/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/mixpanel/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/shopify-plus/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/headless-ui-pro/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -366,27 +261,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/chargebee/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/firebase/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/mailchimp/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/custom-ai-development/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/microsoft-teams/</loc>
+    <loc>https://www.gitstack.pro/alternatives/zapier/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -396,47 +271,12 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/shopify/</loc>
+    <loc>https://www.gitstack.pro/alternatives/mixpanel/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/aws-s3/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/1password-teams/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/notion-team/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/plex-pass/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/openai-assistants-api/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/aws-api-gateway/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/canny/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/toggl/</loc>
+    <loc>https://www.gitstack.pro/alternatives/substack-pro/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -446,7 +286,62 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/jira/</loc>
+    <loc>https://www.gitstack.pro/alternatives/firebase/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/aws-amplify/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/mailchimp/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/convertkit/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/shopify/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/shopify-plus/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/custom-ai-development/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/botpress/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/openai-assistants-api/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/pinecone-custom-dev/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/auth0/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/okta/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -456,17 +351,112 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.gitstack.pro/alternatives/headless-ui-pro/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/salesforce/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/jira/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/amplitude/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.gitstack.pro/alternatives/gitbook/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/vimeo/</loc>
+    <loc>https://www.gitstack.pro/alternatives/readme/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/figma/</loc>
+    <loc>https://www.gitstack.pro/alternatives/statuspage/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/webflow/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/custom-development/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/aws-s3/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/plex-pass/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/1password-teams/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/slack-business/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/microsoft-teams/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/chargebee/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/datadog/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/aws-api-gateway/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/algolia/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/canny/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/freshbooks/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/notion-team/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/toggl/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -476,7 +466,42 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.gitstack.pro/alternatives/zoom/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.gitstack.pro/alternatives/dropbox/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/buffer/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/ahrefs/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/intercom/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/vimeo/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/teachable/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/alternatives/figma/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -491,17 +516,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/intercom/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/zoom/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/teachable/</loc>
+    <loc>https://www.gitstack.pro/alternatives/github-actions/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -511,32 +526,42 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/alternatives/buffer/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/github-actions/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/alternatives/ahrefs/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://www.gitstack.pro/alternatives/bitly/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/tinyhumansai/openhuman/</loc>
+    <loc>https://www.gitstack.pro/r/harry0703/MoneyPrinterTurbo/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/rohitg00/agentmemory/</loc>
+    <loc>https://www.gitstack.pro/r/Lum1104/Understand-Anything/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/r/microsoft/markitdown/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/r/hardikpandya/stop-slop/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/r/rohitg00/ai-engineering-from-scratch/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/r/Leonxlnx/taste-skill/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/r/anthropics/knowledge-work-plugins/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -546,59 +571,44 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/CloakHQ/CloakBrowser/</loc>
+    <loc>https://www.gitstack.pro/r/mukul975/Anthropic-Cybersecurity-Skills/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/ruvnet/RuView/</loc>
+    <loc>https://www.gitstack.pro/r/revfactory/harness/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/Imbad0202/academic-research-skills/</loc>
+    <loc>https://www.gitstack.pro/r/affaan-m/ECC/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/oven-sh/bun/</loc>
+    <loc>https://www.gitstack.pro/r/p-e-w/heretic/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/facebook/pyrefly/</loc>
+    <loc>https://www.gitstack.pro/r/cursor/plugins/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/mattpocock/skills/</loc>
+    <loc>https://www.gitstack.pro/r/run-llama/liteparse/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/yikart/AiToEarn/</loc>
+    <loc>https://www.gitstack.pro/r/microsoft/agent-governance-toolkit/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/r/obra/superpowers/</loc>
+    <loc>https://www.gitstack.pro/solutions/ai-agent-orchestration/</loc>
     <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/r/datawhalechina/easy-vibe/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/r/millionco/react-doctor/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/r/anthropics/skills/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.gitstack.pro/solutions/ai-agent-development/</loc>
@@ -606,7 +616,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/ai-agent-orchestration/</loc>
+    <loc>https://www.gitstack.pro/solutions/developer-productivity/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -621,12 +631,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/application-performance-monitoring/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/penetration-testing/</loc>
+    <loc>https://www.gitstack.pro/solutions/api-testing/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -636,37 +641,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/api-testing/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/sql-query-execution/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/saas-application-development/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/developer-productivity-enhancement/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/developer-productivity/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/digital-product-sales/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/business-process-automation/</loc>
+    <loc>https://www.gitstack.pro/solutions/application-performance-monitoring/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -676,12 +651,57 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/internal-tool-development/</loc>
+    <loc>https://www.gitstack.pro/solutions/sql-query-execution/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/developer-productivity-enhancement/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/api-traffic-management/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/saas-application-development/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/penetration-testing/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.gitstack.pro/solutions/developer-productivity/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/api-security-enforcement/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/digital-product-sales/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/internal-tool-development/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/business-process-automation/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/project-management/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -696,7 +716,42 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.gitstack.pro/solutions/personal-knowledge-management/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.gitstack.pro/solutions/voice-calling/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/application-performance-monitoring/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/developer-productivity-enhancement/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/iot-device-management/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/vulnerability-scanning/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/workflow-automation/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/internal-tool-development/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -721,47 +776,27 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.gitstack.pro/solutions/personal-task-management/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/productivity-enhancement/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.gitstack.pro/solutions/team-collaboration/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/api-traffic-management/</loc>
+    <loc>https://www.gitstack.pro/solutions/customer-relationship-management/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/vulnerability-scanning/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/internal-tool-development/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/project-management/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/project-management/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/iot-device-management/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/saas-boilerplate/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/developer-productivity-enhancement/</loc>
+    <loc>https://www.gitstack.pro/solutions/knowledge-management/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -771,7 +806,12 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/application-performance-monitoring/</loc>
+    <loc>https://www.gitstack.pro/solutions/personal-knowledge-management/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/saas-boilerplate/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -781,12 +821,27 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/customer-relationship-management/</loc>
+    <loc>https://www.gitstack.pro/solutions/automated-code-generation/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/business-intelligence-reporting/</loc>
+    <loc>https://www.gitstack.pro/solutions/personal-task-management/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/project-management/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/ai-assisted-code-generation/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.gitstack.pro/solutions/personal-ai-assistant/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -796,81 +851,31 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/customer-relationship-management/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/personal-ai-assistant/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/automated-task-execution/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://www.gitstack.pro/solutions/user-authentication/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.gitstack.pro/solutions/automated-code-generation/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/note-taking/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/internal-tool-building/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/ai-powered-code-generation/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/api-security-enforcement/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/personal-ai-assistant/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.gitstack.pro/solutions/website-content-management/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://www.gitstack.pro/blog/what-is-gitstack/</loc>
-    <lastmod>2026-05-10</lastmod>
+    <lastmod>2026-06-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://www.gitstack.pro/blog/top-5-zapier-alternatives/</loc>
-    <lastmod>2026-05-09</lastmod>
+    <lastmod>2026-06-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://www.gitstack.pro/blog/how-to-self-host-n8n/</loc>
-    <lastmod>2026-05-08</lastmod>
+    <lastmod>2026-06-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://www.gitstack.pro/blog/build-saas-for-free/</loc>
-    <lastmod>2026-05-07</lastmod>
+    <lastmod>2026-06-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>

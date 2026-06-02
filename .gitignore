@@ -49,6 +49,7 @@ __pycache__/
 *.pyo
 venv/
 .venv/
+.test-venv/
 
 # Development tools
 .chainlit

@@ -39,6 +39,20 @@ from utils.email import (
 from email_jobs import send_daily_drop
 from onboarding_drip import run_onboarding_drip, send_onboarding_email
 
+# ── Search Engine Imports ──
+from search_engine import GitStackSearchEngine
+from query_parser import QueryAnalyzer, QueryAnalysis
+from scoring import compute_composite_score
+from diversity import inject_diversity
+from reranker import rerank_with_llm
+from search_utils import (
+    normalize_repo,
+    load_click_data,
+    search_github_live,
+    mongodb_text_search,
+    make_cache_key,
+)
+
 # ── Email Token Helpers (for unsubscribe/preferences magic links) ──
 EMAIL_TOKEN_SECRET = os.environ.get("EMAIL_TOKEN_SECRET") or os.environ.get("SMTP_PASSWORD")
 if not EMAIL_TOKEN_SECRET:
@@ -196,6 +210,34 @@ async def invalidate_repo_cache(full_name: str):
     except Exception as e:
         logger.warning(f"Repo cache invalidation skipped: {e}")
 
+# ── Search Engine Globals ──
+search_engine = GitStackSearchEngine()
+
+async def _cache_get(key: str):
+    """Wrapper to get from FastAPICache backend."""
+    try:
+        backend = FastAPICache.get_backend()
+        return await backend.get(key)
+    except Exception:
+        return None
+
+async def _cache_set(key: str, value: str, ttl: int = 900):
+    """Wrapper to set in FastAPICache backend."""
+    try:
+        backend = FastAPICache.get_backend()
+        await backend.set(key, value, expire=ttl)
+    except Exception:
+        pass
+
+async def _build_search_index_background():
+    """Build BM25 search index from DB in background."""
+    try:
+        if db is not None:
+            await search_engine.build_index(db)
+            logger.info(f"Search index ready: {search_engine.stats()}")
+    except Exception as e:
+        logger.error(f"Failed to build search index: {e}")
+
 # ── Email validation regex (SEC-05) ──────────────────────────────────
 _EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
 
@@ -287,6 +329,9 @@ async def lifespan(_app: FastAPI):
             logger.info("In-memory cache initialized")
     except Exception as e:
         logger.warning(f"Cache init skipped: {e}")
+
+    # Build search index from DB (background, non-blocking)
+    asyncio.create_task(_safe_task(_build_search_index_background(), "search_index"))
 
     # Marketplace auto-release escrow worker (hourly)
     asyncio.create_task(_safe_task(auto_release_escrow_loop(), "escrow"))
@@ -445,6 +490,13 @@ class SmartSearchRequest(BaseModel):
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=10, ge=1, le=50)
     include_github_live: bool = True
+
+class SearchFeedbackRequest(BaseModel):
+    query: str
+    full_name: str
+    action: str = Field(default="click", pattern="^(click|impression)$")
+    position: int = Field(default=1, ge=1)
+    session_id: str = Field(default="")
 
 class SolutionFinderRequest(BaseModel):
     query: str = Field(..., min_length=3, max_length=500)
@@ -2985,118 +3037,212 @@ async def _safe_send_stack(email: str, idea: str, tools: list):
 
 @api_router.post("/search")
 async def smart_search(req: SmartSearchRequest):
-    """AI-powered search across curated DB and live GitHub"""
-    # 1. Parse query with AI
-    parsed_query = {"keywords": req.query.lower().split(), "intent": "search"}
+    """Multi-pillar AI-powered search across curated DB, BM25 index, and live GitHub."""
+
+    # === STAGE 0: Cache Check ===
+    cache_key = make_cache_key(req.query, req.page, req.per_page)
     try:
-        prompt = f"""Parse this search: "{req.query}"
-Return ONLY JSON (no markdown):
-{{"keywords": ["word1", "word2"], "categories": ["ai", "saas"], "github_query": "optimized search for open source tools", "alternative_to": "paid tool name if possible"}}"""
-        response = await call_ai(prompt, json_response=True)
-        import json
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
-        parsed_query = json.loads(cleaned)
-    except Exception as e:
-        logger.error(f"Query parse error: {e}")
+        cached = await _cache_get(f"search:{cache_key}")
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
 
-    keywords = parsed_query.get("keywords", req.query.lower().split())
-    results = []
-
-    # 2. Search our database with pagination
-    if keywords:
-        text_regex = "|".join(re.escape(k) for k in keywords[:5])
-        db_query = {
-            "$or": [
-                {"name": {"$regex": text_regex, "$options": "i"}},
-                {"description": {"$regex": text_regex, "$options": "i"}},
-                {"tags": {"$in": keywords}},
-                {"topics": {"$in": keywords}}
-            ]
+    # === Fallback: if index not built yet, use old MongoDB search ===
+    if not search_engine._built:
+        logger.warning("Search index not built yet, falling back to MongoDB search")
+        fallback_results = await mongodb_text_search(db, req.query, limit=req.per_page)
+        normalized = [normalize_repo(r) for r in fallback_results]
+        return {
+            "query": req.query,
+            "parsed": {"fallback": True},
+            "results": normalized,
+            "solutions": [r for r in normalized if r.get("repo_type") == "complete_solution"][:5],
+            "building_blocks": [r for r in normalized if r.get("repo_type") != "complete_solution"][:req.per_page],
+            "total": len(normalized),
+            "pagination": {
+                "page": 1,
+                "per_page": req.per_page,
+                "total": len(normalized),
+                "total_pages": 1,
+                "has_next": False,
+                "has_prev": False,
+            }
         }
 
-        # Count totals for pagination metadata
-        total_tools = await db.tools.count_documents(db_query)
-        total_github = await db.github_repos.count_documents(db_query)
-        total_db = total_tools + total_github
+    # === STAGE 1: Query Understanding ===
+    analyzer = QueryAnalyzer(call_ai, _cache_get, _cache_set)
+    try:
+        analysis = await analyzer.analyze(req.query)
+    except Exception as e:
+        logger.error(f"Query analysis failed: {e}")
+        analysis = QueryAnalysis(
+            intent=req.query,
+            core_features=[req.query],
+            search_phrases=[req.query],
+            github_query=req.query,
+        )
 
-        skip = (req.page - 1) * req.per_page
-        max_fetch = skip + req.per_page  # how many we need up to this page
+    # === STAGE 2: Parallel Retrieval ===
+    async def _search_bm25_pillar():
+        """Pillar A: BM25 inverted index search."""
+        q = req.query
+        if analysis.search_phrases:
+            q = " ".join(analysis.search_phrases)
+        return search_engine.search(q, k=50)
 
-        # Fetch curated tools first
-        tools = await db.tools.find(db_query, {"_id": 0}).skip(skip).limit(req.per_page).to_list(req.per_page)
-        for t in tools:
-            t["source"] = "curated"
-            results.append(t)
+    async def _search_exact_pillar():
+        """Pillar B: Exact name/full_name lookups."""
+        names = analysis.specific_tools[:]
+        if analysis.alternative_to:
+            names.append(analysis.alternative_to)
+        if not names:
+            return []
+        return search_engine.get_by_name(names)
 
-        # Fill remainder from github_repos
-        remaining = req.per_page - len(tools)
-        if remaining > 0:
-            gh_skip = max(0, skip - total_tools)
-            gh_repos = await db.github_repos.find(db_query, {"_id": 0}).sort("score", -1).skip(gh_skip).limit(remaining).to_list(remaining)
-            for r in gh_repos:
-                r["source"] = "github_cached"
-                results.append(r)
-    else:
-        total_db = 0
+    async def _search_alternative_pillar():
+        """Pillar C: Search by replaces_saas field."""
+        if not analysis.alternative_to:
+            return []
+        alt = analysis.alternative_to.lower()
+        # Use regex search on use_cases and replaces_saas in index
+        matches = []
+        for idx, doc in search_engine.repo_map.items():
+            text = f"{' '.join(doc.get('replaces_saas', []))} {' '.join(doc.get('use_cases', []))}"
+            if alt in text.lower():
+                matches.append({**doc, "_pillar": "alternative_match"})
+        return matches
 
-    # 3. Search GitHub live on page 1 only (fills remaining slots)
-    if req.include_github_live and req.page == 1 and len(results) < req.per_page:
-        github_query = parsed_query.get("github_query", req.query)
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "https://api.github.com/search/repositories",
-                    params={
-                        "q": f"{github_query} stars:>50",
-                        "sort": "stars",
-                        "order": "desc",
-                        "per_page": req.per_page - len(results)
-                    },
-                    headers=GITHUB_HEADERS,
-                    timeout=15
+    async def _search_github_pillar():
+        """Pillar D: GitHub live API search."""
+        if not req.include_github_live:
+            return []
+        return await search_github_live(analysis.github_query or req.query, GITHUB_HEADERS, per_page=15)
+
+    tasks = [_search_bm25_pillar(), _search_exact_pillar(), _search_alternative_pillar(), _search_github_pillar()]
+    results_by_pillar = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # === STAGE 3: Merge & Deduplicate ===
+    candidate_pool = {}
+    for pillar_results in results_by_pillar:
+        if isinstance(pillar_results, Exception):
+            logger.warning(f"Pillar failed: {pillar_results}")
+            continue
+        for repo in pillar_results:
+            fn = repo.get("full_name") or repo.get("name", "")
+            if not fn:
+                continue
+            if fn in candidate_pool:
+                existing = candidate_pool[fn]
+                existing["_pillar"] = f"{existing.get('_pillar', '')},{repo.get('_pillar', '')}"
+                existing["_bm25_score"] = max(
+                    existing.get("_bm25_score", 0),
+                    repo.get("_bm25_score", 0)
                 )
-                if response.status_code == 200:
-                    data = response.json()
-                    for item in data.get("items", []):
-                        results.append({
-                            "tool_id": item["full_name"].replace("/", "_").lower(),
-                            "name": item["name"],
-                            "full_name": item["full_name"],
-                            "description": item.get("description") or "",
-                            "stars": f"{item['stargazers_count']:,}",
-                            "language": item.get("language") or "Unknown",
-                            "github_url": item["html_url"],
-                            "topics": item.get("topics", []),
-                            "source": "github_live"
-                        })
-                    total_db += data.get("total_count", 0)  # approximate
-        except Exception as e:
-            logger.error(f"GitHub live search error: {e}")
+            else:
+                candidate_pool[fn] = repo
 
-    total_pages = max(1, (total_db + req.per_page - 1) // req.per_page)
+    candidates = list(candidate_pool.values())
+    if not candidates:
+        # No results from any pillar
+        return {
+            "query": req.query,
+            "parsed": analysis.model_dump(),
+            "results": [],
+            "solutions": [],
+            "building_blocks": [],
+            "total": 0,
+            "pagination": {
+                "page": 1,
+                "per_page": req.per_page,
+                "total": 0,
+                "total_pages": 1,
+                "has_next": False,
+                "has_prev": False,
+            }
+        }
 
-    # Split results into solutions vs building blocks
-    complete_solutions = [r for r in results if r.get("repo_type") == "complete_solution"]
-    building_blocks = [r for r in results if r.get("repo_type") != "complete_solution"]
+    # === STAGE 4: Signal Scoring ===
+    click_data = {}
+    try:
+        click_data = await load_click_data(db, req.query)
+    except Exception as e:
+        logger.debug(f"Click data load failed: {e}")
 
-    return {
+    for c in candidates:
+        c["_composite_score"] = compute_composite_score(c, analysis, click_data)
+
+    # === STAGE 5: Diversity Injection ===
+    diverse = inject_diversity(candidates, max_per_category=3, max_results=25)
+
+    # === STAGE 6: AI Reranking ===
+    try:
+        final_results = await rerank_with_llm(diverse, req.query, analysis, call_ai)
+    except Exception as e:
+        logger.warning(f"Reranking failed, using heuristic: {e}")
+        for c in diverse:
+            c["_final_score"] = c.get("_composite_score", 0)
+        final_results = sorted(diverse, key=lambda x: x.get("_final_score", 0), reverse=True)
+
+    # === STAGE 7: Normalize & Paginate ===
+    normalized = [normalize_repo(r) for r in final_results]
+
+    total = len(normalized)
+    start = (req.page - 1) * req.per_page
+    end = start + req.per_page
+    page_results = normalized[start:end]
+
+    complete_solutions = [r for r in page_results if r.get("repo_type") == "complete_solution"]
+    building_blocks = [r for r in page_results if r.get("repo_type") != "complete_solution"]
+
+    response = {
         "query": req.query,
-        "parsed": parsed_query,
-        "results": results,
+        "parsed": analysis.model_dump(),
+        "results": page_results,
         "solutions": complete_solutions[:5],
         "building_blocks": building_blocks[:req.per_page],
-        "total": total_db,
+        "total": total,
         "pagination": {
             "page": req.page,
             "per_page": req.per_page,
-            "total": total_db,
-            "total_pages": total_pages,
-            "has_next": req.page < total_pages,
-            "has_prev": req.page > 1
+            "total": total,
+            "total_pages": max(1, (total + req.per_page - 1) // req.per_page),
+            "has_next": end < total,
+            "has_prev": req.page > 1,
         }
     }
+
+    # Cache for 15 minutes
+    try:
+        await _cache_set(f"search:{cache_key}", json.dumps(response), ttl=900)
+    except Exception:
+        pass
+
+    return response
+
+
+@api_router.post("/search/feedback")
+@limiter.limit("30/minute")
+async def search_feedback(request: Request, req: SearchFeedbackRequest):
+    """Log click/impression for search result feedback loop."""
+    doc = {
+        "query_hash": hashlib.sha256(req.query.encode()).hexdigest(),
+        "query": req.query,
+        "full_name": req.full_name,
+        "action": req.action,
+        "position": req.position,
+        "session_id": req.session_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.search_feedback.insert_one(doc)
+    return {"status": "ok"}
+
+
+@api_router.post("/search/rebuild-index")
+async def rebuild_search_index(admin: UserModel = Depends(require_admin)):
+    """Manually rebuild the BM25 search index (admin only)."""
+    await _build_search_index_background()
+    return {"status": "ok", "stats": search_engine.stats()}
 
 
 
