@@ -144,18 +144,18 @@ def compute_composite_score(
         if repo_type in ("tutorial", "course", "learning"):
             score *= 0.001
         elif repo_type == "building_block":
-            score *= 0.3
+            score *= 0.6  # Lenient: users often want libraries too
         elif repo_type == "complete_solution":
-            score += 50
+            score += 40
     elif query_repo_type == "building_block":
         if repo_type == "complete_solution":
             score *= 0.7
         elif repo_type == "building_block":
-            score += 50
+            score += 40
 
-    # Unclassified repo penalty
+    # Unclassified repo penalty (mild — many good repos aren't classified yet)
     if not repo_type:
-        score *= 0.7
+        score *= 0.85
 
     if candidate.get("is_course"):
         score *= 0.01
