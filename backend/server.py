@@ -381,16 +381,6 @@ async def health_check():
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
 
-@api_router.get("/debug/ai-test")
-async def debug_ai_test():
-    """Temporary: test if call_ai works in production."""
-    try:
-        result = await call_ai('Return ONLY JSON: {"test": "ok", "number": 42}', json_response=True)
-        return {"status": "ok", "result": result}
-    except Exception as e:
-        import traceback
-        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
-
 # Legacy root health endpoint — redirects to canonical /api/health
 app.add_api_route("/health", lambda: RedirectResponse(url="/api/health", status_code=307))
 

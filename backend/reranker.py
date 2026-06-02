@@ -99,9 +99,18 @@ def _parse_llm_scores(response: str) -> Dict[str, float]:
         cleaned = cleaned[4:].strip()
 
     data = json.loads(cleaned)
+
+    # Unwrap envelope if LLM wrapped response in {data: [...]} etc.
+    if isinstance(data, dict):
+        for key in ("result", "data", "response", "scores", "rankings"):
+            if key in data and isinstance(data[key], list):
+                data = data[key]
+                break
+
     scores = {}
     for item in data:
-        fn = item.get("full_name", "")
-        if fn:
-            scores[fn] = float(item.get("score", 0))
+        if isinstance(item, dict):
+            fn = item.get("full_name", "")
+            if fn:
+                scores[fn] = float(item.get("score", 0))
     return scores

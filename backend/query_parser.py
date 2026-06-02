@@ -58,7 +58,9 @@ class QueryAnalyzer:
             analysis = self._parse_response(response)
             logger.info(f"Query parsed: intent='{analysis.intent}' alt_to={analysis.alternative_to} repo_type={analysis.expected_repo_type}")
         except Exception as e:
-            logger.error(f"Query analysis LLM failed: {e}")
+            import traceback
+            logger.error(f"Query analysis LLM failed: {type(e).__name__}: {e}")
+            logger.error(traceback.format_exc())
             # Fallback: basic analysis
             analysis = QueryAnalysis(
                 intent=normalized,
@@ -119,6 +121,13 @@ Rules:
             cleaned = cleaned[4:].strip()
 
         data = json.loads(cleaned)
+
+        # Unwrap envelope if LLM wrapped response in {data: {...}} etc.
+        if isinstance(data, dict):
+            for key in ("result", "data", "response", "parsed_query"):
+                if key in data and isinstance(data[key], dict):
+                    data = data[key]
+                    break
 
         # Normalize fields
         return QueryAnalysis(
