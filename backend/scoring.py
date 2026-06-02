@@ -16,10 +16,14 @@ def compute_composite_score(
     """Compute composite relevance score. Higher = more relevant."""
     score = 0.0
 
+    def _j(val):
+        if not val:
+            return ""
+        return " ".join(val)
     # Build searchable text
     text = f"{candidate.get('name', '')} {candidate.get('description', '')} "
-    text += f"{' '.join(candidate.get('topics', []))} "
-    text += f"{' '.join(candidate.get('use_cases', []))}"
+    text += f"{_j(candidate.get('topics'))} "
+    text += f"{_j(candidate.get('use_cases'))}"
     text_lower = text.lower()
 
     # === SOURCE BONUSES ===

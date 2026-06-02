@@ -3134,7 +3134,9 @@ async def smart_search(req: SmartSearchRequest):
         # Use regex search on use_cases and replaces_saas in index
         matches = []
         for idx, doc in search_engine.repo_map.items():
-            text = f"{' '.join(doc.get('replaces_saas', []))} {' '.join(doc.get('use_cases', []))}"
+            rs = doc.get("replaces_saas") or []
+            uc = doc.get("use_cases") or []
+            text = f"{' '.join(rs)} {' '.join(uc)}"
             if alt in text.lower():
                 matches.append({**doc, "_pillar": "alternative_match"})
         return matches

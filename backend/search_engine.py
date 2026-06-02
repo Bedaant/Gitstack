@@ -72,12 +72,16 @@ class GitStackSearchEngine:
     @staticmethod
     def _build_search_text(repo: Dict) -> str:
         """Concatenate all searchable fields into one string."""
+        def _j(val):
+            if not val:
+                return ""
+            return " ".join(val)
         parts = [
             repo.get("name", ""),
             repo.get("description", ""),
-            " ".join(repo.get("topics", [])),
-            " ".join(repo.get("use_cases", [])),
-            " ".join(repo.get("replaces_saas", [])),
+            _j(repo.get("topics")),
+            _j(repo.get("use_cases")),
+            _j(repo.get("replaces_saas")),
             repo.get("language", ""),
         ]
         return " ".join(p for p in parts if p)
