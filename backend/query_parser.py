@@ -54,7 +54,7 @@ class QueryAnalyzer:
         # LLM call
         try:
             prompt = self._build_prompt(normalized)
-            response = await self.call_ai(prompt, json_response=True, temperature=0)
+            response = await self.call_ai(prompt, json_response=True)
             analysis = self._parse_response(response)
         except Exception as e:
             logger.error(f"Query analysis LLM failed: {e}")

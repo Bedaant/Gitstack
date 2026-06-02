@@ -32,7 +32,7 @@ async def rerank_with_llm(
     prompt = _build_rerank_prompt(query, analysis, top_candidates)
 
     try:
-        response = await call_ai_fn(prompt, json_response=True, temperature=0)
+        response = await call_ai_fn(prompt, json_response=True)
         llm_scores = _parse_llm_scores(response)
     except Exception as e:
         logger.warning(f"LLM reranking failed: {e}")
