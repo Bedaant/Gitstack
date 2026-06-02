@@ -3091,7 +3091,7 @@ async def _smart_search_impl(req: SmartSearchRequest):
     # === STAGE 0: Cache Check ===
     cache_key = make_cache_key(req.query, req.page, req.per_page)
     try:
-        cached = await _cache_get(f"search:{cache_key}")
+        cached = await _cache_get(f"search_v2:{cache_key}")
         if cached:
             return json.loads(cached)
     except Exception:
@@ -3312,7 +3312,7 @@ async def _smart_search_impl(req: SmartSearchRequest):
 
     # Cache for 15 minutes
     try:
-        await _cache_set(f"search:{cache_key}", json.dumps(response), ttl=900)
+        await _cache_set(f"search_v2:{cache_key}", json.dumps(response), ttl=900)
     except Exception:
         pass
 
