@@ -3064,6 +3064,29 @@ async def _safe_send_stack(email: str, idea: str, tools: list):
 @api_router.post("/search")
 async def smart_search(req: SmartSearchRequest):
     """Multi-pillar AI-powered search across curated DB, BM25 index, and live GitHub."""
+    try:
+        return await _smart_search_impl(req)
+    except Exception as e:
+        logger.error(f"CRITICAL: smart_search completely failed: {e}")
+        return {
+            "query": req.query,
+            "parsed": {"error": "search_unavailable"},
+            "results": [],
+            "solutions": [],
+            "building_blocks": [],
+            "total": 0,
+            "pagination": {
+                "page": 1,
+                "per_page": req.per_page,
+                "total": 0,
+                "total_pages": 1,
+                "has_next": False,
+                "has_prev": False,
+            }
+        }
+
+async def _smart_search_impl(req: SmartSearchRequest):
+    """Actual search implementation."""
 
     # === STAGE 0: Cache Check ===
     cache_key = make_cache_key(req.query, req.page, req.per_page)
@@ -3077,24 +3100,43 @@ async def smart_search(req: SmartSearchRequest):
     # === Fallback: if index not built yet, use old MongoDB search ===
     if not search_engine._built:
         logger.warning("Search index not built yet, falling back to MongoDB search")
-        fallback_results = await mongodb_text_search(db, req.query, limit=req.per_page)
-        normalized = [normalize_repo(r) for r in fallback_results]
-        return {
-            "query": req.query,
-            "parsed": {"fallback": True},
-            "results": normalized,
-            "solutions": [r for r in normalized if r.get("repo_type") == "complete_solution"][:5],
-            "building_blocks": [r for r in normalized if r.get("repo_type") != "complete_solution"][:req.per_page],
-            "total": len(normalized),
-            "pagination": {
-                "page": 1,
-                "per_page": req.per_page,
+        try:
+            fallback_results = await mongodb_text_search(db, req.query, limit=req.per_page)
+            normalized = [normalize_repo(r) for r in fallback_results]
+            return {
+                "query": req.query,
+                "parsed": {"fallback": True},
+                "results": normalized,
+                "solutions": [r for r in normalized if r.get("repo_type") == "complete_solution"][:5],
+                "building_blocks": [r for r in normalized if r.get("repo_type") != "complete_solution"][:req.per_page],
                 "total": len(normalized),
-                "total_pages": 1,
-                "has_next": False,
-                "has_prev": False,
+                "pagination": {
+                    "page": 1,
+                    "per_page": req.per_page,
+                    "total": len(normalized),
+                    "total_pages": 1,
+                    "has_next": False,
+                    "has_prev": False,
+                }
             }
-        }
+        except Exception as e:
+            logger.error(f"MongoDB fallback search failed: {e}")
+            return {
+                "query": req.query,
+                "parsed": {"error": "search_unavailable"},
+                "results": [],
+                "solutions": [],
+                "building_blocks": [],
+                "total": 0,
+                "pagination": {
+                    "page": 1,
+                    "per_page": req.per_page,
+                    "total": 0,
+                    "total_pages": 1,
+                    "has_next": False,
+                    "has_prev": False,
+                }
+            }
 
     # === STAGE 1: Query Understanding ===
     analyzer = QueryAnalyzer(call_ai, _cache_get, _cache_set)

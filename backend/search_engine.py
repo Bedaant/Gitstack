@@ -91,6 +91,11 @@ class GitStackSearchEngine:
         if not self._built or not self.retriever or not query.strip():
             return []
 
+        corpus_size = len(self.corpus)
+        if corpus_size == 0:
+            return []
+        k = min(k, corpus_size)
+
         query_tokens = bm25s.tokenize([query], stopwords="en", stemmer=self.stemmer)
         results, scores = self.retriever.retrieve(query_tokens, k=k)
 

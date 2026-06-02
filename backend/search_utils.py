@@ -22,15 +22,15 @@ def normalize_repo(repo: Dict[str, Any]) -> Dict[str, Any]:
         "description": repo.get("description", ""),
         "stars": stars,
         "language": repo.get("language", "Unknown"),
-        "topics": repo.get("topics", []),
-        "use_cases": repo.get("use_cases", []),
-        "replaces_saas": repo.get("replaces_saas", []),
+        "topics": repo.get("topics") or [],
+        "use_cases": repo.get("use_cases") or [],
+        "replaces_saas": repo.get("replaces_saas") or [],
         "repo_type": repo.get("repo_type", ""),
         "has_docker": repo.get("has_docker", False),
         "has_ui": repo.get("has_ui", False),
         "health_score": repo.get("health_score", 0),
         "github_url": repo.get("github_url") or repo.get("html_url", ""),
-        "source": repo.get("_pillar", "unknown").split(",")[0],
+        "source": (repo.get("_pillar") or "unknown").split(",")[0],
         "_score": round(repo.get("_final_score", repo.get("_composite_score", 0)), 2),
     }
 
@@ -81,7 +81,7 @@ async def search_github_live(
                         "description": item.get("description") or "",
                         "stars": item["stargazers_count"],
                         "language": item.get("language") or "Unknown",
-                        "topics": item.get("topics", []),
+                        "topics": item.get("topics") or [],
                         "html_url": item["html_url"],
                         "_pillar": "github_live",
                     })

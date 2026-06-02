@@ -27,7 +27,9 @@ def inject_diversity(
 
     for candidate in sorted_candidates:
         # Determine category: use_cases > topics > language > uncategorized
-        categories = candidate.get("use_cases", []) or candidate.get("topics", [])
+        use_cases = candidate.get("use_cases") or []
+        topics = candidate.get("topics") or []
+        categories = use_cases or topics
         cat = categories[0] if categories else candidate.get("language", "uncategorized")
         cat = str(cat).lower()
 
