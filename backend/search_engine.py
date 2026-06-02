@@ -109,6 +109,61 @@ class GitStackSearchEngine:
                 matches.append(doc)
         return matches
 
+    def multi_search(self, queries: List[str], k: int = 50) -> List[Dict[str, Any]]:
+        """Run BM25 with multiple query formulations and merge results.
+        
+        Each query gets k/len(queries) slots to ensure diversity across
+        different query formulations.
+        """
+        if not self._built or not self.retriever:
+            return []
+
+        corpus_size = len(self.corpus)
+        if corpus_size == 0:
+            return []
+
+        # Deduplicate non-empty queries
+        unique_queries = [q for q in dict.fromkeys(q.strip() for q in queries if q and q.strip())]
+        if not unique_queries:
+            return []
+
+        per_query_k = max(1, min(k // len(unique_queries), corpus_size))
+        seen = set()
+        all_matches = []
+
+        for q in unique_queries:
+            try:
+                query_tokens = bm25s.tokenize([q], stopwords="en", stemmer=self.stemmer)
+                results, scores = self.retriever.retrieve(query_tokens, k=per_query_k)
+                for idx, score in zip(results[0], scores[0]):
+                    idx = int(idx)
+                    if idx in seen:
+                        continue
+                    seen.add(idx)
+                    if idx in self.repo_map:
+                        doc = {**self.repo_map[idx]}
+                        doc["_bm25_score"] = float(score)
+                        doc["_pillar"] = "bm25"
+                        all_matches.append(doc)
+            except Exception:
+                continue
+
+        return all_matches
+
+    def search_replaces_saas(self, tool_name: str) -> List[Dict[str, Any]]:
+        """Find repos that explicitly list tool_name in their replaces_saas field."""
+        if not tool_name:
+            return []
+        tn_lower = tool_name.lower()
+        matches = []
+        for idx, doc in self.repo_map.items():
+            rs = doc.get("replaces_saas") or []
+            if any(tn_lower == r.lower() for r in rs):
+                match = {**doc, "_pillar": "alternative_exact"}
+                match["_bm25_score"] = 999  # Dominant signal
+                matches.append(match)
+        return matches
+
     def get_by_name(self, names: List[str]) -> List[Dict[str, Any]]:
         """Fast exact lookup by name or full_name."""
         names_lower = {n.lower() for n in names}

@@ -3153,12 +3153,18 @@ async def _smart_search_impl(req: SmartSearchRequest):
 
     # === STAGE 2: Parallel Retrieval ===
     async def _search_bm25_pillar():
-        """Pillar A: BM25 inverted index search."""
+        """Pillar A: Multi-query BM25 retrieval."""
         try:
-            q = req.query
-            if analysis.search_phrases:
-                q = " ".join(analysis.search_phrases)
-            return search_engine.search(q, k=50)
+            queries = [req.query]
+            if analysis.search_phrases and " ".join(analysis.search_phrases) != req.query:
+                queries.append(" ".join(analysis.search_phrases))
+            if analysis.core_features:
+                queries.append(" ".join(analysis.core_features))
+            if analysis.alternative_to:
+                queries.append(f"{analysis.alternative_to} alternative open source")
+            if analysis.github_query and analysis.github_query not in queries:
+                queries.append(analysis.github_query)
+            return search_engine.multi_search(queries, k=60)
         except Exception as e:
             logger.warning(f"BM25 search failed: {e}")
             return []
@@ -3173,18 +3179,29 @@ async def _smart_search_impl(req: SmartSearchRequest):
         return search_engine.get_by_name(names)
 
     async def _search_alternative_pillar():
-        """Pillar C: Search by replaces_saas field."""
+        """Pillar C: Exact replaces_saas matching + fallback substring."""
         try:
-            if not analysis.alternative_to:
-                return []
-            alt = analysis.alternative_to.lower()
             matches = []
-            for idx, doc in search_engine.repo_map.items():
-                rs = doc.get("replaces_saas") or []
-                uc = doc.get("use_cases") or []
-                text = f"{' '.join(rs)} {' '.join(uc)}"
-                if alt in text.lower():
-                    matches.append({**doc, "_pillar": "alternative_match"})
+            # Exact match on replaces_saas array (killer signal)
+            if analysis.alternative_to:
+                exact = search_engine.search_replaces_saas(analysis.alternative_to)
+                matches.extend(exact)
+                for tool in analysis.specific_tools:
+                    exact_tool = search_engine.search_replaces_saas(tool)
+                    matches.extend(exact_tool)
+            # Fallback: substring match in replaces_saas + use_cases
+            if analysis.alternative_to:
+                alt = analysis.alternative_to.lower()
+                seen = {m.get("full_name") for m in matches}
+                for idx, doc in search_engine.repo_map.items():
+                    fn = doc.get("full_name")
+                    if fn in seen:
+                        continue
+                    rs = doc.get("replaces_saas") or []
+                    uc = doc.get("use_cases") or []
+                    text = f"{' '.join(rs)} {' '.join(uc)}"
+                    if alt in text.lower():
+                        matches.append({**doc, "_pillar": "alternative_match"})
             return matches
         except Exception as e:
             logger.warning(f"Alternative search failed: {e}")

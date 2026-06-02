@@ -1,5 +1,6 @@
 """
 Diversity injection — prevent result collapse into one category.
+Uses repo_type as primary diversity dimension, then use_cases/topics.
 """
 
 from typing import List, Dict, Any
@@ -13,7 +14,7 @@ def inject_diversity(
 ) -> List[Dict[str, Any]]:
     """
     Re-rank candidates to ensure diversity across categories.
-    Takes top-scoring candidates but limits how many from each category.
+    Prioritizes repo_type diversity first, then use_case/topic diversity.
     """
     # Sort by composite score descending
     sorted_candidates = sorted(
@@ -26,12 +27,16 @@ def inject_diversity(
     diverse_results = []
 
     for candidate in sorted_candidates:
-        # Determine category: use_cases > topics > language > uncategorized
+        # Primary category: repo_type (complete_solution, building_block, etc.)
+        # Secondary: use_cases > topics > language > uncategorized
+        repo_type = candidate.get("repo_type") or "unknown"
         use_cases = candidate.get("use_cases") or []
         topics = candidate.get("topics") or []
-        categories = use_cases or topics
-        cat = categories[0] if categories else candidate.get("language", "uncategorized")
-        cat = str(cat).lower()
+        secondary = use_cases or topics
+        secondary_cat = secondary[0] if secondary else candidate.get("language", "uncategorized")
+
+        # Composite category key: repo_type + secondary
+        cat = f"{repo_type}:{str(secondary_cat).lower()}"
 
         if category_counts[cat] < max_per_category:
             diverse_results.append(candidate)

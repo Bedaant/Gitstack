@@ -20,11 +20,23 @@ def compute_composite_score(
         if not val:
             return ""
         return " ".join(val)
-    # Build searchable text
-    text = f"{candidate.get('name', '')} {candidate.get('description', '')} "
-    text += f"{_j(candidate.get('topics'))} "
-    text += f"{_j(candidate.get('use_cases'))}"
+
+    # Build searchable text with FIELD WEIGHTING
+    # use_cases and replaces_saas are 3x more important than topics
+    name = candidate.get("name", "")
+    description = candidate.get("description", "")
+    topics = _j(candidate.get("topics"))
+    use_cases = _j(candidate.get("use_cases"))
+    replaces_saas = _j(candidate.get("replaces_saas"))
+
+    text = f"{name} {description} {topics} {use_cases} {use_cases} {use_cases} {replaces_saas} {replaces_saas} {replaces_saas}"
     text_lower = text.lower()
+
+    # Also build a separate text for exact-field matching
+    name_lower = name.lower()
+    desc_lower = (description or "").lower()
+    uc_lower = use_cases.lower()
+    rs_lower = replaces_saas.lower()
 
     # === SOURCE BONUSES ===
     pillar = candidate.get("_pillar", "unknown")
@@ -40,9 +52,31 @@ def compute_composite_score(
     if "github_live" in pillar:
         score += 40
 
+    # === REPLACES_SAAS MATCH — KILLER SIGNAL ===
+    if analysis.alternative_to:
+        alt_lower = analysis.alternative_to.lower()
+        # Direct match in replaces_saas array
+        rs_list = candidate.get("replaces_saas") or []
+        if rs_list and any(alt_lower == r.lower() for r in rs_list):
+            score += 500  # Exact match = dominant boost
+        elif alt_lower in rs_lower:
+            score += 300  # Partial match in replaces_saas text
+        elif alt_lower in desc_lower:
+            score += 80   # Mentioned in description
+        elif alt_lower in name_lower:
+            score += 60   # Mentioned in name
+
+        # Also boost if ANY of the specific_tools match replaces_saas
+        for tool in analysis.specific_tools:
+            tl = tool.lower()
+            if any(tl == r.lower() for r in (rs_list if rs_list else [])):
+                score += 200
+            elif tl in rs_lower:
+                score += 120
+
     # === EXACT NAME MATCH ===
     query_phrase = analysis.search_phrases[0] if analysis.search_phrases else ""
-    if query_phrase and candidate.get("name", "").lower() == query_phrase.lower():
+    if query_phrase and name_lower == query_phrase.lower():
         score += 200
 
     # === PHRASE MATCHES (AND semantics) ===
@@ -67,15 +101,33 @@ def compute_composite_score(
         if anti.lower() in text_lower
     )
     if anti_count > 0:
-        score *= (0.1 ** anti_count)
+        score *= (0.05 ** anti_count)  # Much stronger penalty
+
+    # === REPO_TYPE PENALTIES / BOOSTS ===
+    repo_type = candidate.get("repo_type", "") or ""
+    query_repo_type = analysis.expected_repo_type or ""
+
+    # Hard penalties for mismatched repo types
+    if query_repo_type == "complete_solution":
+        if repo_type in ("tutorial", "course", "learning"):
+            score *= 0.001  # Nearly eliminate tutorials
+        elif repo_type == "building_block":
+            score *= 0.3    # Strongly penalize libraries
+        elif repo_type == "complete_solution":
+            score += 50     # Boost actual complete solutions
+    elif query_repo_type == "building_block":
+        if repo_type == "complete_solution":
+            score *= 0.7
+        elif repo_type == "building_block":
+            score += 50
+
+    # Legacy is_course / is_template flags
     if candidate.get("is_course"):
         score *= 0.01
     if candidate.get("is_template"):
         score *= 0.05
 
     # === METADATA MATCH ===
-    if analysis.expected_repo_type and candidate.get("repo_type") == analysis.expected_repo_type:
-        score += 30
     if analysis.self_hosted:
         if candidate.get("has_docker"):
             score += 20
@@ -97,7 +149,6 @@ def compute_composite_score(
     # === RECENCY / STALENESS ===
     days = candidate.get("last_push_days")
     if days is None:
-        # Fallback: compute from last_pushed string if available
         days = _compute_days_since_push(candidate.get("last_pushed"))
     if days is None:
         days = 365

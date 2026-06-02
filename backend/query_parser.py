@@ -15,7 +15,7 @@ class QueryAnalysis(BaseModel):
     core_features: List[str] = Field(default_factory=list)
     search_phrases: List[str] = Field(default_factory=list)
     synonyms: Dict[str, List[str]] = Field(default_factory=dict)
-    anti_keywords: List[str] = Field(default_factory=lambda: ["course", "tutorial", "learn", "from-scratch"])
+    anti_keywords: List[str] = Field(default_factory=lambda: ["course", "tutorial", "learn", "from-scratch", "template", "boilerplate", "example"])
     specific_tools: List[str] = Field(default_factory=list)
     alternative_to: Optional[str] = None
     expected_repo_type: Optional[str] = None
